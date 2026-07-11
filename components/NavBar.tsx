@@ -29,45 +29,46 @@ const CATEGORIES = [
 
 const LOCATION_PRESETS = [
   {
-    label: "All India",
+    label: "All locations",
     query: "",
-    detail: "Show every supplier and industrial cluster",
+    detail: "Show every public and seller-submitted listing",
   },
   {
-    label: "Bengaluru, Karnataka",
-    query: "Bengaluru Karnataka",
-    detail: "Electronic City, Peenya, Whitefield belt",
+    label: "Tennessee, USA",
+    query: "Tennessee USA",
+    detail: "Chemicals, packaging, surplus materials",
   },
   {
-    label: "Electronic City",
-    query: "Electronic City",
-    detail: "High-density chemical and electronics supply",
+    label: "South Carolina, USA",
+    query: "South Carolina USA",
+    detail: "Machinery, pallets, chemicals, industrial surplus",
   },
   {
-    label: "Peenya Industrial Area",
-    query: "Peenya",
-    detail: "Metals, machining, polymers, fabrication",
+    label: "Florida, USA",
+    query: "Florida USA",
+    detail: "Resins, textiles, chemicals, export lanes",
   },
   {
-    label: "Mumbai, Maharashtra",
-    query: "Mumbai Maharashtra",
-    detail: "Port-linked commodity and recycling suppliers",
+    label: "Texas, USA",
+    query: "Texas USA",
+    detail: "Polymer, chemical, and port-linked listings",
   },
   {
-    label: "Chennai, Tamil Nadu",
-    query: "Chennai Tamil Nadu",
-    detail: "Automotive, chemicals, textiles, logistics",
+    label: "Canada",
+    query: "Canada",
+    detail: "Cross-border polymer and textile listings",
   },
   {
-    label: "Delhi NCR",
-    query: "Delhi NCR",
-    detail: "North India sourcing and resale hubs",
+    label: "Seller submitted",
+    query: "seller_submitted",
+    detail: "New listings added directly on Symbi-OS",
   },
 ];
 
 interface NavBarProps {
   query: string;
   locationLabel: string;
+  listingCount: number;
   onQueryChange: (query: string) => void;
   onCategorySelect: (category: string) => void;
   onLocationChange: (location: { label: string; query: string }) => void;
@@ -80,6 +81,7 @@ interface NavBarProps {
 export default function NavBar({
   query,
   locationLabel,
+  listingCount,
   onQueryChange,
   onCategorySelect,
   onLocationChange,
@@ -223,7 +225,7 @@ export default function NavBar({
             onKeyDown={(event) => {
               if (event.key === "Enter") submitSearch();
             }}
-            placeholder="Search 10,000 wholesale listings: slag, PCB scrap, HDPE regrind..."
+            placeholder={`Search ${listingCount.toLocaleString("en-IN")} live listings: carbon black, HDPE, PET, textiles...`}
             className="min-w-0 flex-1 px-3 text-sm outline-none"
           />
           <button
@@ -247,7 +249,7 @@ export default function NavBar({
       <div className="flex h-11 items-center gap-7 overflow-x-auto border-t border-stone-100 bg-white px-4 text-sm font-semibold text-stone-700 sm:px-6">
         <span className="flex shrink-0 items-center gap-1 text-orange-600">
           <ShieldCheck size={14} />
-          Verified industrial suppliers
+          Live industrial inventory
         </span>
         {CATEGORIES.map((category) => (
           <button

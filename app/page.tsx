@@ -136,7 +136,7 @@ const HOME_FOOTER_COLUMNS = [
   },
   {
     title: "Source on Symbi-OS",
-    links: ["Verified suppliers", "Post bulk RFQ", "Industrial categories", "Location sourcing"],
+    links: ["Active suppliers", "Post bulk RFQ", "Industrial categories", "Location sourcing"],
   },
   {
     title: "Help Center",
@@ -164,6 +164,13 @@ function formatQuantity(value: number | null) {
 
 function displayQuantity(listing: MaterialListing) {
   return listing.rawQuantityText || formatQuantity(listing.quantity);
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    notation: value >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 function cleanToxicity(value: string) {
@@ -205,6 +212,11 @@ function HomeLanding({
     verifiedSellers: number;
     totalQuantity: number;
     matchRate: number;
+    totalListings: number;
+    publicListings: number;
+    sellerListings: number;
+    categoryCount: number;
+    sourceCount: number;
   };
   locationLabel: string;
   isLoading: boolean;
@@ -224,16 +236,22 @@ function HomeLanding({
             </h1>
             <div className="mt-5 flex flex-wrap gap-7 text-[#063b66]">
               <div>
-                <p className="text-2xl font-bold">140+</p>
-                <p className="text-xs font-semibold">Verified companies</p>
+                <p className="text-2xl font-bold">
+                  {formatCompactNumber(marketplaceStats.verifiedSellers)}
+                </p>
+                <p className="text-xs font-semibold">Active suppliers</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">10k</p>
-                <p className="text-xs font-semibold">Wholesale listings</p>
+                <p className="text-2xl font-bold">
+                  {formatCompactNumber(marketplaceStats.totalListings)}
+                </p>
+                <p className="text-xs font-semibold">Live listings</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">78</p>
-                <p className="text-xs font-semibold">Match signals</p>
+                <p className="text-2xl font-bold">
+                  {formatCompactNumber(marketplaceStats.categoryCount)}
+                </p>
+                <p className="text-xs font-semibold">Categories</p>
               </div>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -302,26 +320,26 @@ function HomeLanding({
         <MetricCard
           icon={Package}
           label="Catalog depth"
-          value="10,000"
-          detail="Wholesale listings behind search"
+          value={marketplaceStats.totalListings.toLocaleString("en-IN")}
+          detail={`${marketplaceStats.publicListings.toLocaleString("en-IN")} public-source records`}
         />
         <MetricCard
           icon={Factory}
-          label="Verified suppliers"
+          label="Active suppliers"
           value={String(marketplaceStats.verifiedSellers)}
-          detail="Company nodes in the network"
+          detail={`${marketplaceStats.sourceCount} data source${marketplaceStats.sourceCount === 1 ? "" : "s"}`}
         />
         <MetricCard
           icon={Truck}
           label="Available quantity"
-          value={`${Math.round(marketplaceStats.totalQuantity / 1000).toLocaleString("en-IN")}k t`}
-          detail="Across industrial categories"
+          value={marketplaceStats.totalQuantity.toLocaleString("en-IN")}
+          detail="Parsed quantity units"
         />
         <MetricCard
           icon={Gauge}
-          label="Match readiness"
+          label="Catalog coverage"
           value={`${marketplaceStats.matchRate}%`}
-          detail="Specs, distance, buyer fit"
+          detail="Listings with category and location"
         />
       </section>
 
@@ -443,10 +461,10 @@ function HomeLanding({
       <section className="grid gap-5 xl:grid-cols-2">
         <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold tracking-tight text-stone-950">
-            Nearby sourcing lanes
+            Active sourcing lanes
           </h2>
           <p className="mt-1 text-sm text-stone-500">
-            Fast-moving industrial clusters and regional supply.
+            Real public listings grouped by current inventory and location signals.
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {localDeals.slice(0, 4).map((listing) => (
@@ -479,10 +497,10 @@ function HomeLanding({
 
         <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold tracking-tight text-stone-950">
-            Verified supplier programs
+            Active source clusters
           </h2>
           <p className="mt-1 text-sm text-stone-500">
-            Suppliers with broad category coverage and active inventory.
+            Locations and suppliers with the most marketplace inventory right now.
           </p>
           <div className="mt-5 divide-y divide-stone-100">
             {suppliers.map((supplier) => (
@@ -667,7 +685,7 @@ export default function Home() {
   const [category, setCategory] = useState("All");
   const [marketplaceLocation, setMarketplaceLocation] =
     useState<MarketplaceLocation>({
-      label: "All India",
+      label: "All locations",
       query: "",
     });
   const [activeView, setActiveView] = useState<ActiveView>("Home");
@@ -706,7 +724,10 @@ export default function Home() {
       if (!res.ok) throw new Error("Failed to fetch marketplace listings");
       const data: MaterialListing[] = await res.json();
       setListings(data);
-      setSelected((current) => current ?? data[0] ?? null);
+      setSelected((current) => {
+        if (!current) return data[0] ?? null;
+        return data.find((item) => item.id === current.id) ?? data[0] ?? null;
+      });
     } catch (err) {
       setListings([]);
       setSelected(null);
@@ -763,6 +784,10 @@ export default function Home() {
           item.country,
           item.verified ? "verified supplier buyer protection" : "",
           item.tradeAssurance ? "trade assurance buyer protection" : "",
+          item.sourceType,
+          item.sourceName ?? "",
+          item.rawQuantityText ?? "",
+          item.rawLocationText ?? "",
         ]
           .join(" ")
           .toLowerCase()
@@ -794,7 +819,7 @@ export default function Home() {
       current.count += 1;
       current.quantity += listing.quantity ?? 0;
       current.supplierCount.add(listing.producer);
-      if (listing.tradeAssurance) current.imageUrl = listing.imageUrl;
+      if (listing.imageUrl.includes("upload_images_listings")) current.imageUrl = listing.imageUrl;
       summary.set(listing.category, current);
     }
 
@@ -813,20 +838,32 @@ export default function Home() {
   const featuredDeals = useMemo(
     () =>
       listings
-        .filter((listing) => listing.tradeAssurance && listing.verified)
+        .slice()
+        .sort((a, b) => {
+          const imageScore = Number(b.imageUrl.includes("upload_images_listings")) - Number(a.imageUrl.includes("upload_images_listings"));
+          const quantityScore = (b.quantity ?? 0) - (a.quantity ?? 0);
+          return imageScore || quantityScore || b.rating - a.rating;
+        })
         .slice(0, 10),
     [listings]
   );
 
-  const localDeals = useMemo(
-    () =>
-      listings
-        .filter((listing) =>
-          ["Karnataka", "Maharashtra", "Tamil Nadu"].includes(listing.state)
+  const localDeals = useMemo(() => {
+    const locationTerm = marketplaceLocation.query.trim().toLowerCase();
+    const pool = locationTerm
+      ? listings.filter((listing) =>
+          [listing.area, listing.city, listing.state, listing.country, listing.location]
+            .join(" ")
+            .toLowerCase()
+            .includes(locationTerm)
         )
-        .slice(0, 8),
-    [listings]
-  );
+      : listings;
+
+    return pool
+      .slice()
+      .sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))
+      .slice(0, 8);
+  }, [listings, marketplaceLocation.query]);
 
   const supplierHighlights = useMemo(() => {
     const bySupplier = new Map<
@@ -865,12 +902,25 @@ export default function Home() {
       (sum, item) => sum + (item.quantity ?? 0),
       0
     );
+    const completeListings = filteredListings.filter(
+      (item) => item.category && item.city && item.state
+    ).length;
 
     return {
       activeValue,
       verifiedSellers,
       totalQuantity,
-      matchRate: filteredListings.length > 0 ? 78 : 0,
+      matchRate:
+        filteredListings.length > 0
+          ? Math.round((completeListings / filteredListings.length) * 100)
+          : 0,
+      totalListings: filteredListings.length,
+      publicListings: filteredListings.filter((item) => item.sourceType === "real_public").length,
+      sellerListings: filteredListings.filter((item) => item.sourceType === "seller_submitted").length,
+      categoryCount: new Set(filteredListings.map((item) => item.category).filter(Boolean)).size,
+      sourceCount: new Set(
+        filteredListings.map((item) => item.sourceName ?? item.sourceType).filter(Boolean)
+      ).size,
     };
   }, [filteredListings]);
 
@@ -1012,6 +1062,7 @@ export default function Home() {
       <NavBar
         query={query}
         locationLabel={marketplaceLocation.label}
+        listingCount={listings.length}
         onQueryChange={setQuery}
         onCategorySelect={handleCategorySelect}
         onLocationChange={(location) => {
@@ -1107,8 +1158,8 @@ export default function Home() {
                 Marketplace command center
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-stone-600">
-                Source verified bulk secondary materials, compare suppliers, place RFQs,
-                and turn industrial surplus into transparent deal flow.
+                Source live secondary materials, compare public-source and seller-added
+                inventory, place RFQs, and turn industrial surplus into transparent deal flow.
               </p>
               <div className="mt-3 inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-700 shadow-sm">
                 <MapPin size={15} className="text-orange-600" />
@@ -1121,7 +1172,7 @@ export default function Home() {
                 {marketplaceLocation.query && (
                   <button
                     onClick={() =>
-                      setMarketplaceLocation({ label: "All India", query: "" })
+                      setMarketplaceLocation({ label: "All locations", query: "" })
                     }
                     className="ml-1 text-xs font-semibold text-orange-700 hover:text-orange-800"
                   >
@@ -1162,7 +1213,7 @@ export default function Home() {
             />
             <MetricCard
               icon={Factory}
-              label="Verified suppliers"
+              label="Active suppliers"
               value={String(marketplaceStats.verifiedSellers)}
               detail="Across industrial categories"
             />
@@ -1174,9 +1225,9 @@ export default function Home() {
             />
             <MetricCard
               icon={Gauge}
-              label="Match readiness"
+              label="Catalog coverage"
               value={`${marketplaceStats.matchRate}%`}
-              detail="Specs, distance, buyer fit"
+              detail="Category and location completeness"
             />
           </section>
 
@@ -1190,7 +1241,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-stone-950">
-                      Verified listings
+                      Live marketplace listings
                     </h2>
                     <p className="text-sm text-stone-500">
                       {filteredListings.length.toLocaleString("en-IN")} wholesale offers available
@@ -1238,30 +1289,35 @@ export default function Home() {
                   <div className="mt-4 grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-3">
                     <button
                       onClick={() => {
-                        setQuery("Trade Assurance");
-                        showToast("Showing listings with stronger buyer protection signals.");
+                        setQuery("public source");
+                        showToast("Showing public-source marketplace listings.");
                       }}
                       className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left font-medium text-stone-700 hover:border-orange-300"
                     >
-                      Trade Assurance
+                      Public source
                     </button>
                     <button
                       onClick={() => {
-                        setMarketplaceLocation({
-                          label: "Bengaluru, Karnataka",
-                          query: "Bengaluru Karnataka",
-                        });
-                        showToast("Filtered toward Bengaluru and Karnataka suppliers.");
+                        const topLocation =
+                          listings.find((item) => item.state && item.state !== "Industrial Region") ??
+                          listings[0];
+                        if (topLocation) {
+                          setMarketplaceLocation({
+                            label: `${topLocation.city}, ${topLocation.state}`,
+                            query: `${topLocation.city} ${topLocation.state}`,
+                          });
+                          showToast(`Filtered toward ${topLocation.city}, ${topLocation.state}.`);
+                        }
                       }}
                       className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left font-medium text-stone-700 hover:border-orange-300"
                     >
-                      Nearby suppliers
+                      Top location
                     </button>
                     <button
                       onClick={() => {
                         setQuery("");
                         setCategory("All");
-                        setMarketplaceLocation({ label: "All India", query: "" });
+                        setMarketplaceLocation({ label: "All locations", query: "" });
                         setFiltersOpen(false);
                       }}
                       className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left font-medium text-stone-700 hover:border-orange-300"
@@ -2051,9 +2107,9 @@ function WorkspacePanel({
         />
         <MetricCard
           icon={ShieldCheck}
-          label="Verified share"
-          value={`${Math.round((listings.filter((item) => item.verified).length / Math.max(listings.length, 1)) * 100)}%`}
-          detail="Supplier trust signal"
+          label="Public-source share"
+          value={`${Math.round((listings.filter((item) => item.sourceType === "real_public").length / Math.max(listings.length, 1)) * 100)}%`}
+          detail="Real imported inventory"
         />
         <MetricCard
           icon={Truck}

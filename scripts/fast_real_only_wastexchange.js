@@ -295,8 +295,8 @@ async function main() {
     console.log(`Wrote ${Math.min(i + 400, statements.length)} / ${statements.length} statements`);
   }
 
-  await client.execute("delete from MarketplaceListing where sourceType != 'real_public' or sourceType is null");
-  const counts = await client.execute("select count(*) as total, sum(case when sourceType='real_public' then 1 else 0 end) as realPublic from MarketplaceListing");
+  await client.execute("delete from MarketplaceListing where sourceType = 'synthetic' or sourceType is null");
+  const counts = await client.execute("select count(*) as total, sum(case when sourceType='real_public' then 1 else 0 end) as realPublic, sum(case when sourceType='seller_submitted' then 1 else 0 end) as sellerSubmitted from MarketplaceListing");
   console.log(JSON.stringify(counts.rows[0], null, 2));
 }
 
