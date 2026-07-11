@@ -1,21 +1,5 @@
-// ---------------------------------------------------------------------------
-//  POST /api/hybrid-search
-//
-//  Hybrid Semantic Routing — bridges the "vocabulary gap" by combining:
-//    1. Vector similarity search (OpenAI embeddings in Neo4j)
-//    2. Graph relationship traversal (producers, upcyclers, regulations)
-//
-//  A user searching "clear polymer" will match "Polycarbonate Scrap" even
-//  though the exact phrase never appears in the node properties.
-// ---------------------------------------------------------------------------
-
 import { NextRequest, NextResponse } from "next/server";
-import { embedQuery } from "@/lib/embeddings";
-import { getNeo4jGraph } from "@/lib/neo4j-graph";
-
-// ---------------------------------------------------------------------------
-//  Types
-// ---------------------------------------------------------------------------
+import prisma from "@/lib/prisma";
 
 export interface HybridSearchResult {
   id: string;
@@ -35,9 +19,33 @@ interface HybridSearchRequest {
   topK?: number;
 }
 
-// ---------------------------------------------------------------------------
-//  Route Handler
-// ---------------------------------------------------------------------------
+function scoreMaterial(material: {
+  name: string;
+  category: string;
+  baseElement: string;
+  description: string;
+}, query: string) {
+  const q = query.toLowerCase();
+  const fields = [
+    [material.name, 0.55],
+    [material.category, 0.2],
+    [material.baseElement, 0.15],
+    [material.description, 0.1],
+  ] as const;
+
+  let score = 0;
+  for (const [value, weight] of fields) {
+    const text = value.toLowerCase();
+    if (text === q) score += weight;
+    else if (text.includes(q)) score += weight * 0.8;
+    else {
+      const tokens = q.split(/\s+/).filter(Boolean);
+      const hits = tokens.filter((token) => text.includes(token)).length;
+      if (tokens.length > 0) score += weight * (hits / tokens.length) * 0.55;
+    }
+  }
+  return Math.min(1, Math.round(score * 1000) / 1000);
+}
 
 export async function POST(
   request: NextRequest
@@ -60,109 +68,52 @@ export async function POST(
   const topK = Math.min(Math.max(body.topK ?? 10, 1), 50);
 
   try {
-    // ---- Step 1: Embed the user query ----------------------------------------
-    const queryEmbedding = await embedQuery(query);
+    const candidates = await prisma.wasteMaterial.findMany({
+      where: {
+        status: "available",
+        OR: [
+          { name: { contains: query } },
+          { description: { contains: query } },
+          { category: { contains: query } },
+          { baseElement: { contains: query } },
+        ],
+      },
+      include: {
+        producers: { include: { company: { select: { name: true } } } },
+        upcyclers: { include: { company: { select: { name: true } } } },
+        regulations: { include: { regulation: { select: { code: true } } } },
+      },
+      take: 100,
+    });
 
-    // ---- Step 2: Vector search + graph traversal -----------------------------
-    const graph = await getNeo4jGraph();
+    const fallback =
+      candidates.length > 0
+        ? candidates
+        : await prisma.wasteMaterial.findMany({
+            where: { status: "available" },
+            include: {
+              producers: { include: { company: { select: { name: true } } } },
+              upcyclers: { include: { company: { select: { name: true } } } },
+              regulations: { include: { regulation: { select: { code: true } } } },
+            },
+            take: 100,
+          });
 
-    let results: HybridSearchResult[];
-
-    try {
-      // Try vector index search first
-      const records = await graph.query<{
-        id: string;
-        name: string;
-        category: string;
-        toxicity: string;
-        baseElement: string;
-        description: string;
-        similarity: number;
-        producers: string[];
-        upcyclers: string[];
-        regulations: string[];
-      }>(
-        `CALL db.index.vector.queryNodes('waste_embedding_idx', $topK, $queryEmbedding)
-         YIELD node AS waste, score
-         MATCH (producer:Company)-[:PRODUCES]->(waste)
-         OPTIONAL MATCH (upcycler:Company)-[:CAN_UPCYCLE]->(waste)
-         OPTIONAL MATCH (waste)-[:REQUIRES_COMPLIANCE]->(reg:Regulation)
-         RETURN waste.id AS id,
-                waste.name AS name,
-                waste.category AS category,
-                waste.toxicity_level AS toxicity,
-                waste.base_element AS baseElement,
-                waste.description AS description,
-                score AS similarity,
-                collect(DISTINCT producer.name) AS producers,
-                collect(DISTINCT upcycler.name) AS upcyclers,
-                collect(DISTINCT reg.code) AS regulations
-         ORDER BY score DESC`,
-        { topK, queryEmbedding }
-      );
-
-      results = records.map((r) => ({
-        id: r.id,
-        name: r.name,
-        category: r.category,
-        toxicity: r.toxicity,
-        baseElement: r.baseElement,
-        description: r.description,
-        similarity: Math.round(r.similarity * 1000) / 1000,
-        producers: r.producers.filter(Boolean),
-        upcyclers: r.upcyclers.filter(Boolean),
-        regulations: r.regulations.filter(Boolean),
-      }));
-    } catch (vectorErr: unknown) {
-      // Fallback: if vector index isn't available, do text-based search
-      const msg =
-        vectorErr instanceof Error ? vectorErr.message : String(vectorErr);
-      console.warn("[HybridSearch] Vector search failed, using fallback:", msg);
-
-      const records = await graph.query<{
-        id: string;
-        name: string;
-        category: string;
-        toxicity: string;
-        baseElement: string;
-        description: string;
-        producers: string[];
-        upcyclers: string[];
-        regulations: string[];
-      }>(
-        `MATCH (producer:Company)-[:PRODUCES]->(waste:WasteMaterial)
-         WHERE toLower(waste.name) CONTAINS toLower($query)
-            OR toLower(waste.description) CONTAINS toLower($query)
-            OR toLower(waste.category) CONTAINS toLower($query)
-            OR toLower(waste.base_element) CONTAINS toLower($query)
-         OPTIONAL MATCH (upcycler:Company)-[:CAN_UPCYCLE]->(waste)
-         OPTIONAL MATCH (waste)-[:REQUIRES_COMPLIANCE]->(reg:Regulation)
-         RETURN waste.id AS id,
-                waste.name AS name,
-                waste.category AS category,
-                waste.toxicity_level AS toxicity,
-                waste.base_element AS baseElement,
-                waste.description AS description,
-                collect(DISTINCT producer.name) AS producers,
-                collect(DISTINCT upcycler.name) AS upcyclers,
-                collect(DISTINCT reg.code) AS regulations
-         LIMIT $topK`,
-        { query, topK }
-      );
-
-      results = records.map((r) => ({
-        id: r.id,
-        name: r.name,
-        category: r.category,
-        toxicity: r.toxicity,
-        baseElement: r.baseElement,
-        description: r.description,
-        similarity: -1, // indicates fallback was used
-        producers: r.producers.filter(Boolean),
-        upcyclers: r.upcyclers.filter(Boolean),
-        regulations: r.regulations.filter(Boolean),
-      }));
-    }
+    const results = fallback
+      .map((material) => ({
+        id: material.id,
+        name: material.name,
+        category: material.category,
+        toxicity: material.toxicityLevel,
+        baseElement: material.baseElement,
+        description: material.description,
+        similarity: scoreMaterial(material, query),
+        producers: material.producers.map((edge) => edge.company.name),
+        upcyclers: material.upcyclers.map((edge) => edge.company.name),
+        regulations: material.regulations.map((edge) => edge.regulation.code),
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK);
 
     return NextResponse.json({ results });
   } catch (err: unknown) {

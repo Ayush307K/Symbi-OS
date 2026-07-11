@@ -1,6 +1,6 @@
 datasource db {
   provider = "sqlite"
-  url      = "file:./placeholder.db"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -13,7 +13,7 @@ model User {
   passwordHash   String
   role           String   @default("BOTH") // BUYER | SELLER | BOTH
   companyName    String
-  neo4jCompanyId String?
+  companyId      String?
   createdAt      DateTime @default(now())
 }
 
@@ -31,4 +31,171 @@ model Bid {
   producerId     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model Company {
+  id            String   @id
+  name          String   @unique
+  industry      String
+  location      String
+  carbonRating  String
+  latitude      Float
+  longitude     Float
+  capacity      Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  produces      MaterialProducer[]
+  upcycles      MaterialUpcycler[]
+  listings      MarketplaceListing[]
+  demands       Demand[]
+  matchesA      PotentialMatch[] @relation("MatchCompanyA")
+  matchesB      PotentialMatch[] @relation("MatchCompanyB")
+}
+
+model WasteMaterial {
+  id            String   @id
+  name          String   @unique
+  toxicityLevel String
+  baseElement   String
+  category      String
+  description   String
+  price         Float?
+  quantity      Int?
+  status        String   @default("available")
+  embeddingJson String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  producers     MaterialProducer[]
+  upcyclers     MaterialUpcycler[]
+  regulations   MaterialRegulation[]
+  complements   MaterialComplement[] @relation("ComplementSource")
+  complementedBy MaterialComplement[] @relation("ComplementTarget")
+  listings      MarketplaceListing[]
+  demands       Demand[]
+}
+
+model MarketplaceListing {
+  id                String   @id
+  title             String
+  slug              String   @unique
+  materialId        String
+  sellerCompanyId   String
+  category          String
+  subcategory       String
+  area              String
+  city              String
+  state             String
+  country           String
+  imageUrl          String
+  pricePerUnit      Float
+  currency          String   @default("INR")
+  unit              String   @default("ton")
+  minOrderQuantity  Int
+  quantityAvailable Int
+  leadTimeDays      Int
+  rating            Float
+  responseRate      Int
+  verified          Boolean  @default(true)
+  tradeAssurance    Boolean  @default(true)
+  yearsActive       Int
+  ordersCompleted   Int
+  description       String
+  packaging         String
+  paymentTerms      String
+  status            String   @default("active")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  material          WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  seller            Company       @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([category])
+  @@index([state])
+  @@index([country])
+  @@index([materialId])
+  @@index([sellerCompanyId])
+}
+
+model Regulation {
+  id            String   @id
+  code          String   @unique
+  description   String
+
+  materials     MaterialRegulation[]
+}
+
+model MaterialProducer {
+  companyId     String
+  materialId    String
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material      WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, materialId])
+  @@index([materialId])
+}
+
+model MaterialUpcycler {
+  companyId     String
+  materialId    String
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material      WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, materialId])
+  @@index([materialId])
+}
+
+model MaterialRegulation {
+  materialId    String
+  regulationId  String
+
+  material      WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  regulation    Regulation    @relation(fields: [regulationId], references: [id], onDelete: Cascade)
+
+  @@id([materialId, regulationId])
+  @@index([regulationId])
+}
+
+model MaterialComplement {
+  sourceId      String
+  targetId      String
+
+  source        WasteMaterial @relation("ComplementSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target        WasteMaterial @relation("ComplementTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([sourceId, targetId])
+  @@index([targetId])
+}
+
+model PotentialMatch {
+  id              String   @id @default(uuid())
+  company1Id      String
+  company2Id      String
+  score           Float
+  sharedMaterials Int
+  sharedNamesJson String
+  computedAt      DateTime @default(now())
+
+  company1        Company @relation("MatchCompanyA", fields: [company1Id], references: [id], onDelete: Cascade)
+  company2        Company @relation("MatchCompanyB", fields: [company2Id], references: [id], onDelete: Cascade)
+
+  @@unique([company1Id, company2Id])
+  @@index([score])
+}
+
+model Demand {
+  id          String   @id @default(uuid())
+  companyId   String
+  materialId  String
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material    WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, materialId])
+  @@index([materialId])
 }

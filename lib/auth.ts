@@ -11,7 +11,7 @@ export interface JWTPayload {
   email: string;
   role: string;
   companyName: string;
-  neo4jCompanyId: string | null;
+  companyId: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,15 +1,7 @@
-// ---------------------------------------------------------------------------
-//  POST /api/auth/register
-//
-//  Creates a new user in SQLite, MERGEs the Company node in Neo4j,
-//  and sets a JWT cookie.
-// ---------------------------------------------------------------------------
-
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, signToken, setAuthCookie } from "@/lib/auth";
-import { getNeo4jGraph } from "@/lib/neo4j-graph";
-import { randomUUID } from "crypto";
 
 interface RegisterBody {
   email: string;
@@ -26,8 +18,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { email, password, companyName } = body;
-  const industry = body.industry ?? "General";
+  const email = body.email?.trim().toLowerCase();
+  const password = body.password;
+  const companyName = body.companyName?.trim();
+  const industry = body.industry?.trim() || "General";
   const role = "BOTH";
 
   if (!email || !password || !companyName) {
@@ -44,51 +38,47 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check if email already exists
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return NextResponse.json(
-      { error: "An account with this email already exists." },
-      { status: 409 }
-    );
-  }
-
   try {
-    // ---- Step 1: MERGE Company in Neo4j ----------------------------------------
-    const graph = await getNeo4jGraph();
-    const genId = `company_${randomUUID().slice(0, 8)}`;
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return NextResponse.json(
+        { error: "An account with this email already exists." },
+        { status: 409 }
+      );
+    }
 
-    const mergeResult = await graph.query<{ neo4jCompanyId: string }>(
-      `MERGE (c:Company {name: $companyName})
-       ON CREATE SET c.industry = $industry, c.id = $genId,
-                     c.location = 'Unknown', c.carbon_rating = 'B',
-                     c.latitude = 0, c.longitude = 0, c.capacity = 0
-       RETURN c.id AS neo4jCompanyId`,
-      { companyName, industry, genId }
-    );
+    const company = await prisma.company.upsert({
+      where: { name: companyName },
+      update: { industry },
+      create: {
+        id: `company_${randomUUID().slice(0, 8)}`,
+        name: companyName,
+        industry,
+        location: "Unknown",
+        carbonRating: "B",
+        latitude: 0,
+        longitude: 0,
+        capacity: 0,
+      },
+    });
 
-    const neo4jCompanyId = mergeResult[0]?.neo4jCompanyId ?? genId;
-
-    // ---- Step 2: Create user in SQLite -----------------------------------------
     const passwordHash = await hashPassword(password);
-
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
         role,
         companyName,
-        neo4jCompanyId,
+        companyId: company.id,
       },
     });
 
-    // ---- Step 3: Issue JWT + cookie --------------------------------------------
     const token = signToken({
       userId: user.id,
       email: user.email,
       role: user.role,
       companyName: user.companyName,
-      neo4jCompanyId,
+      companyId: company.id,
     });
 
     await setAuthCookie(token);
@@ -99,7 +89,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         companyName: user.companyName,
-        neo4jCompanyId,
+        companyId: company.id,
       },
     });
   } catch (err: unknown) {

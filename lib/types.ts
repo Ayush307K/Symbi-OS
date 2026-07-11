@@ -2,10 +2,10 @@
 //  Symbi-OS — Shared TypeScript Interfaces
 // ---------------------------------------------------------------------------
 
-/** Node categories stored in Neo4j. */
+/** Node categories used by the marketplace relationship graph. */
 export type NodeLabel = "Company" | "WasteMaterial" | "Regulation";
 
-/** Relationship types stored in Neo4j. */
+/** Relationship types used by the marketplace relationship graph. */
 export type RelationshipType =
   | "PRODUCES"
   | "CAN_UPCYCLE"
@@ -107,5 +107,5 @@ export interface AuthUser {
   email: string;
   role: string;
   companyName: string;
-  neo4jCompanyId: string | null;
+  companyId: string | null;
 }

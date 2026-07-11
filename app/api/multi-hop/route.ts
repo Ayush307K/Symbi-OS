@@ -1,20 +1,5 @@
-// ---------------------------------------------------------------------------
-//  POST /api/multi-hop
-//
-//  Multi-Hop Constraint Solving — "The Middleman Problem"
-//
-//  Finds supply chain routes:
-//    Producer → (PRODUCES) → WasteMaterial → (CAN_UPCYCLE) ← Upcycler
-//
-//  With geospatial distance constraints and capacity filtering.
-// ---------------------------------------------------------------------------
-
 import { NextRequest, NextResponse } from "next/server";
-import { getNeo4jGraph } from "@/lib/neo4j-graph";
-
-// ---------------------------------------------------------------------------
-//  Types
-// ---------------------------------------------------------------------------
+import prisma from "@/lib/prisma";
 
 export interface SupplyRoute {
   producer: string;
@@ -37,9 +22,18 @@ interface MultiHopRequest {
   minCapacity?: number;
 }
 
-// ---------------------------------------------------------------------------
-//  Route Handler
-// ---------------------------------------------------------------------------
+function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const radius = 6371;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return Math.round(radius * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)));
+}
 
 export async function POST(
   request: NextRequest
@@ -51,8 +45,8 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const material = body.material?.trim();
-  if (!material) {
+  const materialName = body.material?.trim();
+  if (!materialName) {
     return NextResponse.json(
       { error: "Missing required field: material" },
       { status: 400 }
@@ -63,75 +57,60 @@ export async function POST(
   const minCapacity = body.minCapacity ?? 0;
 
   try {
-    const graph = await getNeo4jGraph();
+    const material = await prisma.wasteMaterial.findUnique({
+      where: { name: materialName },
+      include: {
+        producers: { include: { company: true } },
+        upcyclers: {
+          include: {
+            company: {
+              include: {
+                upcycles: {
+                  include: { material: { select: { name: true } } },
+                  take: 6,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
 
-    const records = await graph.query<{
-      producer: string;
-      producerLocation: string;
-      producerIndustry: string;
-      material: string;
-      materialCategory: string;
-      materialToxicity: string;
-      upcycler: string;
-      upcyclerLocation: string;
-      upcyclerIndustry: string;
-      distanceKm: number;
-      upcyclerCapacity: number;
-      alsoUpcycles: string[];
-    }>(
-      `MATCH (producer:Company)-[:PRODUCES]->(w:WasteMaterial)<-[:CAN_UPCYCLE]-(upcycler:Company)
-       WHERE w.name = $material
-         AND producer <> upcycler
-         AND producer.latitude IS NOT NULL
-         AND upcycler.latitude IS NOT NULL
-         AND upcycler.capacity >= $minCapacity
-       WITH producer, w, upcycler,
-            point.distance(
-              point({latitude: producer.latitude, longitude: producer.longitude}),
-              point({latitude: upcycler.latitude, longitude: upcycler.longitude})
-            ) / 1000.0 AS distKm
-       WHERE distKm <= $maxDistanceKm
-       OPTIONAL MATCH (upcycler)-[:CAN_UPCYCLE]->(other:WasteMaterial)
-       WHERE other <> w
-       WITH producer, w, upcycler, distKm,
-            collect(DISTINCT other.name)[0..5] AS alsoUpcycles
-       RETURN producer.name AS producer,
-              producer.location AS producerLocation,
-              producer.industry AS producerIndustry,
-              w.name AS material,
-              w.category AS materialCategory,
-              w.toxicity_level AS materialToxicity,
-              upcycler.name AS upcycler,
-              upcycler.location AS upcyclerLocation,
-              upcycler.industry AS upcyclerIndustry,
-              round(distKm) AS distanceKm,
-              upcycler.capacity AS upcyclerCapacity,
-              alsoUpcycles
-       ORDER BY distKm ASC
-       LIMIT 20`,
-      { material, maxDistanceKm, minCapacity }
-    );
+    if (!material) return NextResponse.json({ routes: [] });
 
-    const routes: SupplyRoute[] = records.map((r) => ({
-      producer: r.producer,
-      producerLocation: r.producerLocation,
-      producerIndustry: r.producerIndustry,
-      material: r.material,
-      materialCategory: r.materialCategory,
-      materialToxicity: r.materialToxicity,
-      upcycler: r.upcycler,
-      upcyclerLocation: r.upcyclerLocation,
-      upcyclerIndustry: r.upcyclerIndustry,
-      distanceKm: typeof r.distanceKm === "object"
-        ? (r.distanceKm as unknown as { low: number }).low ?? Number(r.distanceKm)
-        : Number(r.distanceKm),
-      upcyclerCapacity: typeof r.upcyclerCapacity === "object"
-        ? (r.upcyclerCapacity as unknown as { low: number }).low ?? Number(r.upcyclerCapacity)
-        : Number(r.upcyclerCapacity),
-      alsoUpcycles: r.alsoUpcycles ?? [],
-    }));
+    const routes: SupplyRoute[] = [];
+    for (const producerEdge of material.producers) {
+      for (const upcyclerEdge of material.upcyclers) {
+        const producer = producerEdge.company;
+        const upcycler = upcyclerEdge.company;
+        if (producer.id === upcycler.id) continue;
+        if (upcycler.capacity < minCapacity) continue;
+        const dist = distanceKm(producer, upcycler);
+        if (dist > maxDistanceKm) continue;
 
-    return NextResponse.json({ routes });
+        routes.push({
+          producer: producer.name,
+          producerLocation: producer.location,
+          producerIndustry: producer.industry,
+          material: material.name,
+          materialCategory: material.category,
+          materialToxicity: material.toxicityLevel,
+          upcycler: upcycler.name,
+          upcyclerLocation: upcycler.location,
+          upcyclerIndustry: upcycler.industry,
+          distanceKm: dist,
+          upcyclerCapacity: upcycler.capacity,
+          alsoUpcycles: upcycler.upcycles
+            .map((edge) => edge.material.name)
+            .filter((name) => name !== material.name)
+            .slice(0, 5),
+        });
+      }
+    }
+
+    return NextResponse.json({
+      routes: routes.sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 20),
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[MultiHop] Error:", message);

@@ -1,16 +1,6 @@
-// ---------------------------------------------------------------------------
-//  POST /api/materials/add
-//
-//  Seller Listing + Demand Matchmaker
-//  1. A logged-in seller lists a new waste material.
-//  2. Creates/updates the WasteMaterial node + PRODUCES edge in Neo4j.
-//  3. Checks for IS_SEEKING buyers — returns matched demand alerts.
-// ---------------------------------------------------------------------------
-
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthFromCookie } from "@/lib/auth";
-import { getNeo4jGraph } from "@/lib/neo4j-graph";
 import { randomUUID } from "crypto";
+import { getAuthFromCookie } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { notifySeekerOfNewSupply } from "@/lib/mailer";
 
@@ -24,14 +14,17 @@ interface AddMaterialBody {
   quantity?: number;
 }
 
-interface MatchedBuyer {
-  companyId: string;
-  companyName: string;
-  seekingSince: string | null;
+function slugify(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=900&q=80";
+
 export async function POST(request: NextRequest) {
-  // ---- Auth check ---------------------------------------------------------------
   const auth = await getAuthFromCookie();
   if (!auth) {
     return NextResponse.json(
@@ -58,67 +51,126 @@ export async function POST(request: NextRequest) {
   const category = body.category ?? "Uncategorized";
   const toxicity = body.toxicity ?? "medium";
   const baseElement = body.baseElement ?? "Unknown";
-  const description = body.description ?? `${name} — listed by seller`;
+  const description = body.description ?? `${name} - listed by seller`;
   const price = body.price ?? null;
   const quantity = body.quantity ?? null;
 
   try {
-    const graph = await getNeo4jGraph();
-    const materialId = `mat_${randomUUID().slice(0, 8)}`;
+    const companyId =
+      auth.companyId ?? `company_${randomUUID().slice(0, 8)}`;
 
-    // ---- Step 1: MERGE material + PRODUCES edge ------------------------------
-    await graph.query(
-      `MATCH (seller:Company {id: $companyId})
-       MERGE (m:WasteMaterial {name: $name})
-       ON CREATE SET m.id = $materialId,
-                     m.category = $category,
-                     m.toxicity_level = $toxicity,
-                     m.base_element = $baseElement,
-                     m.description = $description,
-                     m.status = 'available',
-                     m.price = $price,
-                     m.quantity = $quantity
-       ON MATCH SET  m.status = 'available',
-                     m.category = CASE WHEN m.category = 'Requested' THEN $category ELSE m.category END,
-                     m.toxicity_level = CASE WHEN m.toxicity_level = 'unknown' THEN $toxicity ELSE m.toxicity_level END,
-                     m.base_element = CASE WHEN m.base_element = 'unknown' THEN $baseElement ELSE m.base_element END,
-                     m.description = CASE WHEN m.description STARTS WITH 'Demand request:' THEN $description ELSE m.description END,
-                     m.price = CASE WHEN $price IS NOT NULL THEN $price ELSE m.price END,
-                     m.quantity = CASE WHEN $quantity IS NOT NULL THEN $quantity ELSE m.quantity END
-       MERGE (seller)-[:PRODUCES]->(m)`,
-      { companyId: auth.neo4jCompanyId, name, materialId, category, toxicity, baseElement, description, price, quantity }
-    );
+    await prisma.company.upsert({
+      where: { id: companyId },
+      update: {},
+      create: {
+        id: companyId,
+        name: auth.companyName,
+        industry: "General",
+        location: "Unknown",
+        carbonRating: "B",
+        latitude: 0,
+        longitude: 0,
+        capacity: 0,
+      },
+    });
 
-    // ---- Step 2: Check for IS_SEEKING buyers (Demand Matchmaker) -------------
-    const seekingRecords = await graph.query<{
-      companyId: string;
-      companyName: string;
-      seekingSince: string | null;
-    }>(
-      `MATCH (buyer:Company)-[r:IS_SEEKING]->(m:WasteMaterial {name: $name})
-       RETURN buyer.id AS companyId,
-              buyer.name AS companyName,
-              toString(r.createdAt) AS seekingSince`,
-      { name }
-    );
+    await prisma.user.update({
+      where: { id: auth.userId },
+      data: { companyId: companyId },
+    });
 
-    const matchedBuyers: MatchedBuyer[] = seekingRecords.map((r) => ({
-      companyId: r.companyId,
-      companyName: r.companyName,
-      seekingSince: r.seekingSince,
+    const material = await prisma.wasteMaterial.upsert({
+      where: { name },
+      update: {
+        status: "available",
+        category,
+        toxicityLevel: toxicity,
+        baseElement,
+        description,
+        price,
+        quantity,
+      },
+      create: {
+        id: `mat_${randomUUID().slice(0, 8)}`,
+        name,
+        category,
+        toxicityLevel: toxicity,
+        baseElement,
+        description,
+        price,
+        quantity,
+        status: "available",
+      },
+    });
+
+    await prisma.materialProducer.upsert({
+      where: {
+        companyId_materialId: {
+          companyId,
+          materialId: material.id,
+        },
+      },
+      update: {},
+      create: {
+        companyId,
+        materialId: material.id,
+      },
+    });
+
+    const listingId = `listing_${randomUUID().slice(0, 10)}`;
+    await prisma.marketplaceListing.create({
+      data: {
+        id: listingId,
+        title: `Seller listed ${name} available for bulk sourcing`,
+        slug: `${slugify(name)}-${listingId}`,
+        materialId: material.id,
+        sellerCompanyId: companyId,
+        category,
+        subcategory: baseElement,
+        area: "Seller location",
+        city: "Unknown",
+        state: "Unknown",
+        country: "India",
+        imageUrl: FALLBACK_IMAGE,
+        pricePerUnit: price ?? 0,
+        currency: "INR",
+        unit: "ton",
+        minOrderQuantity: 1,
+        quantityAvailable: quantity ?? 1,
+        leadTimeDays: 7,
+        rating: 4.1,
+        responseRate: 85,
+        verified: true,
+        tradeAssurance: true,
+        yearsActive: 1,
+        ordersCompleted: 0,
+        description,
+        packaging: "Seller specified",
+        paymentTerms: "Escrow supported",
+        status: "active",
+      },
+    });
+
+    const demands = await prisma.demand.findMany({
+      where: { materialId: material.id },
+      include: { company: true },
+    });
+
+    const matchedBuyers = demands.map((demand) => ({
+      companyId: demand.company.id,
+      companyName: demand.company.name,
+      seekingSince: demand.createdAt.toISOString(),
     }));
 
-    // ---- Step 3: Email seekers about new supply --------------------------------
     if (matchedBuyers.length > 0) {
-      // Look up seeker emails from Prisma by matching neo4jCompanyId
-      const seekerCompanyIds = matchedBuyers.map((b) => b.companyId);
       const seekerUsers = await prisma.user.findMany({
-        where: { neo4jCompanyId: { in: seekerCompanyIds } },
+        where: { companyId: { in: matchedBuyers.map((b) => b.companyId) } },
         select: { email: true },
       });
-      for (const u of seekerUsers) {
+
+      for (const user of seekerUsers) {
         notifySeekerOfNewSupply({
-          seekerEmail: u.email,
+          seekerEmail: user.email,
           materialName: name,
           sellerCompany: auth.companyName,
         });

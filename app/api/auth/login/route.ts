@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       role: user.role,
       companyName: user.companyName,
-      neo4jCompanyId: user.neo4jCompanyId,
+      companyId: user.companyId,
     });
 
     await setAuthCookie(token);
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         companyName: user.companyName,
-        neo4jCompanyId: user.neo4jCompanyId,
+        companyId: user.companyId,
       },
     });
   } catch (err: unknown) {

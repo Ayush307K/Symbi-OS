@@ -22,7 +22,7 @@ export async function GET() {
         email: true,
         role: true,
         companyName: true,
-        neo4jCompanyId: true,
+        companyId: true,
       },
     });
 

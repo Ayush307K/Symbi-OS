@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // If no sellerUserId provided, try to look up by producerId (Neo4j company id)
+  // If no sellerUserId provided, try to look up by producerId (Company id)
   if (!sellerUserId && producerId) {
     const sellerUser = await prisma.user.findFirst({
-      where: { neo4jCompanyId: producerId },
+      where: { companyId: producerId },
       select: { id: true },
     });
     if (sellerUser) sellerUserId = sellerUser.id;
@@ -102,13 +102,13 @@ export async function GET(request: NextRequest) {
   try {
     let bids;
     if (role === "seller") {
-      // Match bids where this user is seller BY userId OR by producerId (neo4j company)
+      // Match bids where this user is seller BY userId OR by producerId (Company id)
       bids = await prisma.bid.findMany({
         where: {
           OR: [
             { sellerUserId: auth.userId },
-            ...(auth.neo4jCompanyId
-              ? [{ producerId: auth.neo4jCompanyId }]
+            ...(auth.companyId
+              ? [{ producerId: auth.companyId }]
               : []),
           ],
           // Exclude bids placed by the same user

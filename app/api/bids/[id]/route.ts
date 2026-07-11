@@ -5,7 +5,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthFromCookie } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { getNeo4jGraph } from "@/lib/neo4j-graph";
 import { notifyBuyerOfBidDecision } from "@/lib/mailer";
 
 interface PatchBody {
@@ -39,9 +38,9 @@ export async function PATCH(
     if (!bid) {
       return NextResponse.json({ error: "Bid not found." }, { status: 404 });
     }
-    // Seller is authorized if their userId matches OR their neo4j company matches producerId
+    // Seller is authorized if their userId matches OR their Company matches producerId
     const isSellerByUserId = bid.sellerUserId === auth.userId;
-    const isSellerByCompany = bid.producerId != null && bid.producerId === auth.neo4jCompanyId;
+    const isSellerByCompany = bid.producerId != null && bid.producerId === auth.companyId;
     if (!isSellerByUserId && !isSellerByCompany) {
       return NextResponse.json({ error: "Only the seller can accept/reject this bid." }, { status: 403 });
     }
@@ -55,21 +54,21 @@ export async function PATCH(
       data: { status: body.status },
     });
 
-    // If accepted, decrement quantity in Neo4j
+    // If accepted, decrement quantity in the marketplace database.
     if (body.status === "accepted" && bid.materialId) {
       try {
-        const graph = await getNeo4jGraph();
-        await graph.query(
-          `MATCH (w:WasteMaterial {id: $materialId})
-           WHERE w.quantity IS NOT NULL
-           SET w.quantity = CASE
-             WHEN w.quantity - $qty < 0 THEN 0
-             ELSE w.quantity - $qty
-           END`,
-          { materialId: bid.materialId, qty: bid.quantity }
-        );
+        const material = await prisma.wasteMaterial.findUnique({
+          where: { id: bid.materialId },
+          select: { quantity: true },
+        });
+        if (material?.quantity != null) {
+          await prisma.wasteMaterial.update({
+            where: { id: bid.materialId },
+            data: { quantity: Math.max(0, material.quantity - bid.quantity) },
+          });
+        }
       } catch (e) {
-        console.error("[Bids PATCH] Neo4j quantity decrement failed:", e);
+        console.error("[Bids PATCH] Quantity decrement failed:", e);
       }
     }
 

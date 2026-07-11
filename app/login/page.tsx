@@ -2,129 +2,148 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Recycle, Loader2, Mail, Lock } from "lucide-react";
+import { Building2, Loader2, Lock, Mail, Recycle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
   const { login, error, isLoading } = useAuth();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     await login(email, password);
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-      {/* Grid background */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(16,185,129,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.3) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-      />
-
-      <div className="relative w-full max-w-md">
-        {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/15 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-            <Recycle size={24} className="text-emerald-400" />
+    <main className="grid min-h-screen bg-[#f4f2ed] lg:grid-cols-[1fr_520px]">
+      <section className="hidden border-r border-stone-200 bg-[#fbfaf7] p-10 lg:flex lg:flex-col lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-800 text-white">
+            <Recycle size={20} />
           </div>
           <div>
-            <span className="text-2xl font-bold tracking-tight text-zinc-100">
-              Symbi<span className="text-emerald-400">-OS</span>
-            </span>
+            <p className="text-lg font-semibold text-stone-950">Symbi-OS</p>
+            <p className="text-sm text-stone-500">Industrial materials marketplace</p>
           </div>
-          <p className="text-sm text-zinc-500">
-            Sign in to your account
+        </div>
+
+        <div className="max-w-xl">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+            Karnataka pilot
+          </p>
+          <h1 className="mt-3 text-5xl font-semibold tracking-tight text-stone-950">
+            Trade secondary raw materials with verified counterparties.
+          </h1>
+          <p className="mt-5 text-lg leading-8 text-stone-600">
+            Manage listings, bids, compliance readiness, and buyer demand from a
+            single marketplace workspace.
           </p>
         </div>
 
-        {/* Card */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 backdrop-blur-xl">
-          <h1 className="mb-6 text-lg font-semibold text-zinc-100">
-            Welcome back
-          </h1>
+        <div className="grid grid-cols-3 gap-3">
+          {["Verified sellers", "Bid workflows", "Compliance trail"].map((item) => (
+            <div key={item} className="rounded-lg border border-stone-200 bg-white p-4">
+              <Building2 size={18} className="text-emerald-700" />
+              <p className="mt-3 text-sm font-medium text-stone-800">{item}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-zinc-300">
-                Email
-              </label>
-              <div className="relative">
-                <Mail
-                  size={14}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800/50 py-2.5 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25"
-                />
+      <section className="flex items-center justify-center px-5 py-10">
+        <div className="w-full max-w-md rounded-lg border border-stone-200 bg-white p-7 shadow-sm">
+          <div className="mb-7 lg:hidden">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-800 text-white">
+                <Recycle size={20} />
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-stone-950">Symbi-OS</p>
+                <p className="text-sm text-stone-500">Materials marketplace</p>
               </div>
             </div>
+          </div>
 
-            {/* Password */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-zinc-300">
-                Password
-              </label>
-              <div className="relative">
-                <Lock
-                  size={14}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500"
-                />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Your password"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800/50 py-2.5 pl-10 pr-4 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/25"
-                />
-              </div>
-            </div>
+          <h2 className="text-2xl font-semibold tracking-tight text-stone-950">
+            Sign in
+          </h2>
+          <p className="mt-2 text-sm text-stone-500">
+            Continue to your sourcing and deal workspace.
+          </p>
 
-            {/* Error */}
+          <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+            <Field icon={Mail} label="Email">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@company.com"
+                className="h-11 w-full rounded-md border border-stone-300 pl-10 pr-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+              />
+            </Field>
+
+            <Field icon={Lock} label="Password">
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Your password"
+                className="h-11 w-full rounded-md border border-stone-300 pl-10 pr-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+              />
+            </Field>
+
             {error && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-800 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : null}
-              {isLoading ? "Signing in…" : "Sign In"}
+              {isLoading && <Loader2 size={16} className="animate-spin" />}
+              Sign in
             </button>
           </form>
 
-          {/* Register link */}
-          <p className="mt-6 text-center text-sm text-zinc-500">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/register"
-              className="font-medium text-emerald-400 transition-colors hover:text-emerald-300"
-            >
-              Create one
+          <p className="mt-6 text-center text-sm text-stone-500">
+            New to Symbi-OS?{" "}
+            <Link href="/register" className="font-semibold text-emerald-800 hover:text-emerald-900">
+              Create an account
             </Link>
           </p>
         </div>
+      </section>
+    </main>
+  );
+}
+
+function Field({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ElementType;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium text-stone-700">
+        {label}
+      </span>
+      <div className="relative">
+        <Icon
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+        />
+        {children}
       </div>
-    </div>
+    </label>
   );
 }

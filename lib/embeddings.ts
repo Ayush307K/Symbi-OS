@@ -1,29 +1,30 @@
-// ---------------------------------------------------------------------------
-//  Symbi-OS — OpenAI Embedding Utility
-//
-//  Wraps text-embedding-3-small for use in API routes.
-//  Cached singleton to avoid re-instantiating on every request.
-// ---------------------------------------------------------------------------
+import OpenAI from "openai";
 
-import { OpenAIEmbeddings } from "@langchain/openai";
+let client: OpenAI | null = null;
 
-let instance: OpenAIEmbeddings | null = null;
-
-function getEmbeddings(): OpenAIEmbeddings {
-  if (!instance) {
-    instance = new OpenAIEmbeddings({
-      model: "text-embedding-3-small",
-    });
+function getClient(): OpenAI {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("Missing OPENAI_API_KEY.");
   }
-  return instance;
+  if (!client) {
+    client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return client;
 }
 
-/** Embed a single query string → 1536-d float array. */
 export async function embedQuery(text: string): Promise<number[]> {
-  return getEmbeddings().embedQuery(text);
+  const response = await getClient().embeddings.create({
+    model: "text-embedding-3-small",
+    input: text,
+  });
+  return response.data[0].embedding;
 }
 
-/** Embed multiple documents → array of 1536-d float arrays. */
 export async function embedDocuments(texts: string[]): Promise<number[][]> {
-  return getEmbeddings().embedDocuments(texts);
+  if (texts.length === 0) return [];
+  const response = await getClient().embeddings.create({
+    model: "text-embedding-3-small",
+    input: texts,
+  });
+  return response.data.map((item) => item.embedding);
 }
