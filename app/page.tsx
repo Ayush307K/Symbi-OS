@@ -3,15 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
-  BadgeCheck,
   Bell,
   Building2,
-  CheckCircle2,
   ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
   Factory,
-  Filter,
   Gavel,
   Gauge,
   LayoutDashboard,
@@ -19,7 +16,6 @@ import {
   MapPin,
   Package,
   Plus,
-  Route,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -108,23 +104,6 @@ const NAV_ITEMS = [
   { label: "Logistics", view: "Logistics", icon: Truck },
 ];
 
-const TOXICITY_STYLE: Record<string, string> = {
-  low: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  medium: "border-amber-200 bg-amber-50 text-amber-700",
-  high: "border-red-200 bg-red-50 text-red-700",
-};
-
-const CATEGORY_HINTS: Record<string, string> = {
-  "Metals & Alloys": "High salvage value",
-  Chemicals: "Docs required",
-  "Minerals & Construction": "Bulk logistics",
-  "Polymers & Plastics": "Grade sensitive",
-  "Energy Materials": "Special handling",
-  "E-Waste": "Verified buyers",
-  "Organic & Bio": "Fast clearance",
-  "Textiles & Fibers": "SME demand",
-};
-
 const HOME_FOOTER_COLUMNS = [
   {
     title: "About Symbi-OS",
@@ -171,10 +150,6 @@ function formatCompactNumber(value: number) {
     notation: value >= 10000 ? "compact" : "standard",
     maximumFractionDigits: 1,
   }).format(value);
-}
-
-function cleanToxicity(value: string) {
-  return value ? value.toLowerCase() : "medium";
 }
 
 function HomeLanding({
@@ -232,7 +207,7 @@ function HomeLanding({
         <div className="relative min-h-[330px] overflow-hidden rounded-lg border border-sky-100 bg-[#c8eaff] p-6 shadow-sm sm:p-8">
           <div className="relative z-10 max-w-xl">
             <h1 className="max-w-md text-3xl font-bold tracking-tight text-[#083b68] sm:text-4xl">
-              Your shortcut to verified industrial suppliers
+              Source real India scrap sell offers
             </h1>
             <div className="mt-5 flex flex-wrap gap-7 text-[#063b66]">
               <div>
@@ -408,7 +383,7 @@ function HomeLanding({
                 Curated for bulk buyers
               </h2>
               <p className="mt-1 text-sm text-stone-500">
-                A short row of verified offers, not the whole catalog.
+                A short row from the live India public-offer catalog.
               </p>
             </div>
             <button
@@ -782,10 +757,9 @@ export default function Home() {
           item.city,
           item.state,
           item.country,
-          item.verified ? "verified supplier buyer protection" : "",
-          item.tradeAssurance ? "trade assurance buyer protection" : "",
           item.sourceType,
           item.sourceName ?? "",
+          item.sourceType.startsWith("real_public") ? "public source" : "",
           item.rawQuantityText ?? "",
           item.rawLocationText ?? "",
         ]
@@ -842,7 +816,7 @@ export default function Home() {
         .sort((a, b) => {
           const imageScore = Number(b.imageUrl.includes("upload_images_listings")) - Number(a.imageUrl.includes("upload_images_listings"));
           const quantityScore = (b.quantity ?? 0) - (a.quantity ?? 0);
-          return imageScore || quantityScore || b.rating - a.rating;
+          return imageScore || quantityScore;
         })
         .slice(0, 10),
     [listings]
@@ -915,7 +889,7 @@ export default function Home() {
           ? Math.round((completeListings / filteredListings.length) * 100)
           : 0,
       totalListings: filteredListings.length,
-      publicListings: filteredListings.filter((item) => item.sourceType === "real_public").length,
+      publicListings: filteredListings.filter((item) => item.sourceType.startsWith("real_public")).length,
       sellerListings: filteredListings.filter((item) => item.sourceType === "seller_submitted").length,
       categoryCount: new Set(filteredListings.map((item) => item.category).filter(Boolean)).size,
       sourceCount: new Set(
@@ -1360,7 +1334,6 @@ export default function Home() {
                 listing={selected}
                 onBid={(listing) => openBidModal(listing)}
               />
-              <DealFlowPanel userCompany={user?.companyName ?? "Your company"} />
             </aside>
           </div>
           ) : (
@@ -1690,12 +1663,12 @@ function ListingCard({
   onSelect: () => void;
   onBid: () => void;
 }) {
-  const toxicity = cleanToxicity(listing.toxicity);
+  const isPublicSource = listing.sourceType.startsWith("real_public");
 
   return (
     <article
       className={cn(
-        "flex min-h-[430px] flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition",
+        "flex min-h-[390px] flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition",
         isSelected
           ? "border-emerald-700 ring-2 ring-emerald-700/10"
           : "border-stone-200 hover:border-stone-300 hover:shadow-md"
@@ -1710,89 +1683,57 @@ function ListingCard({
             loading="lazy"
           />
           <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-            {listing.tradeAssurance && (
-              <span className="rounded-sm bg-orange-500 px-2 py-1 text-[11px] font-bold text-white shadow-sm">
-                Trade Assurance
-              </span>
-            )}
-            {listing.verified && (
-              <span className="rounded-sm bg-white/95 px-2 py-1 text-[11px] font-bold text-emerald-800 shadow-sm">
-                Verified Supplier
-              </span>
-            )}
-            {listing.sourceType === "real_public" && (
+            {isPublicSource && (
               <span className="rounded-sm bg-sky-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm">
-                Public Source
+                India public source
               </span>
             )}
           </div>
         </div>
 
         <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span
-                className={cn(
-                  "rounded-full border px-2 py-0.5 text-xs font-medium capitalize",
-                  TOXICITY_STYLE[toxicity] ?? TOXICITY_STYLE.medium
-                )}
-              >
-                {toxicity} risk
-              </span>
-              <span
-                className={cn(
-                  "rounded-full border px-2 py-0.5 text-xs font-medium",
-                  listing.sourceType === "real_public"
-                    ? "border-sky-200 bg-sky-50 text-sky-700"
-                    : "border-blue-200 bg-blue-50 text-blue-700"
-                )}
-              >
-                {listing.sourceType === "real_public" ? "Public source" : "Verified"}
-              </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                  {listing.sourceName ?? (isPublicSource ? "Public source" : "Seller listing")}
+                </span>
+              </div>
+              <h3 className="line-clamp-2 text-base font-semibold leading-snug text-stone-950">
+                {listing.title}
+              </h3>
             </div>
-            <h3 className="line-clamp-2 text-base font-semibold leading-snug text-stone-950">
-              {listing.title}
-            </h3>
+            <ArrowUpRight size={17} className="shrink-0 text-stone-400" />
           </div>
-          <ArrowUpRight size={17} className="shrink-0 text-stone-400" />
-        </div>
 
-        <p className="mt-2 line-clamp-1 text-sm text-stone-500">
-          {listing.category} · {listing.subcategory || listing.baseElement}
-        </p>
+          <p className="mt-2 line-clamp-1 text-sm text-stone-500">
+            {listing.category} · {listing.subcategory || listing.baseElement}
+          </p>
 
-        <div className="mt-4">
-          <div className="flex items-baseline gap-2">
-            <span className="text-xl font-bold text-stone-950">
-              {formatMoney(listing.price)}
-            </span>
-            <span className="text-xs text-stone-500">/ {listing.unit ?? "ton"}</span>
+          <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-bold text-stone-950">
+                {formatMoney(listing.price)}
+              </span>
+              {listing.price && listing.price > 0 && (
+                <span className="text-xs text-stone-500">/ {listing.unit ?? "unit"}</span>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">
+              Quantity: {displayQuantity(listing)}
+            </div>
           </div>
-          <div className="mt-1 text-xs text-stone-500">
-            MOQ: {listing.minOrderQuantity} {listing.unit} · Stock: {displayQuantity(listing)}
-          </div>
-        </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <InfoBlock label="Rating" value={`${listing.rating.toFixed(1)}/5`} />
-          <InfoBlock label="Response" value={`${listing.responseRate}%`} />
-          <InfoBlock label="Lead" value={`${listing.leadTimeDays}d`} />
-        </div>
-
-        <div className="mt-4 space-y-2 text-sm text-stone-600">
-          <div className="flex items-center gap-2">
-            <Factory size={15} className="text-stone-400" />
-            <span className="truncate">{listing.producer}</span>
+          <div className="mt-4 space-y-2 text-sm text-stone-600">
+            <div className="flex items-center gap-2">
+              <Factory size={15} className="text-stone-400" />
+              <span className="truncate">{listing.producer}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin size={15} className="text-stone-400" />
+              <span className="truncate">{listing.rawLocationText || `${listing.area}, ${listing.state}`}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <MapPin size={15} className="text-stone-400" />
-            <span className="truncate">{listing.area}, {listing.state}</span>
-          </div>
-          <div className="text-xs text-stone-500">
-            {listing.yearsActive} yrs active · {listing.ordersCompleted.toLocaleString("en-IN")} completed orders
-          </div>
-        </div>
         </div>
       </button>
 
@@ -1834,12 +1775,10 @@ function ListingDetail({
   if (!listing) {
     return (
       <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
-        <p className="text-sm text-stone-500">Select a listing to inspect specs.</p>
+        <p className="text-sm text-stone-500">Select a listing to inspect source details.</p>
       </section>
     );
   }
-
-  const hint = CATEGORY_HINTS[listing.category] ?? "Match ready";
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white shadow-sm">
@@ -1847,7 +1786,7 @@ function ListingDetail({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-              Listing detail
+              Source record
             </p>
             <h2 className="mt-1 text-xl font-semibold text-stone-950">
               {listing.title}
@@ -1856,8 +1795,8 @@ function ListingDetail({
               {listing.category} · {listing.subcategory}
             </p>
           </div>
-          <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-            {hint}
+          <span className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">
+            India public data
           </span>
         </div>
       </div>
@@ -1871,86 +1810,60 @@ function ListingDetail({
             loading="lazy"
           />
         </div>
+
         <div className="grid grid-cols-2 gap-3">
-          <InfoBlock label="Ask price" value={formatMoney(listing.price)} />
-          <InfoBlock label="MOQ" value={`${listing.minOrderQuantity} ${listing.unit}`} />
-          <InfoBlock label="Available" value={displayQuantity(listing)} />
-          <InfoBlock label="Lead time" value={`${listing.leadTimeDays} days`} />
+          <InfoBlock label="Price" value={formatMoney(listing.price)} />
+          <InfoBlock label="Quantity" value={displayQuantity(listing)} />
+          <InfoBlock label="Location" value={listing.rawLocationText || `${listing.city}, ${listing.state}`} />
+          <InfoBlock label="Source" value={listing.sourceName ?? "Public source"} />
         </div>
 
         <div className="rounded-lg border border-stone-200 p-4">
           <h3 className="text-sm font-semibold text-stone-900">Supplier</h3>
           <div className="mt-3 space-y-2 text-sm text-stone-600">
             <div className="flex items-center gap-2">
-              <BadgeCheck size={16} className="text-emerald-700" />
+              <Factory size={16} className="text-stone-400" />
               <span>{listing.producer}</span>
             </div>
             <div className="flex items-center gap-2">
               <MapPin size={16} className="text-stone-400" />
-              <span>{listing.area}, {listing.city}, {listing.state}</span>
+              <span>{listing.area}, {listing.city}, {listing.state}, {listing.country}</span>
             </div>
-            <div className="flex items-center justify-between pt-2 text-xs">
-              <span className="rounded-sm bg-orange-50 px-2 py-1 font-semibold text-orange-700">
-                {listing.sourceType === "real_public"
-                  ? "Public source"
-                  : listing.tradeAssurance
-                    ? "Trade Assurance"
-                    : "Direct Deal"}
-              </span>
-              <span className="rounded-sm bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">
-                {listing.responseRate}% response rate
-              </span>
+            <div className="rounded-sm bg-stone-50 px-2 py-1 text-xs font-medium text-stone-600">
+              Contact details are not copied into Symbi-OS. Use RFQ or open the source record.
             </div>
           </div>
         </div>
 
         <div className="rounded-lg border border-stone-200 p-4">
-          <h3 className="text-sm font-semibold text-stone-900">Wholesale terms</h3>
+          <h3 className="text-sm font-semibold text-stone-900">Terms from source</h3>
           <div className="mt-3 space-y-2 text-sm text-stone-600">
             <div className="flex justify-between gap-3">
               <span>Packaging</span>
               <span className="font-medium text-stone-900">{listing.packaging}</span>
             </div>
-          <div className="flex justify-between gap-3">
-            <span>Payment</span>
-            <span className="font-medium text-stone-900">{listing.paymentTerms}</span>
-          </div>
-          {listing.sourceUrl && (
-            <a
-              href={listing.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block text-sm font-semibold text-sky-700 hover:text-sky-800"
-            >
-              View original public listing
-            </a>
-          )}
             <div className="flex justify-between gap-3">
-              <span>Completed orders</span>
-              <span className="font-medium text-stone-900">{listing.ordersCompleted.toLocaleString("en-IN")}</span>
+              <span>Payment</span>
+              <span className="font-medium text-stone-900">{listing.paymentTerms}</span>
             </div>
           </div>
         </div>
 
         <div className="rounded-lg border border-stone-200 p-4">
-          <h3 className="text-sm font-semibold text-stone-900">Deal readiness</h3>
-          <div className="mt-3 space-y-3">
-            {[
-              ["Specs captured", true],
-              ["Seller verified", true],
-              ["Compliance review", listing.toxicity !== "high"],
-              ["Route estimate", true],
-            ].map(([label, ok]) => (
-              <div key={String(label)} className="flex items-center justify-between text-sm">
-                <span className="text-stone-600">{label}</span>
-                {ok ? (
-                  <CheckCircle2 size={16} className="text-emerald-700" />
-                ) : (
-                  <Filter size={16} className="text-amber-600" />
-                )}
-              </div>
-            ))}
-          </div>
+          <h3 className="text-sm font-semibold text-stone-900">Description from source</h3>
+          <p className="mt-2 line-clamp-6 text-sm leading-6 text-stone-600">
+            {listing.description}
+          </p>
+          {listing.sourceUrl && (
+            <a
+              href={listing.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 block text-sm font-semibold text-sky-700 hover:text-sky-800"
+            >
+              View original public listing
+            </a>
+          )}
         </div>
 
         <button
@@ -1958,61 +1871,8 @@ function ListingDetail({
           className="flex w-full items-center justify-center gap-2 rounded-md bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-800"
         >
           <Gavel size={16} />
-          Place bid
+          Request quote
         </button>
-      </div>
-    </section>
-  );
-}
-
-function DealFlowPanel({ userCompany }: { userCompany: string }) {
-  return (
-    <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-stone-950">Deal flow</h2>
-          <p className="text-sm text-stone-500">{userCompany}</p>
-        </div>
-        <Route size={18} className="text-emerald-700" />
-      </div>
-
-      <div className="mt-4 space-y-3">
-        {[
-          {
-            title: "Split-match candidate",
-            body: "Large mineral lots can be divided across nearby SME buyers.",
-            tone: "emerald",
-          },
-          {
-            title: "Compliance watch",
-            body: "High-risk chemical listings need documentation before close.",
-            tone: "amber",
-          },
-          {
-            title: "Buyer demand gap",
-            body: "Polymer and e-waste searches are rising in the current inventory.",
-            tone: "blue",
-          },
-        ].map((item) => (
-          <div key={item.title} className="rounded-md border border-stone-200 p-3">
-            <div className="flex items-start gap-3">
-              <span
-                className={cn(
-                  "mt-1 h-2 w-2 rounded-full",
-                  item.tone === "emerald" && "bg-emerald-700",
-                  item.tone === "amber" && "bg-amber-500",
-                  item.tone === "blue" && "bg-blue-600"
-                )}
-              />
-              <div>
-                <p className="text-sm font-semibold text-stone-900">{item.title}</p>
-                <p className="mt-1 text-sm leading-relaxed text-stone-500">
-                  {item.body}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
       </div>
     </section>
   );
@@ -2043,7 +1903,7 @@ function WorkspacePanel({
   const copy: Record<Exclude<ActiveView, "Home">, { title: string; body: string; primary: string }> = {
     Marketplace: {
       title: "Marketplace",
-      body: "Browse live wholesale listings and source verified industrial materials.",
+      body: "Browse live India sell offers, inspect source records, and start RFQs.",
       primary: "Browse marketplace",
     },
     "Bids & Deals": {
@@ -2053,12 +1913,12 @@ function WorkspacePanel({
     },
     "Match Engine": {
       title: "Match Engine",
-      body: "Use material category, supplier location, risk, and demand signals to discover circular supply matches.",
+      body: "Use material category and supplier location to shortlist practical sourcing matches.",
       primary: "Find supply",
     },
     Compliance: {
       title: "Compliance",
-      body: "Prioritize listings that are verified, lower risk, and ready for documentation review.",
+      body: "Keep source links, terms, packaging, and descriptions visible before a buyer follows up.",
       primary: "Review listings",
     },
     Logistics: {
@@ -2108,14 +1968,14 @@ function WorkspacePanel({
         <MetricCard
           icon={ShieldCheck}
           label="Public-source share"
-          value={`${Math.round((listings.filter((item) => item.sourceType === "real_public").length / Math.max(listings.length, 1)) * 100)}%`}
+          value={`${Math.round((listings.filter((item) => item.sourceType.startsWith("real_public")).length / Math.max(listings.length, 1)) * 100)}%`}
           detail="Real imported inventory"
         />
         <MetricCard
           icon={Truck}
-          label="Avg lead time"
-          value={`${Math.round(listings.reduce((sum, item) => sum + item.leadTimeDays, 0) / Math.max(listings.length, 1))}d`}
-          detail="Catalog average"
+          label="India offers"
+          value={listings.filter((item) => item.country === "India").length.toLocaleString("en-IN")}
+          detail="Listings with India as source country"
         />
       </div>
 

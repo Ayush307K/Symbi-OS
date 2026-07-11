@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
         name: auth.companyName,
         industry: "General",
         location: "Unknown",
-        carbonRating: "B",
+        carbonRating: "Unrated",
         latitude: 0,
         longitude: 0,
         capacity: 0,
