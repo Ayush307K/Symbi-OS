@@ -146,22 +146,20 @@ function extractDetailImage(html, fallback) {
 
 function parseListPage(html) {
   const rows = [];
-  const rowRegex = /<tr[^>]*>[\s\S]*?Listing\.cfm\?idsListing=(\d+)[\s\S]*?<\/tr>/gi;
+  const rowRegex = /<tr[^>]*>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>\s*<a[^>]+href=["']Listing\.cfm\?idsListing=(\d+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi;
   let match;
 
   while ((match = rowRegex.exec(html))) {
-    const row = match[0];
-    const externalId = match[1];
-    const title = stripTags(row.match(/<a[^>]+href=["']Listing\.cfm\?idsListing=\d+["'][^>]*>([\s\S]*?)<\/a>/i)?.[1] || "");
-    const cells = [...row.matchAll(/<td[\s\S]*?<\/td>/gi)].map((cell) => stripTags(cell[0]));
-    const imagePath = row.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+    const imagePath = match[1].match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || "";
+    const externalId = match[2];
+    const title = stripTags(match[3]);
 
     if (externalId && title) {
       rows.push({
         externalId,
         title,
-        rawQuantityText: cells[2] || "",
-        rawLocationText: cells[3] || "",
+        rawQuantityText: stripTags(match[4]),
+        rawLocationText: stripTags(match[5]),
         thumbUrl: absoluteUrl(imagePath),
         sourceUrl: `${BASE_URL}/Listing.cfm?idsListing=${externalId}`,
       });
