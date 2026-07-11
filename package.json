@@ -11,6 +11,7 @@
     "ingest:wastexchange": "node scripts/ingest_wastexchange.js",
     "ingest:wastexchange:fast": "node scripts/fast_real_only_wastexchange.js",
     "ingest:india": "node scripts/import_recycleinme_india.js",
+    "ingest:tradeindia": "node scripts/import_tradeindia_india.js",
     "seed": "node scripts/seed_prisma_graph.js",
     "embed": "node scripts/embed_materials.js",
     "postinstall": "prisma generate"

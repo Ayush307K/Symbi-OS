@@ -51,7 +51,7 @@ export async function GET(): Promise<
         material: true,
         seller: true,
       },
-      orderBy: [{ tradeAssurance: "desc" }, { rating: "desc" }, { ordersCompleted: "desc" }],
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
 
     const producerIds = [...new Set(listings.map((listing) => listing.sellerCompanyId))];

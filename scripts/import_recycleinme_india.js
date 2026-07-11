@@ -239,9 +239,8 @@ async function main() {
 
   await client.execute({
     sql: `delete from MarketplaceListing
-      where sourceType in ('synthetic', 'real_public')
-      or (sourceType = 'real_public_india' and sourceName != ?)`,
-    args: [SOURCE_NAME],
+      where sourceType in ('synthetic', 'real_public')`,
+    args: [],
   });
   const counts = await client.execute(
     "select sourceType, sourceName, count(*) as count from MarketplaceListing group by sourceType, sourceName"
