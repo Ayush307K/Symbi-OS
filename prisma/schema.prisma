@@ -80,6 +80,12 @@ model MarketplaceListing {
   id                String   @id
   title             String
   slug              String   @unique
+  sourceType        String   @default("synthetic")
+  sourceName        String?
+  sourceUrl         String?
+  externalId        String?  @unique
+  rawQuantityText   String?
+  rawLocationText   String?
   materialId        String
   sellerCompanyId   String
   category          String
@@ -114,6 +120,8 @@ model MarketplaceListing {
   @@index([category])
   @@index([state])
   @@index([country])
+  @@index([sourceType])
+  @@index([sourceName])
   @@index([materialId])
   @@index([sellerCompanyId])
 }

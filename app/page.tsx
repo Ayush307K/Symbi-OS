@@ -63,6 +63,12 @@ interface MaterialListing {
   description: string;
   packaging: string;
   paymentTerms: string;
+  sourceType: string;
+  sourceName: string | null;
+  sourceUrl: string | null;
+  externalId: string | null;
+  rawQuantityText: string | null;
+  rawLocationText: string | null;
 }
 
 interface BidDraft {
@@ -143,7 +149,7 @@ const HOME_FOOTER_COLUMNS = [
 ];
 
 function formatMoney(value: number | null) {
-  if (value == null) return "Ask quote";
+  if (value == null || value <= 0) return "Ask quote";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -154,6 +160,10 @@ function formatMoney(value: number | null) {
 function formatQuantity(value: number | null) {
   if (value == null) return "Qty on request";
   return `${value.toLocaleString("en-IN")} t`;
+}
+
+function displayQuantity(listing: MaterialListing) {
+  return listing.rawQuantityText || formatQuantity(listing.quantity);
 }
 
 function cleanToxicity(value: string) {
@@ -555,8 +565,13 @@ function CompactListingCard({
           {listing.title}
         </p>
         <p className="mt-1 text-xs text-stone-500">
-          {listing.category} · MOQ {listing.minOrderQuantity} {listing.unit}
+          {listing.category} · {displayQuantity(listing)}
         </p>
+        {listing.sourceType === "real_public" && (
+          <p className="mt-2 w-fit rounded-sm bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700">
+            Public source
+          </p>
+        )}
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="text-sm font-bold text-stone-950">
             {formatMoney(listing.price)}
@@ -1649,6 +1664,11 @@ function ListingCard({
                 Verified Supplier
               </span>
             )}
+            {listing.sourceType === "real_public" && (
+              <span className="rounded-sm bg-sky-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm">
+                Public Source
+              </span>
+            )}
           </div>
         </div>
 
@@ -1664,8 +1684,15 @@ function ListingCard({
               >
                 {toxicity} risk
               </span>
-              <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                Verified
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-xs font-medium",
+                  listing.sourceType === "real_public"
+                    ? "border-sky-200 bg-sky-50 text-sky-700"
+                    : "border-blue-200 bg-blue-50 text-blue-700"
+                )}
+              >
+                {listing.sourceType === "real_public" ? "Public source" : "Verified"}
               </span>
             </div>
             <h3 className="line-clamp-2 text-base font-semibold leading-snug text-stone-950">
@@ -1687,7 +1714,7 @@ function ListingCard({
             <span className="text-xs text-stone-500">/ {listing.unit ?? "ton"}</span>
           </div>
           <div className="mt-1 text-xs text-stone-500">
-            MOQ: {listing.minOrderQuantity} ton · Stock: {formatQuantity(listing.quantity)}
+            MOQ: {listing.minOrderQuantity} {listing.unit} · Stock: {displayQuantity(listing)}
           </div>
         </div>
 
@@ -1791,7 +1818,7 @@ function ListingDetail({
         <div className="grid grid-cols-2 gap-3">
           <InfoBlock label="Ask price" value={formatMoney(listing.price)} />
           <InfoBlock label="MOQ" value={`${listing.minOrderQuantity} ${listing.unit}`} />
-          <InfoBlock label="Available" value={formatQuantity(listing.quantity)} />
+          <InfoBlock label="Available" value={displayQuantity(listing)} />
           <InfoBlock label="Lead time" value={`${listing.leadTimeDays} days`} />
         </div>
 
@@ -1808,7 +1835,11 @@ function ListingDetail({
             </div>
             <div className="flex items-center justify-between pt-2 text-xs">
               <span className="rounded-sm bg-orange-50 px-2 py-1 font-semibold text-orange-700">
-                {listing.tradeAssurance ? "Trade Assurance" : "Direct Deal"}
+                {listing.sourceType === "real_public"
+                  ? "Public source"
+                  : listing.tradeAssurance
+                    ? "Trade Assurance"
+                    : "Direct Deal"}
               </span>
               <span className="rounded-sm bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">
                 {listing.responseRate}% response rate
@@ -1824,10 +1855,20 @@ function ListingDetail({
               <span>Packaging</span>
               <span className="font-medium text-stone-900">{listing.packaging}</span>
             </div>
-            <div className="flex justify-between gap-3">
-              <span>Payment</span>
-              <span className="font-medium text-stone-900">{listing.paymentTerms}</span>
-            </div>
+          <div className="flex justify-between gap-3">
+            <span>Payment</span>
+            <span className="font-medium text-stone-900">{listing.paymentTerms}</span>
+          </div>
+          {listing.sourceUrl && (
+            <a
+              href={listing.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block text-sm font-semibold text-sky-700 hover:text-sky-800"
+            >
+              View original public listing
+            </a>
+          )}
             <div className="flex justify-between gap-3">
               <span>Completed orders</span>
               <span className="font-medium text-stone-900">{listing.ordersCompleted.toLocaleString("en-IN")}</span>

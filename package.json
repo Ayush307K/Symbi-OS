@@ -8,6 +8,8 @@
     "start": "next start",
     "generate": "node generate_dataset.js",
     "ingest": "node scripts/seed_prisma_graph.js",
+    "ingest:wastexchange": "node scripts/ingest_wastexchange.js",
+    "ingest:wastexchange:fast": "node scripts/fast_real_only_wastexchange.js",
     "seed": "node scripts/seed_prisma_graph.js",
     "embed": "node scripts/embed_materials.js",
     "postinstall": "prisma generate"

@@ -33,6 +33,12 @@ export interface MaterialListing {
   description: string;
   packaging: string;
   paymentTerms: string;
+  sourceType: string;
+  sourceName: string | null;
+  sourceUrl: string | null;
+  externalId: string | null;
+  rawQuantityText: string | null;
+  rawLocationText: string | null;
 }
 
 export async function GET(): Promise<
@@ -92,6 +98,12 @@ export async function GET(): Promise<
         description: listing.description,
         packaging: listing.packaging,
         paymentTerms: listing.paymentTerms,
+        sourceType: listing.sourceType,
+        sourceName: listing.sourceName,
+        sourceUrl: listing.sourceUrl,
+        externalId: listing.externalId,
+        rawQuantityText: listing.rawQuantityText,
+        rawLocationText: listing.rawLocationText,
       }))
     );
   } catch (err: unknown) {
