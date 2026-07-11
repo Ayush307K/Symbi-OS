@@ -206,77 +206,86 @@ function HomeLanding({
 }) {
   return (
     <div className="space-y-6">
-      <section className="grid overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm xl:grid-cols-[minmax(0,1fr)_390px]">
-        <div className="relative min-h-[360px] overflow-hidden bg-stone-950 px-6 py-8 text-white sm:px-8 lg:px-10">
-          <img
-            src={featuredDeals[0]?.imageUrl ?? "https://images.unsplash.com/photo-1513828583688-c52646db42da?auto=format&fit=crop&w=1400&q=80"}
-            alt="Industrial materials marketplace"
-            className="absolute inset-0 h-full w-full object-cover opacity-35"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/90 to-stone-950/25" />
-          <div className="relative max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-sm bg-orange-500 px-3 py-1 text-xs font-bold uppercase tracking-wide">
-              <ShieldCheck size={14} />
-              Verified industrial sourcing
-            </div>
-            <h1 className="mt-5 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-              Source secondary raw materials without scrolling through everything.
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="relative min-h-[330px] overflow-hidden rounded-lg border border-sky-100 bg-[#c8eaff] p-6 shadow-sm sm:p-8">
+          <div className="relative z-10 max-w-xl">
+            <h1 className="max-w-md text-3xl font-bold tracking-tight text-[#083b68] sm:text-4xl">
+              Your shortcut to verified industrial suppliers
             </h1>
-            <p className="mt-4 max-w-xl text-base leading-7 text-stone-200">
-              Browse category entrances, post RFQs, compare verified suppliers, and
-              jump into the full marketplace only when you need exact listings.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                onClick={onPostRfq}
-                className="rounded-md bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-orange-600"
-              >
-                Post bulk RFQ
-              </button>
+            <div className="mt-5 flex flex-wrap gap-7 text-[#063b66]">
+              <div>
+                <p className="text-2xl font-bold">140+</p>
+                <p className="text-xs font-semibold">Verified companies</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">10k</p>
+                <p className="text-xs font-semibold">Wholesale listings</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">78</p>
+                <p className="text-xs font-semibold">Match signals</p>
+              </div>
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 onClick={onOpenMarketplace}
-                className="rounded-md bg-white px-5 py-3 text-sm font-bold text-stone-950 shadow-sm hover:bg-stone-100"
+                className="rounded-full bg-[#073b68] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#0b4c82]"
               >
-                View marketplace
+                Explore now
               </button>
               <button
-                onClick={onCreateListing}
-                className="rounded-md border border-white/35 px-5 py-3 text-sm font-bold text-white hover:bg-white/10"
+                onClick={onPostRfq}
+                className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#073b68] hover:bg-sky-50"
               >
-                Start selling
+                Request quotation
               </button>
             </div>
           </div>
+
+          <div className="absolute bottom-5 left-6 right-6 z-10 hidden items-center justify-end gap-8 text-sm font-bold text-white lg:flex">
+            {["Smart material search", "Top supplier rankings", "Factory-direct samples"].map(
+              (item) => (
+                <button
+                  key={item}
+                  onClick={item.includes("search") ? onOpenMarketplace : onPostRfq}
+                  className="flex items-center gap-4 text-left"
+                >
+                  <span>{item}</span>
+                  <span className="h-9 w-9 rounded-full bg-white shadow-sm" />
+                </button>
+              )
+            )}
+          </div>
+
+          <img
+            src={featuredDeals[1]?.imageUrl ?? featuredDeals[0]?.imageUrl}
+            alt="Verified industrial supplier"
+            className="absolute bottom-0 right-0 h-56 w-[44%] object-cover opacity-20 mix-blend-multiply"
+            loading="lazy"
+          />
         </div>
 
-        <div className="grid content-between gap-4 bg-[#fbfaf7] p-5">
-          <div>
-            <h2 className="text-base font-semibold text-stone-950">Procurement desk</h2>
-            <p className="mt-1 text-sm text-stone-500">
-              Delivery location: <span className="font-semibold text-stone-800">{locationLabel}</span>
-            </p>
+        <aside className="rounded-lg border border-stone-200 bg-[#f4f4f4] p-5 shadow-sm">
+          <h2 className="text-xl font-bold leading-tight text-stone-950">
+            Other featured selections
+          </h2>
+          <div className="mt-5 space-y-4 text-sm font-medium text-stone-700">
+            {[
+              ["Order protections", onOpenMarketplace],
+              ["RFQ center", onPostRfq],
+              ["Fast customization", onCreateListing],
+              ["Verified supplier programs", onOpenMarketplace],
+            ].map(([label, action]) => (
+              <button
+                key={String(label)}
+                onClick={action as () => void}
+                className="block text-left hover:text-orange-600"
+              >
+                {String(label)}
+              </button>
+            ))}
           </div>
-          <div className="grid gap-3">
-            <HomeAction
-              icon={Search}
-              title="Find material"
-              body="Search by material, supplier, location, or industrial cluster."
-              onClick={onOpenMarketplace}
-            />
-            <HomeAction
-              icon={Bell}
-              title="Register demand"
-              body="Tell sellers what you want and capture demand if supply is missing."
-              onClick={onPostRfq}
-            />
-            <HomeAction
-              icon={Factory}
-              title="Add supply"
-              body="Create a seller listing with price, stock, MOQ, and terms."
-              onClick={onCreateListing}
-            />
-          </div>
-        </div>
+        </aside>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
