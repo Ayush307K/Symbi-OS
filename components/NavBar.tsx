@@ -71,6 +71,7 @@ interface NavBarProps {
   onQueryChange: (query: string) => void;
   onCategorySelect: (category: string) => void;
   onLocationChange: (location: { label: string; query: string }) => void;
+  onSearchSubmit: () => void;
   onPostRfq: () => void;
   onSell: () => void;
   onHelp: () => void;
@@ -82,6 +83,7 @@ export default function NavBar({
   onQueryChange,
   onCategorySelect,
   onLocationChange,
+  onSearchSubmit,
   onPostRfq,
   onSell,
   onHelp,
@@ -91,6 +93,7 @@ export default function NavBar({
   const [customLocation, setCustomLocation] = useState("");
 
   const submitSearch = () => {
+    onSearchSubmit();
     document.getElementById("marketplace-listings")?.scrollIntoView({
       behavior: "smooth",
       block: "start",

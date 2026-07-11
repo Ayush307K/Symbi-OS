@@ -71,6 +71,7 @@ interface BidDraft {
 }
 
 type ActiveView =
+  | "Home"
   | "Marketplace"
   | "Bids & Deals"
   | "Match Engine"
@@ -93,7 +94,7 @@ interface MarketplaceLocation {
 }
 
 const NAV_ITEMS = [
-  { label: "Overview", view: "Marketplace", icon: LayoutDashboard },
+  { label: "Overview", view: "Home", icon: LayoutDashboard },
   { label: "Marketplace", view: "Marketplace", icon: Package },
   { label: "Bids & Deals", view: "Bids & Deals", icon: Gavel },
   { label: "Match Engine", view: "Match Engine", icon: Sparkles },
@@ -118,6 +119,29 @@ const CATEGORY_HINTS: Record<string, string> = {
   "Textiles & Fibers": "SME demand",
 };
 
+const HOME_FOOTER_COLUMNS = [
+  {
+    title: "About Symbi-OS",
+    links: ["Why choose Symbi-OS", "Circular sourcing", "Verified network", "Sustainability"],
+  },
+  {
+    title: "Order protections",
+    links: ["Secure bids", "Quality documents", "Dispatch readiness", "Compliance trail"],
+  },
+  {
+    title: "Source on Symbi-OS",
+    links: ["Verified suppliers", "Post bulk RFQ", "Industrial categories", "Location sourcing"],
+  },
+  {
+    title: "Help Center",
+    links: ["Buyer help", "Seller help", "Trade dispute", "Report a listing"],
+  },
+  {
+    title: "Sell on Symbi-OS",
+    links: ["Start selling", "Create listing", "Supplier verification", "Partnerships"],
+  },
+];
+
 function formatMoney(value: number | null) {
   if (value == null) return "Ask quote";
   return new Intl.NumberFormat("en-IN", {
@@ -136,6 +160,480 @@ function cleanToxicity(value: string) {
   return value ? value.toLowerCase() : "medium";
 }
 
+function HomeLanding({
+  categories,
+  featuredDeals,
+  localDeals,
+  suppliers,
+  marketplaceStats,
+  locationLabel,
+  isLoading,
+  onCategorySelect,
+  onOpenMarketplace,
+  onPostRfq,
+  onCreateListing,
+  onBid,
+}: {
+  categories: Array<{
+    name: string;
+    count: number;
+    imageUrl: string;
+    quantity: number;
+    suppliers: number;
+  }>;
+  featuredDeals: MaterialListing[];
+  localDeals: MaterialListing[];
+  suppliers: Array<{
+    name: string;
+    location: string;
+    listings: number;
+    categories: Set<string>;
+    rating: number;
+  }>;
+  marketplaceStats: {
+    activeValue: number;
+    verifiedSellers: number;
+    totalQuantity: number;
+    matchRate: number;
+  };
+  locationLabel: string;
+  isLoading: boolean;
+  onCategorySelect: (category: string) => void;
+  onOpenMarketplace: () => void;
+  onPostRfq: () => void;
+  onCreateListing: () => void;
+  onBid: (listing: MaterialListing) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <section className="grid overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm xl:grid-cols-[minmax(0,1fr)_390px]">
+        <div className="relative min-h-[360px] overflow-hidden bg-stone-950 px-6 py-8 text-white sm:px-8 lg:px-10">
+          <img
+            src={featuredDeals[0]?.imageUrl ?? "https://images.unsplash.com/photo-1513828583688-c52646db42da?auto=format&fit=crop&w=1400&q=80"}
+            alt="Industrial materials marketplace"
+            className="absolute inset-0 h-full w-full object-cover opacity-35"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/90 to-stone-950/25" />
+          <div className="relative max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-sm bg-orange-500 px-3 py-1 text-xs font-bold uppercase tracking-wide">
+              <ShieldCheck size={14} />
+              Verified industrial sourcing
+            </div>
+            <h1 className="mt-5 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
+              Source secondary raw materials without scrolling through everything.
+            </h1>
+            <p className="mt-4 max-w-xl text-base leading-7 text-stone-200">
+              Browse category entrances, post RFQs, compare verified suppliers, and
+              jump into the full marketplace only when you need exact listings.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                onClick={onPostRfq}
+                className="rounded-md bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-orange-600"
+              >
+                Post bulk RFQ
+              </button>
+              <button
+                onClick={onOpenMarketplace}
+                className="rounded-md bg-white px-5 py-3 text-sm font-bold text-stone-950 shadow-sm hover:bg-stone-100"
+              >
+                View marketplace
+              </button>
+              <button
+                onClick={onCreateListing}
+                className="rounded-md border border-white/35 px-5 py-3 text-sm font-bold text-white hover:bg-white/10"
+              >
+                Start selling
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid content-between gap-4 bg-[#fbfaf7] p-5">
+          <div>
+            <h2 className="text-base font-semibold text-stone-950">Procurement desk</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Delivery location: <span className="font-semibold text-stone-800">{locationLabel}</span>
+            </p>
+          </div>
+          <div className="grid gap-3">
+            <HomeAction
+              icon={Search}
+              title="Find material"
+              body="Search by material, supplier, location, or industrial cluster."
+              onClick={onOpenMarketplace}
+            />
+            <HomeAction
+              icon={Bell}
+              title="Register demand"
+              body="Tell sellers what you want and capture demand if supply is missing."
+              onClick={onPostRfq}
+            />
+            <HomeAction
+              icon={Factory}
+              title="Add supply"
+              body="Create a seller listing with price, stock, MOQ, and terms."
+              onClick={onCreateListing}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          icon={Package}
+          label="Catalog depth"
+          value="10,000"
+          detail="Wholesale listings behind search"
+        />
+        <MetricCard
+          icon={Factory}
+          label="Verified suppliers"
+          value={String(marketplaceStats.verifiedSellers)}
+          detail="Company nodes in the network"
+        />
+        <MetricCard
+          icon={Truck}
+          label="Available quantity"
+          value={`${Math.round(marketplaceStats.totalQuantity / 1000).toLocaleString("en-IN")}k t`}
+          detail="Across industrial categories"
+        />
+        <MetricCard
+          icon={Gauge}
+          label="Match readiness"
+          value={`${marketplaceStats.matchRate}%`}
+          detail="Specs, distance, buyer fit"
+        />
+      </section>
+
+      <section className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-stone-950">
+              Source by category
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Start broad, then enter filtered marketplace results.
+            </p>
+          </div>
+          <button
+            onClick={onOpenMarketplace}
+            className="hidden rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 sm:block"
+          >
+            All categories
+          </button>
+        </div>
+        {isLoading ? (
+          <div className="mt-5 flex h-44 items-center justify-center text-stone-500">
+            <Loader2 size={22} className="animate-spin" />
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {categories.map((item) => (
+              <button
+                key={item.name}
+                onClick={() => onCategorySelect(item.name)}
+                className="group overflow-hidden rounded-lg border border-stone-200 bg-white text-left shadow-sm transition hover:border-orange-300 hover:shadow-md"
+              >
+                <div className="aspect-[5/3] overflow-hidden bg-stone-100">
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="line-clamp-1 text-sm font-semibold text-stone-950">
+                      {item.name}
+                    </h3>
+                    <ArrowUpRight size={15} className="shrink-0 text-stone-400" />
+                  </div>
+                  <p className="mt-1 text-xs text-stone-500">
+                    {item.count.toLocaleString("en-IN")} listings · {item.suppliers} suppliers
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-orange-700">
+                    {Math.round(item.quantity / 1000).toLocaleString("en-IN")}k t available
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-stone-950">
+                Curated for bulk buyers
+              </h2>
+              <p className="mt-1 text-sm text-stone-500">
+                A short row of verified offers, not the whole catalog.
+              </p>
+            </div>
+            <button
+              onClick={onOpenMarketplace}
+              className="rounded-md bg-stone-950 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+            >
+              View all
+            </button>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {featuredDeals.slice(0, 6).map((listing) => (
+              <CompactListingCard
+                key={listing.id}
+                listing={listing}
+                onBid={() => onBid(listing)}
+              />
+            ))}
+          </div>
+        </div>
+
+        <aside className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-semibold tracking-tight text-stone-950">
+            RFQ match lane
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-stone-500">
+            Use this when you do not know exact material names or need suppliers to
+            respond with specs, price, MOQ, and lead time.
+          </p>
+          <div className="mt-5 space-y-3">
+            {["Describe requirement", "Match existing supply", "Notify seller network"].map(
+              (step, index) => (
+                <div key={step} className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">
+                    {index + 1}
+                  </span>
+                  <span className="text-sm font-medium text-stone-700">{step}</span>
+                </div>
+              )
+            )}
+          </div>
+          <button
+            onClick={onPostRfq}
+            className="mt-5 w-full rounded-md bg-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-600"
+          >
+            Request quotation
+          </button>
+        </aside>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-semibold tracking-tight text-stone-950">
+            Nearby sourcing lanes
+          </h2>
+          <p className="mt-1 text-sm text-stone-500">
+            Fast-moving industrial clusters and regional supply.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {localDeals.slice(0, 4).map((listing) => (
+              <button
+                key={listing.id}
+                onClick={() => onBid(listing)}
+                className="flex gap-3 rounded-lg border border-stone-200 p-3 text-left hover:border-orange-300 hover:bg-orange-50"
+              >
+                <img
+                  src={listing.imageUrl}
+                  alt={listing.name}
+                  className="h-16 w-16 rounded-md object-cover"
+                  loading="lazy"
+                />
+                <span className="min-w-0">
+                  <span className="line-clamp-2 text-sm font-semibold text-stone-900">
+                    {listing.title}
+                  </span>
+                  <span className="mt-1 block text-xs text-stone-500">
+                    {listing.city}, {listing.state}
+                  </span>
+                  <span className="mt-1 block text-xs font-semibold text-orange-700">
+                    {formatMoney(listing.price)} / {listing.unit}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-semibold tracking-tight text-stone-950">
+            Verified supplier programs
+          </h2>
+          <p className="mt-1 text-sm text-stone-500">
+            Suppliers with broad category coverage and active inventory.
+          </p>
+          <div className="mt-5 divide-y divide-stone-100">
+            {suppliers.map((supplier) => (
+              <div key={supplier.name} className="flex items-center justify-between gap-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-stone-900">
+                    {supplier.name}
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    {supplier.location} · {supplier.categories.size} categories
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-stone-950">
+                    {supplier.listings}
+                  </p>
+                  <p className="text-xs text-stone-500">listings</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <MarketplaceFooter
+        onPostRfq={onPostRfq}
+        onCreateListing={onCreateListing}
+        onOpenMarketplace={onOpenMarketplace}
+      />
+    </div>
+  );
+}
+
+function HomeAction({
+  icon: Icon,
+  title,
+  body,
+  onClick,
+}: {
+  icon: React.ElementType;
+  title: string;
+  body: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4 text-left hover:border-orange-300 hover:bg-orange-50"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-orange-100 text-orange-700">
+        <Icon size={18} />
+      </span>
+      <span>
+        <span className="block text-sm font-semibold text-stone-950">{title}</span>
+        <span className="mt-1 block text-sm leading-5 text-stone-500">{body}</span>
+      </span>
+    </button>
+  );
+}
+
+function CompactListingCard({
+  listing,
+  onBid,
+}: {
+  listing: MaterialListing;
+  onBid: () => void;
+}) {
+  return (
+    <article className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
+      <div className="aspect-[4/3] overflow-hidden bg-stone-100">
+        <img
+          src={listing.imageUrl}
+          alt={listing.name}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+      <div className="p-3">
+        <p className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-stone-950">
+          {listing.title}
+        </p>
+        <p className="mt-1 text-xs text-stone-500">
+          {listing.category} · MOQ {listing.minOrderQuantity} {listing.unit}
+        </p>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-sm font-bold text-stone-950">
+            {formatMoney(listing.price)}
+          </span>
+          <button
+            onClick={onBid}
+            className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-600"
+          >
+            RFQ
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function MarketplaceFooter({
+  onPostRfq,
+  onCreateListing,
+  onOpenMarketplace,
+}: {
+  onPostRfq: () => void;
+  onCreateListing: () => void;
+  onOpenMarketplace: () => void;
+}) {
+  return (
+    <footer className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
+      <div className="grid gap-8 p-6 md:grid-cols-2 xl:grid-cols-5">
+        {HOME_FOOTER_COLUMNS.map((column) => (
+          <div key={column.title}>
+            <h3 className="text-sm font-bold text-stone-950">{column.title}</h3>
+            <div className="mt-4 space-y-3">
+              {column.links.map((link) => (
+                <button
+                  key={link}
+                  onClick={
+                    link.includes("RFQ")
+                      ? onPostRfq
+                      : link.includes("selling") || link.includes("listing")
+                        ? onCreateListing
+                        : onOpenMarketplace
+                  }
+                  className="block text-left text-sm text-stone-600 hover:text-orange-700"
+                >
+                  {link}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-stone-200 bg-[#fbfaf7] px-6 py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-stone-500">
+            {["GST-ready suppliers", "Escrow supported", "Verified documents", "Dispatch monitoring"].map(
+              (item) => (
+                <span key={item} className="rounded-sm border border-stone-200 bg-white px-2 py-1">
+                  {item}
+                </span>
+              )
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={onPostRfq}
+              className="rounded-md bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+            >
+              Post RFQ
+            </button>
+            <button
+              onClick={onCreateListing}
+              className="rounded-md border border-stone-300 px-4 py-2 text-sm font-bold text-stone-700 hover:bg-white"
+            >
+              Sell material
+            </button>
+          </div>
+        </div>
+        <p className="mt-5 text-xs text-stone-500">
+          Symbi-OS marketplace infrastructure for circular industrial sourcing.
+        </p>
+      </div>
+    </footer>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
   const [listings, setListings] = useState<MaterialListing[]>([]);
@@ -148,7 +646,7 @@ export default function Home() {
       label: "All India",
       query: "",
     });
-  const [activeView, setActiveView] = useState<ActiveView>("Marketplace");
+  const [activeView, setActiveView] = useState<ActiveView>("Home");
   const [selected, setSelected] = useState<MaterialListing | null>(null);
   const [bidTarget, setBidTarget] = useState<MaterialListing | null>(null);
   const [bidDraft, setBidDraft] = useState<BidDraft>({
@@ -250,9 +748,88 @@ export default function Home() {
   }, [category, listings, marketplaceLocation.query, query]);
 
   const visibleListings = useMemo(
-    () => filteredListings.slice(0, 180),
+    () => filteredListings.slice(0, 60),
     [filteredListings]
   );
+
+  const homeCategoryCards = useMemo(() => {
+    const summary = new Map<
+      string,
+      { count: number; imageUrl: string; quantity: number; supplierCount: Set<string> }
+    >();
+
+    for (const listing of listings) {
+      const current =
+        summary.get(listing.category) ??
+        {
+          count: 0,
+          imageUrl: listing.imageUrl,
+          quantity: 0,
+          supplierCount: new Set<string>(),
+        };
+      current.count += 1;
+      current.quantity += listing.quantity ?? 0;
+      current.supplierCount.add(listing.producer);
+      if (listing.tradeAssurance) current.imageUrl = listing.imageUrl;
+      summary.set(listing.category, current);
+    }
+
+    return Array.from(summary.entries())
+      .map(([name, value]) => ({
+        name,
+        count: value.count,
+        imageUrl: value.imageUrl,
+        quantity: value.quantity,
+        suppliers: value.supplierCount.size,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [listings]);
+
+  const featuredDeals = useMemo(
+    () =>
+      listings
+        .filter((listing) => listing.tradeAssurance && listing.verified)
+        .slice(0, 10),
+    [listings]
+  );
+
+  const localDeals = useMemo(
+    () =>
+      listings
+        .filter((listing) =>
+          ["Karnataka", "Maharashtra", "Tamil Nadu"].includes(listing.state)
+        )
+        .slice(0, 8),
+    [listings]
+  );
+
+  const supplierHighlights = useMemo(() => {
+    const bySupplier = new Map<
+      string,
+      { name: string; location: string; listings: number; categories: Set<string>; rating: number }
+    >();
+
+    for (const listing of listings) {
+      const current =
+        bySupplier.get(listing.producer) ??
+        {
+          name: listing.producer,
+          location: `${listing.city}, ${listing.state}`,
+          listings: 0,
+          categories: new Set<string>(),
+          rating: listing.rating,
+        };
+      current.listings += 1;
+      current.categories.add(listing.category);
+      current.rating = Math.max(current.rating, listing.rating);
+      bySupplier.set(listing.producer, current);
+    }
+
+    return Array.from(bySupplier.values())
+      .sort((a, b) => b.listings - a.listings)
+      .slice(0, 6);
+  }, [listings]);
 
   const marketplaceStats = useMemo(() => {
     const activeValue = filteredListings.reduce(
@@ -415,13 +992,13 @@ export default function Home() {
         onCategorySelect={handleCategorySelect}
         onLocationChange={(location) => {
           setMarketplaceLocation(location);
-          setActiveView("Marketplace");
           showToast(
             location.query
               ? `Showing suppliers near ${location.label}.`
               : "Showing suppliers across all locations."
           );
         }}
+        onSearchSubmit={() => setActiveView("Marketplace")}
         onPostRfq={() => setIsRfqModalOpen(true)}
         onSell={() => setIsListingModalOpen(true)}
         onHelp={() =>
@@ -436,6 +1013,7 @@ export default function Home() {
       )}
 
       <div className="flex min-h-[calc(100vh-64px)]">
+        {activeView !== "Home" && (
         <aside className="hidden w-64 shrink-0 border-r border-stone-200 bg-[#fbfaf7] px-4 py-5 lg:block">
           <button
             onClick={() => setIsListingModalOpen(true)}
@@ -479,8 +1057,26 @@ export default function Home() {
             </div>
           </div>
         </aside>
+        )}
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 xl:px-8">
+          {activeView === "Home" ? (
+            <HomeLanding
+              categories={homeCategoryCards}
+              featuredDeals={featuredDeals}
+              localDeals={localDeals}
+              suppliers={supplierHighlights}
+              marketplaceStats={marketplaceStats}
+              locationLabel={marketplaceLocation.label}
+              isLoading={isLoading}
+              onCategorySelect={handleCategorySelect}
+              onOpenMarketplace={() => setActiveView("Marketplace")}
+              onPostRfq={() => setIsRfqModalOpen(true)}
+              onCreateListing={() => setIsListingModalOpen(true)}
+              onBid={openBidModal}
+            />
+          ) : (
+            <>
           <section className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <h1 className="text-3xl font-semibold tracking-tight text-stone-950">
@@ -695,6 +1291,8 @@ export default function Home() {
               onCreateListing={() => setIsListingModalOpen(true)}
               onOpenMarketplace={() => setActiveView("Marketplace")}
             />
+          )}
+            </>
           )}
         </main>
       </div>
@@ -1321,7 +1919,7 @@ function WorkspacePanel({
   onCreateListing,
   onOpenMarketplace,
 }: {
-  activeView: ActiveView;
+  activeView: Exclude<ActiveView, "Home">;
   listings: MaterialListing[];
   onPostRfq: () => void;
   onCreateListing: () => void;
@@ -1336,7 +1934,7 @@ function WorkspacePanel({
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  const copy: Record<ActiveView, { title: string; body: string; primary: string }> = {
+  const copy: Record<Exclude<ActiveView, "Home">, { title: string; body: string; primary: string }> = {
     Marketplace: {
       title: "Marketplace",
       body: "Browse live wholesale listings and source verified industrial materials.",
