@@ -8,18 +8,23 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
+  CreditCard,
   Factory,
   Gavel,
   Gauge,
+  Heart,
   LayoutDashboard,
   Loader2,
   MapPin,
+  MessageCircle,
   Package,
   Plus,
   Search,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Star,
+  ShoppingCart,
   Truck,
   X,
 } from "lucide-react";
@@ -93,6 +98,16 @@ interface ListingDraft {
 interface MarketplaceLocation {
   label: string;
   query: string;
+}
+
+interface AddressDraft {
+  contactName: string;
+  phone: string;
+  pincode: string;
+  street: string;
+  buildingName: string;
+  area: string;
+  landmark: string;
 }
 
 const NAV_ITEMS = [
@@ -690,6 +705,23 @@ export default function Home() {
   const [isSubmittingRfq, setIsSubmittingRfq] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [checkoutListing, setCheckoutListing] = useState<MaterialListing | null>(null);
+  const [addressDraft, setAddressDraft] = useState<AddressDraft>({
+    contactName: user?.companyName ?? "",
+    phone: "",
+    pincode: "",
+    street: "",
+    buildingName: "",
+    area: "",
+    landmark: "",
+  });
+  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [reviewListing, setReviewListing] = useState<MaterialListing | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewBody, setReviewBody] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const fetchMaterials = useCallback(async () => {
     try {
@@ -719,6 +751,20 @@ export default function Home() {
   useEffect(() => {
     fetchMaterials();
   }, [fetchMaterials]);
+
+  useEffect(() => {
+    async function fetchWishlist() {
+      try {
+        const res = await fetch("/api/wishlist");
+        if (!res.ok) return;
+        const data = await res.json();
+        setSavedIds(new Set((data.items ?? []).map((item: { listingId: string }) => item.listingId)));
+      } catch {
+        // Non-critical; action buttons still work.
+      }
+    }
+    fetchWishlist();
+  }, []);
 
   const categories = useMemo(() => {
     return ["All", ...Array.from(new Set(listings.map((item) => item.category))).sort()];
@@ -1031,6 +1077,145 @@ export default function Home() {
     }
   }, [bidDraft.pricePerUnit, bidDraft.quantity, bidTarget]);
 
+  const saveListing = useCallback(
+    async (listing: MaterialListing) => {
+      try {
+        const alreadySaved = savedIds.has(listing.id);
+        const res = await fetch(
+          alreadySaved ? `/api/wishlist?listingId=${encodeURIComponent(listing.id)}` : "/api/wishlist",
+          {
+            method: alreadySaved ? "DELETE" : "POST",
+            headers: alreadySaved ? undefined : { "Content-Type": "application/json" },
+            body: alreadySaved ? undefined : JSON.stringify({ listingId: listing.id }),
+          }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Unable to update saved products");
+        setSavedIds((current) => {
+          const next = new Set(current);
+          if (alreadySaved) next.delete(listing.id);
+          else next.add(listing.id);
+          return next;
+        });
+        showToast(alreadySaved ? "Removed from saved products." : "Saved for later.");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Unable to update saved products.");
+      }
+    },
+    [savedIds, showToast]
+  );
+
+  const addToCart = useCallback(
+    async (listing: MaterialListing) => {
+      try {
+        const res = await fetch("/api/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listingId: listing.id,
+            quantity: Math.max(1, listing.minOrderQuantity || 1),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Unable to add to cart");
+        showToast("Added to cart.");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Unable to add to cart.");
+      }
+    },
+    [showToast]
+  );
+
+  const messageSeller = useCallback(
+    async (listing: MaterialListing) => {
+      try {
+        const res = await fetch("/api/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listingId: listing.id,
+            sellerUserId: listing.sellerUserId,
+            sellerCompanyId: listing.producerId,
+            subject: `Enquiry for ${listing.title}`,
+            body: `Hi, I am interested in ${listing.title}. Please share availability, latest price, MOQ, dispatch timeline, and GST invoice terms.`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Unable to message seller");
+        showToast("Message thread created.");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Unable to message seller.");
+      }
+    },
+    [showToast]
+  );
+
+  const submitCheckout = useCallback(async () => {
+    if (!checkoutListing) return;
+    setIsCheckingOut(true);
+    setCheckoutMessage(null);
+    try {
+      const addressRes = await fetch("/api/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...addressDraft,
+          label: "Primary delivery",
+          isDefaultShipping: true,
+          isDefaultBilling: true,
+        }),
+      });
+      const addressData = await addressRes.json();
+      if (!addressRes.ok) throw new Error(addressData.error ?? "Unable to save address");
+
+      const orderRes = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: checkoutListing.id,
+          quantity: Math.max(1, checkoutListing.minOrderQuantity || 1),
+          shippingAddressId: addressData.address.id,
+          billingAddressId: addressData.address.id,
+        }),
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) throw new Error(orderData.error ?? "Unable to create order");
+      setCheckoutMessage(`Order ${orderData.order.orderNumber} created. Payment is pending.`);
+      showToast(`Order ${orderData.order.orderNumber} created.`);
+      window.setTimeout(() => setCheckoutListing(null), 1200);
+    } catch (err) {
+      setCheckoutMessage(err instanceof Error ? err.message : "Unable to complete checkout.");
+    } finally {
+      setIsCheckingOut(false);
+    }
+  }, [addressDraft, checkoutListing, showToast]);
+
+  const submitReview = useCallback(async () => {
+    if (!reviewListing) return;
+    setIsSubmittingReview(true);
+    try {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: reviewListing.id,
+          rating: reviewRating,
+          body: reviewBody,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Unable to submit review");
+      showToast("Review submitted.");
+      setReviewBody("");
+      setReviewRating(5);
+      setReviewListing(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Unable to submit review.");
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }, [reviewBody, reviewListing, reviewRating, showToast]);
+
   return (
     <div className="min-h-screen bg-[#f4f2ed] text-stone-950">
       <NavBar
@@ -1333,6 +1518,12 @@ export default function Home() {
               <ListingDetail
                 listing={selected}
                 onBid={(listing) => openBidModal(listing)}
+                onSave={saveListing}
+                onAddToCart={addToCart}
+                onBuyNow={setCheckoutListing}
+                onMessage={messageSeller}
+                onReview={setReviewListing}
+                isSaved={selected ? savedIds.has(selected.id) : false}
               />
             </aside>
           </div>
@@ -1621,6 +1812,149 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {checkoutListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-stone-200 p-5">
+              <div>
+                <h3 className="text-lg font-semibold text-stone-950">Checkout</h3>
+                <p className="mt-1 line-clamp-1 text-sm text-stone-500">
+                  {checkoutListing.title}
+                </p>
+              </div>
+              <button
+                onClick={() => setCheckoutListing(null)}
+                className="rounded-md p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              {[
+                ["contactName", "Contact name", "Procurement manager"],
+                ["phone", "Mobile number", "10-digit mobile"],
+                ["pincode", "Pincode", "560001"],
+                ["buildingName", "Building / company", "Plant or office name"],
+                ["street", "Street address", "Road, industrial estate, plot number"],
+                ["area", "Area / locality", "Peenya Industrial Area"],
+                ["landmark", "Landmark", "Near main gate"],
+              ].map(([key, label, placeholder]) => (
+                <label key={key} className={key === "street" ? "block sm:col-span-2" : "block"}>
+                  <span className="text-sm font-medium text-stone-700">{label}</span>
+                  <input
+                    value={addressDraft[key as keyof AddressDraft] ?? ""}
+                    onChange={(event) =>
+                      setAddressDraft((draft) => ({
+                        ...draft,
+                        [key]: event.target.value,
+                      }))
+                    }
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+                    placeholder={placeholder}
+                  />
+                </label>
+              ))}
+
+              <div className="rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-700 sm:col-span-2">
+                Order summary: {displayQuantity(checkoutListing)} · {formatMoney(checkoutListing.price)} / {checkoutListing.unit}. GST and shipping are calculated when the order is created.
+              </div>
+
+              {checkoutMessage && (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 sm:col-span-2">
+                  {checkoutMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-stone-200 p-5">
+              <button
+                onClick={() => setCheckoutListing(null)}
+                className="rounded-md border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCheckout}
+                disabled={
+                  isCheckingOut ||
+                  !addressDraft.contactName ||
+                  !addressDraft.phone ||
+                  !addressDraft.pincode ||
+                  !addressDraft.street
+                }
+                className="flex items-center gap-2 rounded-md bg-stone-950 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isCheckingOut && <Loader2 size={16} className="animate-spin" />}
+                Confirm order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reviewListing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-stone-200 p-5">
+              <div>
+                <h3 className="text-lg font-semibold text-stone-950">Write review</h3>
+                <p className="mt-1 line-clamp-1 text-sm text-stone-500">{reviewListing.title}</p>
+              </div>
+              <button
+                onClick={() => setReviewListing(null)}
+                className="rounded-md p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700">Rating</span>
+                <select
+                  value={reviewRating}
+                  onChange={(event) => setReviewRating(Number(event.target.value))}
+                  className="mt-1 h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+                >
+                  {[5, 4, 3, 2, 1].map((rating) => (
+                    <option key={rating} value={rating}>
+                      {rating} star{rating === 1 ? "" : "s"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700">Review</span>
+                <textarea
+                  value={reviewBody}
+                  onChange={(event) => setReviewBody(event.target.value)}
+                  className="mt-1 min-h-28 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+                  placeholder="Share product quality, packaging, dispatch, and seller communication."
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-stone-200 p-5">
+              <button
+                onClick={() => setReviewListing(null)}
+                className="rounded-md border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitReview}
+                disabled={isSubmittingReview || reviewBody.trim().length < 10}
+                className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSubmittingReview && <Loader2 size={16} className="animate-spin" />}
+                Submit review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1768,9 +2102,21 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
 function ListingDetail({
   listing,
   onBid,
+  onSave,
+  onAddToCart,
+  onBuyNow,
+  onMessage,
+  onReview,
+  isSaved,
 }: {
   listing: MaterialListing | null;
   onBid: (listing: MaterialListing) => void;
+  onSave: (listing: MaterialListing) => void;
+  onAddToCart: (listing: MaterialListing) => void;
+  onBuyNow: (listing: MaterialListing) => void;
+  onMessage: (listing: MaterialListing) => void;
+  onReview: (listing: MaterialListing) => void;
+  isSaved: boolean;
 }) {
   if (!listing) {
     return (
@@ -1866,13 +2212,53 @@ function ListingDetail({
           )}
         </div>
 
-        <button
-          onClick={() => onBid(listing)}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-800"
-        >
-          <Gavel size={16} />
-          Request quote
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => onSave(listing)}
+            className="flex items-center justify-center gap-2 rounded-md border border-stone-300 px-3 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+          >
+            <Heart size={16} className={isSaved ? "fill-red-500 text-red-500" : ""} />
+            {isSaved ? "Saved" : "Save"}
+          </button>
+          <button
+            onClick={() => onAddToCart(listing)}
+            className="flex items-center justify-center gap-2 rounded-md border border-stone-300 px-3 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+          >
+            <ShoppingCart size={16} />
+            Cart
+          </button>
+          <button
+            onClick={() => onMessage(listing)}
+            className="flex items-center justify-center gap-2 rounded-md border border-stone-300 px-3 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+          >
+            <MessageCircle size={16} />
+            Message
+          </button>
+          <button
+            onClick={() => onReview(listing)}
+            className="flex items-center justify-center gap-2 rounded-md border border-stone-300 px-3 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+          >
+            <Star size={16} />
+            Review
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => onBid(listing)}
+            className="flex items-center justify-center gap-2 rounded-md bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600"
+          >
+            <Gavel size={16} />
+            Request quote
+          </button>
+          <button
+            onClick={() => onBuyNow(listing)}
+            className="flex items-center justify-center gap-2 rounded-md bg-stone-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-800"
+          >
+            <CreditCard size={16} />
+            Buy now
+          </button>
+        </div>
       </div>
     </section>
   );

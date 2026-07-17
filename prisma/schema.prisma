@@ -8,49 +8,64 @@ generator client {
 }
 
 model User {
-  id             String   @id @default(uuid())
-  email          String   @unique
-  passwordHash   String
-  role           String   @default("BOTH") // BUYER | SELLER | BOTH
-  companyName    String
-  companyId      String?
-  createdAt      DateTime @default(now())
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  role             String    @default("BOTH") // BUYER | SELLER | BOTH
+  companyName      String
+  companyId        String?
+  mobile           String?
+  emailVerifiedAt  DateTime?
+  mobileVerifiedAt DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  addresses            Address[]
+  cartItems            CartItem[]
+  wishlistItems        WishlistItem[]
+  orders               PurchaseOrder[]
+  reviews              Review[]
+  messageThreadsBuyer  MessageThread[]   @relation("ThreadBuyer")
+  messageThreadsSeller MessageThread[]   @relation("ThreadSeller")
+  messages             Message[]
+  notifications        Notification[]
+  sellerOnboarding     SellerOnboarding?
 }
 
 model Bid {
-  id             String   @id @default(uuid())
-  materialName   String
-  materialId     String?
-  quantity       Int
-  pricePerUnit   Float
-  status         String   @default("pending") // pending | accepted | rejected
-  bidderUserId   String
-  bidderEmail    String
-  bidderCompany  String
-  sellerUserId   String?
-  producerId     String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(uuid())
+  materialName  String
+  materialId    String?
+  quantity      Int
+  pricePerUnit  Float
+  status        String   @default("pending") // pending | accepted | rejected
+  bidderUserId  String
+  bidderEmail   String
+  bidderCompany String
+  sellerUserId  String?
+  producerId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Company {
-  id            String   @id
-  name          String   @unique
-  industry      String
-  location      String
-  carbonRating  String
-  latitude      Float
-  longitude     Float
-  capacity      Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id
+  name         String   @unique
+  industry     String
+  location     String
+  carbonRating String
+  latitude     Float
+  longitude    Float
+  capacity     Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  produces      MaterialProducer[]
-  upcycles      MaterialUpcycler[]
-  listings      MarketplaceListing[]
-  demands       Demand[]
-  matchesA      PotentialMatch[] @relation("MatchCompanyA")
-  matchesB      PotentialMatch[] @relation("MatchCompanyB")
+  produces MaterialProducer[]
+  upcycles MaterialUpcycler[]
+  listings MarketplaceListing[]
+  demands  Demand[]
+  matchesA PotentialMatch[]     @relation("MatchCompanyA")
+  matchesB PotentialMatch[]     @relation("MatchCompanyB")
 }
 
 model WasteMaterial {
@@ -67,13 +82,13 @@ model WasteMaterial {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  producers     MaterialProducer[]
-  upcyclers     MaterialUpcycler[]
-  regulations   MaterialRegulation[]
-  complements   MaterialComplement[] @relation("ComplementSource")
+  producers      MaterialProducer[]
+  upcyclers      MaterialUpcycler[]
+  regulations    MaterialRegulation[]
+  complements    MaterialComplement[] @relation("ComplementSource")
   complementedBy MaterialComplement[] @relation("ComplementTarget")
-  listings      MarketplaceListing[]
-  demands       Demand[]
+  listings       MarketplaceListing[]
+  demands        Demand[]
 }
 
 model MarketplaceListing {
@@ -114,8 +129,13 @@ model MarketplaceListing {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  material          WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  seller            Company       @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
+  material       WasteMaterial       @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  seller         Company             @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
+  cartItems      CartItem[]
+  wishlistItems  WishlistItem[]
+  orderItems     PurchaseOrderItem[]
+  reviews        Review[]
+  messageThreads MessageThread[]
 
   @@index([category])
   @@index([state])
@@ -126,53 +146,262 @@ model MarketplaceListing {
   @@index([sellerCompanyId])
 }
 
-model Regulation {
-  id            String   @id
-  code          String   @unique
-  description   String
+model Address {
+  id                 String   @id @default(uuid())
+  userId             String
+  label              String   @default("Office")
+  contactName        String
+  phone              String
+  country            String   @default("India")
+  state              String
+  city               String
+  district           String?
+  area               String?
+  locality           String?
+  landmark           String?
+  buildingName       String?
+  floor              String?
+  unitNumber         String?
+  street             String
+  pincode            String
+  latitude           Float?
+  longitude          Float?
+  isDefaultShipping  Boolean  @default(false)
+  isDefaultBilling   Boolean  @default(false)
+  addressType        String   @default("SHIPPING")
+  verificationStatus String   @default("UNVERIFIED")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  materials     MaterialRegulation[]
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shippingOrders PurchaseOrder[] @relation("ShippingAddress")
+  billingOrders  PurchaseOrder[] @relation("BillingAddress")
+
+  @@index([userId])
+  @@index([pincode])
+}
+
+model CartItem {
+  id            String   @id @default(uuid())
+  userId        String
+  listingId     String
+  quantity      Int
+  priceSnapshot Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([listingId])
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([listingId])
+}
+
+model PurchaseOrder {
+  id                  String   @id @default(uuid())
+  orderNumber         String   @unique
+  buyerUserId         String
+  status              String   @default("CREATED")
+  paymentStatus       String   @default("PENDING")
+  shippingAddressId   String?
+  billingAddressId    String?
+  subtotal            Float
+  taxAmount           Float
+  shippingAmount      Float
+  discountAmount      Float    @default(0)
+  totalAmount         Float
+  currency            String   @default("INR")
+  gstInvoice          Boolean  @default(true)
+  purchaseOrderNumber String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  buyer           User                @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
+  shippingAddress Address?            @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  billingAddress  Address?            @relation("BillingAddress", fields: [billingAddressId], references: [id])
+  items           PurchaseOrderItem[]
+
+  @@index([buyerUserId])
+  @@index([status])
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid())
+  orderId         String
+  listingId       String
+  sellerCompanyId String
+  title           String
+  quantity        Int
+  unit            String
+  pricePerUnit    Float
+  lineTotal       Float
+  status          String   @default("CONFIRMED")
+  createdAt       DateTime @default(now())
+
+  order   PurchaseOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listing MarketplaceListing @relation(fields: [listingId], references: [id])
+
+  @@index([orderId])
+  @@index([listingId])
+  @@index([sellerCompanyId])
+}
+
+model Review {
+  id               String   @id @default(uuid())
+  userId           String
+  listingId        String
+  rating           Int
+  title            String?
+  body             String
+  mediaJson        String?
+  verifiedPurchase Boolean  @default(false)
+  helpfulCount     Int      @default(0)
+  status           String   @default("PUBLISHED")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([userId])
+}
+
+model MessageThread {
+  id              String   @id @default(uuid())
+  listingId       String?
+  buyerUserId     String
+  sellerUserId    String?
+  sellerCompanyId String?
+  subject         String
+  status          String   @default("OPEN")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  listing  MarketplaceListing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  buyer    User                @relation("ThreadBuyer", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  seller   User?               @relation("ThreadSeller", fields: [sellerUserId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([buyerUserId])
+  @@index([sellerUserId])
+  @@index([listingId])
+}
+
+model Message {
+  id              String    @id @default(uuid())
+  threadId        String
+  senderUserId    String
+  body            String
+  attachmentsJson String?
+  status          String    @default("SENT")
+  createdAt       DateTime  @default(now())
+  readAt          DateTime?
+
+  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([senderUserId])
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  actionUrl String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([readAt])
+}
+
+model SellerOnboarding {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  status        String    @default("DRAFT")
+  currentStep   String    @default("BUSINESS")
+  businessJson  String?
+  taxJson       String?
+  bankJson      String?
+  kycJson       String?
+  warehouseJson String?
+  policyJson    String?
+  submittedAt   DateTime?
+  reviewedAt    DateTime?
+  reviewerNote  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Regulation {
+  id          String @id
+  code        String @unique
+  description String
+
+  materials MaterialRegulation[]
 }
 
 model MaterialProducer {
-  companyId     String
-  materialId    String
+  companyId  String
+  materialId String
 
-  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material      WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@id([companyId, materialId])
   @@index([materialId])
 }
 
 model MaterialUpcycler {
-  companyId     String
-  materialId    String
+  companyId  String
+  materialId String
 
-  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material      WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@id([companyId, materialId])
   @@index([materialId])
 }
 
 model MaterialRegulation {
-  materialId    String
-  regulationId  String
+  materialId   String
+  regulationId String
 
-  material      WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  regulation    Regulation    @relation(fields: [regulationId], references: [id], onDelete: Cascade)
+  material   WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  regulation Regulation    @relation(fields: [regulationId], references: [id], onDelete: Cascade)
 
   @@id([materialId, regulationId])
   @@index([regulationId])
 }
 
 model MaterialComplement {
-  sourceId      String
-  targetId      String
+  sourceId String
+  targetId String
 
-  source        WasteMaterial @relation("ComplementSource", fields: [sourceId], references: [id], onDelete: Cascade)
-  target        WasteMaterial @relation("ComplementTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  source WasteMaterial @relation("ComplementSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target WasteMaterial @relation("ComplementTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@id([sourceId, targetId])
   @@index([targetId])
@@ -187,22 +416,22 @@ model PotentialMatch {
   sharedNamesJson String
   computedAt      DateTime @default(now())
 
-  company1        Company @relation("MatchCompanyA", fields: [company1Id], references: [id], onDelete: Cascade)
-  company2        Company @relation("MatchCompanyB", fields: [company2Id], references: [id], onDelete: Cascade)
+  company1 Company @relation("MatchCompanyA", fields: [company1Id], references: [id], onDelete: Cascade)
+  company2 Company @relation("MatchCompanyB", fields: [company2Id], references: [id], onDelete: Cascade)
 
   @@unique([company1Id, company2Id])
   @@index([score])
 }
 
 model Demand {
-  id          String   @id @default(uuid())
-  companyId   String
-  materialId  String
-  userId      String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  companyId  String
+  materialId String
+  userId     String?
+  createdAt  DateTime @default(now())
 
-  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material    WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, materialId])
   @@index([materialId])

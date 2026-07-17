@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import { requireAuth } from "@/lib/marketplace";
+
+export async function GET() {
+  const guard = await requireAuth();
+  if ("response" in guard) return guard.response;
+
+  const items = await prisma.wishlistItem.findMany({
+    where: { userId: guard.auth.userId },
+    include: { listing: true },
+    orderBy: { createdAt: "desc" },
+  });
+  return NextResponse.json({ items });
+}
+
+export async function POST(request: NextRequest) {
+  const guard = await requireAuth();
+  if ("response" in guard) return guard.response;
+
+  const body = await request.json().catch(() => null);
+  const listingId = String(body?.listingId || "");
+  if (!listingId) return NextResponse.json({ error: "listingId is required." }, { status: 400 });
+
+  const listing = await prisma.marketplaceListing.findUnique({ where: { id: listingId } });
+  if (!listing) return NextResponse.json({ error: "Listing not found." }, { status: 404 });
+
+  const item = await prisma.wishlistItem.upsert({
+    where: { userId_listingId: { userId: guard.auth.userId, listingId } },
+    update: {},
+    create: { userId: guard.auth.userId, listingId },
+  });
+  return NextResponse.json({ success: true, item });
+}
+
+export async function DELETE(request: NextRequest) {
+  const guard = await requireAuth();
+  if ("response" in guard) return guard.response;
+
+  const listingId = request.nextUrl.searchParams.get("listingId");
+  if (!listingId) return NextResponse.json({ error: "listingId is required." }, { status: 400 });
+
+  await prisma.wishlistItem.deleteMany({ where: { userId: guard.auth.userId, listingId } });
+  return NextResponse.json({ success: true });
+}
