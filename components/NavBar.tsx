@@ -13,6 +13,7 @@ import {
   Store,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -156,9 +157,9 @@ export default function NavBar({
           <button onClick={() => onCategorySelect("Verified")} className="hover:text-orange-600">
             Buyer Protection
           </button>
-          <button onClick={onSell} className="hover:text-orange-600">
+          <Link href="/seller" className="hover:text-orange-600">
             Sell on Symbi-OS
-          </button>
+          </Link>
           <button onClick={onPostRfq} className="hover:text-orange-600">
             Bulk RFQ
           </button>
@@ -177,11 +178,14 @@ export default function NavBar({
           </button>
           {user && (
             <>
-              <button className="hidden items-center gap-2 rounded-sm px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100 sm:flex">
+              <Link
+                href="/account"
+                className="hidden items-center gap-2 rounded-sm px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100 sm:flex"
+              >
                 <Building2 size={15} className="text-orange-500" />
                 <span className="max-w-[140px] truncate text-stone-700">{user.companyName}</span>
                 <ChevronDown size={13} />
-              </button>
+              </Link>
               <button
                 onClick={logout}
                 className="flex h-9 w-9 items-center justify-center rounded-sm text-stone-600 hover:bg-stone-100 hover:text-stone-950"
