@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   ArrowUpRight,
   Bell,
@@ -2079,12 +2080,12 @@ function ListingCard({
           <Gavel size={15} />
           Request quote
         </button>
-        <button
-          onClick={onSelect}
+        <Link
+          href={`/products/${listing.id}`}
           className="rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
         >
           Details
-        </button>
+        </Link>
       </div>
     </article>
   );
@@ -2210,6 +2211,12 @@ function ListingDetail({
               View original public listing
             </a>
           )}
+          <Link
+            href={`/products/${listing.id}`}
+            className="mt-3 block text-sm font-semibold text-orange-600 hover:text-orange-700"
+          >
+            Open full product page
+          </Link>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
