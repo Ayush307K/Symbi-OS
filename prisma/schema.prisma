@@ -12,6 +12,8 @@ model User {
   email            String    @unique
   passwordHash     String
   role             String    @default("BOTH") // BUYER | SELLER | BOTH
+  accountStatus    String    @default("ACTIVE") // ACTIVE | LOCKED | DISABLED
+  tokenVersion     Int       @default(0)
   companyName      String
   companyId        String?
   mobile           String?
@@ -25,27 +27,97 @@ model User {
   wishlistItems        WishlistItem[]
   orders               PurchaseOrder[]
   reviews              Review[]
-  messageThreadsBuyer  MessageThread[]   @relation("ThreadBuyer")
-  messageThreadsSeller MessageThread[]   @relation("ThreadSeller")
+  messageThreadsBuyer  MessageThread[]      @relation("ThreadBuyer")
+  messageThreadsSeller MessageThread[]      @relation("ThreadSeller")
   messages             Message[]
   notifications        Notification[]
   sellerOnboarding     SellerOnboarding?
+  sessions             Session[]
+  authTokens           AuthToken[]
+  securityEvents       SecurityEvent[]
+  listingAssets        ListingAsset[]
+  listingEvents        ListingEvent[]       @relation("ListingEventActor")
+  demands              Demand[]
+  onboardingDocuments  OnboardingDocument[]
+  safetyEvents         SafetyEvent[]
+  company              Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
 }
 
 model Bid {
-  id            String   @id @default(uuid())
-  materialName  String
-  materialId    String?
-  quantity      Int
-  pricePerUnit  Float
-  status        String   @default("pending") // pending | accepted | rejected
-  bidderUserId  String
-  bidderEmail   String
-  bidderCompany String
-  sellerUserId  String?
-  producerId    String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String    @id @default(uuid())
+  materialName    String
+  materialId      String?
+  listingId       String?
+  quantity        Int
+  pricePerUnit    Float
+  currency        String    @default("INR")
+  unit            String    @default("ton")
+  terms           String?
+  status          String    @default("PENDING")
+  currentSequence Int       @default(1)
+  idempotencyKey  String?   @unique
+  bidderUserId    String
+  bidderEmail     String
+  bidderCompany   String
+  sellerUserId    String?
+  producerId      String?
+  expiresAt       DateTime?
+  acceptedAt      DateTime?
+  decisionAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  listing        MarketplaceListing?   @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  revisions      OfferRevision[]
+  events         OfferEvent[]
+  reservation    InventoryReservation?
+  order          PurchaseOrder?        @relation("AcceptedBidOrder")
+  messageThreads MessageThread[]
+
+  @@index([listingId])
+  @@index([bidderUserId])
+  @@index([sellerUserId])
+  @@index([status])
+}
+
+model OfferRevision {
+  id              String   @id @default(uuid())
+  bidId           String
+  sequence        Int
+  createdByUserId String
+  kind            String
+  quantity        Int
+  pricePerUnit    Float
+  currency        String
+  unit            String
+  terms           String?
+  status          String   @default("OPEN")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  bid Bid @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  @@unique([bidId, sequence])
+  @@index([bidId, createdAt])
+}
+
+model OfferEvent {
+  id           String   @id @default(uuid())
+  bidId        String
+  actorUserId  String?
+  type         String
+  fromStatus   String?
+  toStatus     String
+  sequence     Int
+  metadataJson String?
+  createdAt    DateTime @default(now())
+
+  bid Bid @relation(fields: [bidId], references: [id], onDelete: Cascade)
+
+  @@index([bidId, createdAt])
+  @@index([actorUserId])
 }
 
 model Company {
@@ -64,6 +136,7 @@ model Company {
   upcycles MaterialUpcycler[]
   listings MarketplaceListing[]
   demands  Demand[]
+  users    User[]
   matchesA PotentialMatch[]     @relation("MatchCompanyA")
   matchesB PotentialMatch[]     @relation("MatchCompanyB")
 }
@@ -75,9 +148,6 @@ model WasteMaterial {
   baseElement   String
   category      String
   description   String
-  price         Float?
-  quantity      Int?
-  status        String   @default("available")
   embeddingJson String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -92,58 +162,156 @@ model WasteMaterial {
 }
 
 model MarketplaceListing {
-  id                String   @id
-  title             String
-  slug              String   @unique
-  sourceType        String   @default("synthetic")
-  sourceName        String?
-  sourceUrl         String?
-  externalId        String?  @unique
-  rawQuantityText   String?
-  rawLocationText   String?
-  materialId        String
-  sellerCompanyId   String
-  category          String
-  subcategory       String
-  area              String
-  city              String
-  state             String
-  country           String
-  imageUrl          String
-  pricePerUnit      Float
-  currency          String   @default("INR")
-  unit              String   @default("ton")
-  minOrderQuantity  Int
-  quantityAvailable Int
-  leadTimeDays      Int
-  rating            Float
-  responseRate      Int
-  verified          Boolean  @default(true)
-  tradeAssurance    Boolean  @default(true)
-  yearsActive       Int
-  ordersCompleted   Int
-  description       String
-  packaging         String
-  paymentTerms      String
-  status            String   @default("active")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                   String    @id
+  title                String
+  slug                 String    @unique
+  sourceType           String    @default("synthetic")
+  sourceName           String?
+  sourceUrl            String?
+  externalId           String?   @unique
+  rawQuantityText      String?
+  rawLocationText      String?
+  materialId           String
+  sellerCompanyId      String
+  category             String
+  subcategory          String
+  area                 String
+  city                 String
+  state                String
+  country              String
+  imageUrl             String    @default("")
+  pricePerUnit         Float
+  priceMode            String    @default("FIXED")
+  currency             String    @default("INR")
+  unit                 String    @default("ton")
+  minOrderQuantity     Int
+  lotIncrement         Int       @default(1)
+  quantityAvailable    Int
+  leadTimeDays         Int
+  rating               Float
+  responseRate         Int
+  verified             Boolean   @default(true)
+  tradeAssurance       Boolean   @default(true)
+  yearsActive          Int
+  ordersCompleted      Int
+  description          String
+  packaging            String
+  handlingRequirements String    @default("")
+  paymentTerms         String
+  pincode              String?
+  latitude             Float?
+  longitude            Float?
+  availableFrom        DateTime?
+  availableUntil       DateTime?
+  safetyDeclaration    Boolean   @default(false)
+  qualityDeclaration   Boolean   @default(false)
+  ownershipDeclaration Boolean   @default(false)
+  authorityDeclaration Boolean   @default(false)
+  status               String    @default("DRAFT")
+  version              Int       @default(1)
+  submittedAt          DateTime?
+  moderatedAt          DateTime?
+  moderatedByUserId    String?
+  moderationNote       String?
+  activatedAt          DateTime?
+  expiresAt            DateTime?
+  archivedAt           DateTime?
+  lastVerifiedAt       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  material       WasteMaterial       @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  seller         Company             @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
-  cartItems      CartItem[]
-  wishlistItems  WishlistItem[]
-  orderItems     PurchaseOrderItem[]
-  reviews        Review[]
-  messageThreads MessageThread[]
+  material           WasteMaterial          @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  seller             Company                @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
+  cartItems          CartItem[]
+  wishlistItems      WishlistItem[]
+  orderItems         PurchaseOrderItem[]
+  reviews            Review[]
+  messageThreads     MessageThread[]
+  bids               Bid[]
+  inventoryMoves     InventoryMovement[]
+  assets             ListingAsset[]
+  events             ListingEvent[]
+  matches            ListingMatch[]
+  reservations       InventoryReservation[]
+  safetyReviewReason String?
 
   @@index([category])
+  @@index([category, subcategory])
   @@index([state])
+  @@index([state, city, pincode])
   @@index([country])
   @@index([sourceType])
   @@index([sourceName])
   @@index([materialId])
   @@index([sellerCompanyId])
+  @@index([status, updatedAt])
+  @@index([status, category, updatedAt, id])
+  @@index([status, pricePerUnit])
+  @@index([status, quantityAvailable])
+  @@index([status, availableFrom, availableUntil])
+}
+
+model SafetyEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  listingId String?
+  outcome   String
+  ruleCode  String
+  category  String?
+  textHash  String
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([listingId, createdAt])
+  @@index([outcome])
+}
+
+model ListingAsset {
+  id             String   @id @default(uuid())
+  listingId      String
+  ownerUserId    String
+  kind           String
+  storageKey     String   @unique
+  thumbnailKey   String?
+  originalName   String
+  mimeType       String
+  sizeBytes      Int
+  checksumSha256 String
+  width          Int?
+  height         Int?
+  sortOrder      Int      @default(0)
+  visibility     String   @default("PRIVATE")
+  status         String   @default("READY")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  owner   User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, kind, sortOrder])
+  @@index([ownerUserId])
+}
+
+model ListingEvent {
+  id           String   @id @default(uuid())
+  listingId    String
+  actorUserId  String?
+  type         String
+  fromStatus   String?
+  toStatus     String?
+  version      Int
+  snapshotJson String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  actor   User?              @relation("ListingEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, createdAt])
+  @@index([actorUserId])
+  @@index([type])
 }
 
 model Address {
@@ -214,26 +382,41 @@ model PurchaseOrder {
   id                  String   @id @default(uuid())
   orderNumber         String   @unique
   buyerUserId         String
+  sourceBidId         String?  @unique
   status              String   @default("CREATED")
   paymentStatus       String   @default("PENDING")
+  fulfillmentStatus   String   @default("UNFULFILLED")
+  disputeStatus       String   @default("NONE")
   shippingAddressId   String?
   billingAddressId    String?
   subtotal            Float
   taxAmount           Float
   shippingAmount      Float
   discountAmount      Float    @default(0)
+  buyerFeeAmount      Float    @default(0)
+  sellerFeeAmount     Float    @default(0)
+  feeVersion          String   @default("fees-v1")
   totalAmount         Float
   currency            String   @default("INR")
   gstInvoice          Boolean  @default(true)
   purchaseOrderNumber String?
   notes               String?
+  taxNote             String   @default("Tax not calculated in sandbox")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  buyer           User                @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
-  shippingAddress Address?            @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
-  billingAddress  Address?            @relation("BillingAddress", fields: [billingAddressId], references: [id])
+  buyer           User                   @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
+  sourceBid       Bid?                   @relation("AcceptedBidOrder", fields: [sourceBidId], references: [id], onDelete: SetNull)
+  shippingAddress Address?               @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  billingAddress  Address?               @relation("BillingAddress", fields: [billingAddressId], references: [id])
   items           PurchaseOrderItem[]
+  demoPayments    DemoPayment[]
+  inventoryMoves  InventoryMovement[]
+  reservations    InventoryReservation[]
+  events          OrderEvent[]
+  invoice         Invoice?
+  creditNote      CreditNote?
+  messageThreads  MessageThread[]
 
   @@index([buyerUserId])
   @@index([status])
@@ -243,13 +426,14 @@ model PurchaseOrderItem {
   id              String   @id @default(uuid())
   orderId         String
   listingId       String
+  sourceBidId     String?
   sellerCompanyId String
   title           String
   quantity        Int
   unit            String
   pricePerUnit    Float
   lineTotal       Float
-  status          String   @default("CONFIRMED")
+  status          String   @default("RESERVED")
   createdAt       DateTime @default(now())
 
   order   PurchaseOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -258,6 +442,47 @@ model PurchaseOrderItem {
   @@index([orderId])
   @@index([listingId])
   @@index([sellerCompanyId])
+}
+
+model OrderEvent {
+  id           String   @id @default(uuid())
+  orderId      String
+  actorUserId  String?
+  type         String
+  fromStatus   String?
+  toStatus     String
+  reasonCode   String?
+  snapshotJson String
+  createdAt    DateTime @default(now())
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@index([actorUserId])
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  invoiceNumber String   @unique
+  snapshotJson  String
+  issuedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model CreditNote {
+  id               String   @id @default(uuid())
+  orderId          String   @unique
+  creditNoteNumber String   @unique
+  invoiceNumber    String
+  reasonCode       String
+  snapshotJson     String
+  issuedAt         DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Review {
@@ -277,6 +502,7 @@ model Review {
   user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, listingId])
   @@index([listingId])
   @@index([userId])
 }
@@ -284,6 +510,8 @@ model Review {
 model MessageThread {
   id              String   @id @default(uuid())
   listingId       String?
+  bidId           String?
+  orderId         String?
   buyerUserId     String
   sellerUserId    String?
   sellerCompanyId String?
@@ -296,10 +524,15 @@ model MessageThread {
   buyer    User                @relation("ThreadBuyer", fields: [buyerUserId], references: [id], onDelete: Cascade)
   seller   User?               @relation("ThreadSeller", fields: [sellerUserId], references: [id], onDelete: SetNull)
   messages Message[]
+  bid      Bid?                @relation(fields: [bidId], references: [id], onDelete: SetNull)
+  order    PurchaseOrder?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  reports  MessageReport[]
 
   @@index([buyerUserId])
   @@index([sellerUserId])
   @@index([listingId])
+  @@index([bidId])
+  @@index([orderId])
 }
 
 model Message {
@@ -319,6 +552,21 @@ model Message {
   @@index([senderUserId])
 }
 
+model MessageReport {
+  id             String   @id @default(uuid())
+  threadId       String
+  reporterUserId String
+  reasonCode     String
+  details        String?
+  status         String   @default("OPEN")
+  createdAt      DateTime @default(now())
+
+  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([reporterUserId, status])
+}
+
 model Notification {
   id        String    @id @default(uuid())
   userId    String
@@ -336,23 +584,233 @@ model Notification {
 }
 
 model SellerOnboarding {
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  status                String    @default("DRAFT")
+  currentStep           String    @default("BUSINESS")
+  businessJson          String?
+  taxJson               String?
+  bankJson              String?
+  kycJson               String?
+  warehouseJson         String?
+  policyJson            String?
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  reviewerNote          String?
+  gstinHash             String?   @unique
+  verificationProvider  String?
+  verificationReference String?
+  verifiedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents OnboardingDocument[]
+  events    VerificationEvent[]
+}
+
+model OnboardingDocument {
+  id             String   @id @default(uuid())
+  onboardingId   String
+  ownerUserId    String
+  kind           String
+  storageKey     String   @unique
+  originalName   String
+  mimeType       String
+  sizeBytes      Int
+  checksumSha256 String
+  status         String   @default("READY")
+  retentionUntil DateTime
+  createdAt      DateTime @default(now())
+
+  onboarding SellerOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  owner      User             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([onboardingId, kind])
+  @@index([ownerUserId])
+  @@index([retentionUntil])
+}
+
+model VerificationEvent {
+  id           String   @id @default(uuid())
+  onboardingId String
+  actorUserId  String?
+  type         String
+  fromStatus   String?
+  toStatus     String
+  note         String?
+  provider     String?
+  reference    String?
+  createdAt    DateTime @default(now())
+
+  onboarding SellerOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+
+  @@index([onboardingId, createdAt])
+  @@index([actorUserId])
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  userAgent  String?
+  ipHash     String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthToken {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String // EMAIL_VERIFICATION | PASSWORD_RESET
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  key          String    @id
+  count        Int       @default(0)
+  windowStart  DateTime
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+}
+
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  type      String
+  ipHash    String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model ListingImportRun {
+  id              String    @id @default(uuid())
+  provider        String
+  status          String    @default("RUNNING")
+  recordsSeen     Int       @default(0)
+  recordsUpserted Int       @default(0)
+  recordsRejected Int       @default(0)
+  errorSummary    String?
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+
+  @@index([provider])
+  @@index([startedAt])
+}
+
+model KnowledgeDocument {
+  id          String   @id @default(uuid())
+  sourceType  String
+  sourceId    String?
+  sourceUrl   String?
+  title       String
+  contentHash String   @unique
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([sourceType])
+  @@index([sourceId])
+}
+
+model KnowledgeChunk {
+  id            String   @id @default(uuid())
+  documentId    String
+  chunkIndex    Int
+  content       String
+  embeddingJson String?
+  tokenEstimate Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+}
+
+model DemoPayment {
+  id             String    @id @default(uuid())
+  orderId        String
+  providerRef    String    @unique
+  amount         Float
+  currency       String    @default("INR")
+  status         String    @default("CREATED")
+  idempotencyKey String    @unique
+  confirmedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model InventoryMovement {
+  id             String   @id @default(uuid())
+  listingId      String
+  orderId        String?
+  reservationId  String?
+  quantityChange Int
+  balanceAfter   Int
+  reason         String
+  idempotencyKey String?  @unique
+  createdAt      DateTime @default(now())
+
+  listing     MarketplaceListing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  order       PurchaseOrder?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  reservation InventoryReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  @@index([listingId])
+  @@index([orderId])
+  @@index([reservationId])
+}
+
+model InventoryReservation {
   id            String    @id @default(uuid())
-  userId        String    @unique
-  status        String    @default("DRAFT")
-  currentStep   String    @default("BUSINESS")
-  businessJson  String?
-  taxJson       String?
-  bankJson      String?
-  kycJson       String?
-  warehouseJson String?
-  policyJson    String?
-  submittedAt   DateTime?
-  reviewedAt    DateTime?
-  reviewerNote  String?
+  listingId     String
+  bidId         String?   @unique
+  orderId       String?
+  quantity      Int
+  status        String    @default("ACTIVE")
+  expiresAt     DateTime
+  committedAt   DateTime?
+  releasedAt    DateTime?
+  releaseReason String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   MarketplaceListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bid       Bid?                @relation(fields: [bidId], references: [id], onDelete: SetNull)
+  order     PurchaseOrder?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  movements InventoryMovement[]
+
+  @@index([listingId, status])
+  @@index([orderId])
+  @@index([status, expiresAt])
 }
 
 model Regulation {
@@ -424,15 +882,57 @@ model PotentialMatch {
 }
 
 model Demand {
-  id         String   @id @default(uuid())
-  companyId  String
-  materialId String
-  userId     String?
-  createdAt  DateTime @default(now())
+  id            String    @id @default(uuid())
+  companyId     String
+  materialId    String
+  userId        String?
+  query         String
+  category      String
+  subcategory   String?
+  quantity      Int
+  unit          String
+  maxPrice      Float?
+  state         String?
+  city          String?
+  pincode       String?
+  latitude      Float?
+  longitude     Float?
+  maxDistanceKm Float?
+  availableBy   DateTime?
+  status        String    @default("OPEN")
+  matchVersion  String    @default("rules-v1")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  material WasteMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  material WasteMaterial  @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  user     User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  matches  ListingMatch[]
 
-  @@unique([companyId, materialId])
+  @@index([companyId, status])
   @@index([materialId])
+  @@index([userId])
+  @@index([category, status])
+}
+
+model ListingMatch {
+  id                String   @id @default(uuid())
+  demandId          String
+  listingId         String
+  score             Int
+  version           String
+  explanationJson   String
+  inputSnapshotJson String
+  status            String   @default("PROPOSED")
+  convertedOrderId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  demand  Demand             @relation(fields: [demandId], references: [id], onDelete: Cascade)
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([demandId, listingId])
+  @@index([demandId, score])
+  @@index([listingId, status])
+  @@index([convertedOrderId])
 }

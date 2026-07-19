@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { PrismaLibSQL } from "@prisma/adapter-libsql";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -14,7 +14,7 @@ function buildPrisma(): PrismaClient {
 
     const baseUrl = url.includes("?") ? url.split("?")[0] : url;
 
-    const adapter = new PrismaLibSql({ url: baseUrl, authToken });
+    const adapter = new PrismaLibSQL({ url: baseUrl, authToken });
     return new PrismaClient({ adapter } as any);
   }
 

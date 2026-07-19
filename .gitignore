@@ -4,6 +4,13 @@ node_modules/
 !.env.example
 .next
 .claude
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
 prisma/*.db
 prisma/*.db-journal
 .vercel
+coverage/
+*.tsbuildinfo
+.data/
