@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/marketplace";
+import { assertTrustedOrigin } from "@/server/http";
+import { hasRole } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   const listingId = request.nextUrl.searchParams.get("listingId");
@@ -15,8 +17,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  assertTrustedOrigin(request);
   const guard = await requireAuth();
   if ("response" in guard) return guard.response;
+  if (!hasRole(guard.auth, "BUYER")) {
+    return NextResponse.json(
+      { error: "Buyer access is required." },
+      { status: 403 },
+    );
+  }
 
   const body = await request.json().catch(() => null);
   const listingId = String(body?.listingId || "");
@@ -30,22 +39,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Review must be at least 10 characters." }, { status: 400 });
   }
 
-  const verifiedPurchase = Boolean(
-    await prisma.purchaseOrderItem.findFirst({
-      where: { listingId, order: { buyerUserId: guard.auth.userId, status: { in: ["CONFIRMED", "DELIVERED", "CREATED"] } } },
+  const verifiedPurchase = await prisma.purchaseOrderItem.findFirst({
+      where: {
+        listingId,
+        status: { in: ["FULFILLED", "DELIVERED"] },
+        order: {
+          buyerUserId: guard.auth.userId,
+          fulfillmentStatus: { in: ["FULFILLED", "DELIVERED"] },
+        },
+      },
       select: { id: true },
-    })
-  );
+    });
+  if (!verifiedPurchase) {
+    return NextResponse.json(
+      { error: "A fulfilled purchase is required before reviewing this listing." },
+      { status: 403 },
+    );
+  }
 
-  const review = await prisma.review.create({
-    data: {
+  const review = await prisma.review.upsert({
+    where: {
+      userId_listingId: { userId: guard.auth.userId, listingId },
+    },
+    update: {
+      rating,
+      title: body?.title ? String(body.title).trim().slice(0, 160) : null,
+      body: reviewBody.slice(0, 3000),
+      verifiedPurchase: true,
+      status: "PUBLISHED",
+    },
+    create: {
       userId: guard.auth.userId,
       listingId,
       rating,
-      title: body?.title ? String(body.title).trim() : null,
-      body: reviewBody,
-      mediaJson: body?.media ? JSON.stringify(body.media) : null,
-      verifiedPurchase,
+      title: body?.title ? String(body.title).trim().slice(0, 160) : null,
+      body: reviewBody.slice(0, 3000),
+      mediaJson: null,
+      verifiedPurchase: true,
     },
   });
 

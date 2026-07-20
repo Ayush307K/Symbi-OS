@@ -1,61 +1,55 @@
-// ---------------------------------------------------------------------------
-//  POST /api/auth/login
-//
-//  Authenticates a user against SQLite credentials and sets a JWT cookie.
-// ---------------------------------------------------------------------------
-
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { verifyPassword, signToken, setAuthCookie } from "@/lib/auth";
-
-interface LoginBody {
-  email: string;
-  password: string;
-}
+import prisma from "@/lib/prisma";
+import {
+  createSession,
+  hashRequestIp,
+  verifyPassword,
+} from "@/lib/auth";
+import { apiError, assertTrustedOrigin, parseJson } from "@/server/http";
+import { enforceRateLimit } from "@/server/rate-limit";
+import { loginSchema } from "@/server/auth/schemas";
 
 export async function POST(request: NextRequest) {
-  let body: LoginBody;
   try {
-    body = (await request.json()) as LoginBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-
-  const { email, password } = body;
-  if (!email || !password) {
-    return NextResponse.json(
-      { error: "Missing required fields: email, password" },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return NextResponse.json(
-        { error: "Invalid email or password." },
-        { status: 401 }
-      );
-    }
-
-    const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) {
-      return NextResponse.json(
-        { error: "Invalid email or password." },
-        { status: 401 }
-      );
-    }
-
-    const token = signToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      companyName: user.companyName,
-      companyId: user.companyId,
+    assertTrustedOrigin(request);
+    const body = await parseJson(request, loginSchema);
+    const rateKey = `login:${hashRequestIp(request) ?? "unknown"}:${body.email}`;
+    await enforceRateLimit(rateKey, {
+      max: 8,
+      windowMs: 15 * 60 * 1000,
+      blockMs: 30 * 60 * 1000,
     });
 
-    await setAuthCookie(token);
+    const user = await prisma.user.findUnique({ where: { email: body.email } });
+    const valid =
+      user?.accountStatus === "ACTIVE" &&
+      (await verifyPassword(
+        body.password,
+        user?.passwordHash ??
+          "$2b$12$wjbU2pQ/FZRm9eCqvHh2wOnaECYQdHjgP/0jGd6ERqhxS2Wz5YQj."
+      ));
+    if (!user || !valid) {
+      await prisma.securityEvent.create({
+        data: {
+          userId: user?.id,
+          type: "LOGIN_FAILED",
+          ipHash: hashRequestIp(request),
+        },
+      });
+      return NextResponse.json(
+        { error: "Invalid email or password.", code: "INVALID_CREDENTIALS" },
+        { status: 401 }
+      );
+    }
 
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+    await createSession(user, request);
+    await prisma.securityEvent.create({
+      data: { userId: user.id, type: "LOGIN_SUCCEEDED", ipHash: hashRequestIp(request) },
+    });
     return NextResponse.json({
       user: {
         id: user.id,
@@ -63,11 +57,10 @@ export async function POST(request: NextRequest) {
         role: user.role,
         companyName: user.companyName,
         companyId: user.companyId,
+        emailVerified: Boolean(user.emailVerifiedAt),
       },
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[Login] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return apiError(error);
   }
 }

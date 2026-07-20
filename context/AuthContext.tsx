@@ -21,7 +21,7 @@ interface RegisterData {
   password: string;
   companyName: string;
   industry?: string;
-  role?: "BUYER" | "SELLER";
+  role?: "BUYER" | "SELLER" | "BOTH";
 }
 
 interface AuthContextValue {
@@ -125,6 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!res.ok) {
           setError(data.error ?? "Registration failed.");
           return;
+        }
+        if (data.demoEmailVerificationToken) {
+          await fetch("/api/auth/verify-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: data.demoEmailVerificationToken }),
+          });
+          data.user.emailVerified = true;
         }
         setUser(data.user);
         router.replace("/");

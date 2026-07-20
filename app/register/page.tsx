@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [industry, setIndustry] = useState("");
+  const [role, setRole] = useState<"BUYER" | "SELLER" | "BOTH">("BOTH");
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -27,6 +28,7 @@ export default function RegisterPage() {
       password,
       companyName,
       industry: industry || undefined,
+      role,
     });
   }
 
@@ -106,13 +108,30 @@ export default function RegisterPage() {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={12}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder="12+ chars, upper/lowercase and number"
                 className="h-11 w-full rounded-md border border-stone-300 pl-10 pr-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
               />
             </Field>
+
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-stone-700">
+                Account role
+              </span>
+              <select
+                value={role}
+                onChange={(event) =>
+                  setRole(event.target.value as "BUYER" | "SELLER" | "BOTH")
+                }
+                className="h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+              >
+                <option value="BOTH">Buyer and seller</option>
+                <option value="BUYER">Buyer only</option>
+                <option value="SELLER">Seller only</option>
+              </select>
+            </label>
 
             <Field icon={Building2} label="Company name">
               <input

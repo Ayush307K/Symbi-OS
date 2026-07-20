@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isValidIndianPincode, requireAuth, serviceabilityForPincode } from "@/lib/marketplace";
+import { assertTrustedOrigin } from "@/server/http";
 
 export async function GET() {
   const guard = await requireAuth();
@@ -14,6 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  assertTrustedOrigin(request);
   const guard = await requireAuth();
   if ("response" in guard) return guard.response;
 
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  assertTrustedOrigin(request);
   const guard = await requireAuth();
   if ("response" in guard) return guard.response;
 
@@ -115,6 +118,7 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  assertTrustedOrigin(request);
   const guard = await requireAuth();
   if ("response" in guard) return guard.response;
 

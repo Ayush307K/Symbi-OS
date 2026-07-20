@@ -23,6 +23,8 @@ export async function GET() {
         role: true,
         companyName: true,
         companyId: true,
+        accountStatus: true,
+        emailVerifiedAt: true,
       },
     });
 
@@ -30,7 +32,13 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json({
+      user: {
+        ...user,
+        emailVerified: Boolean(user.emailVerifiedAt),
+        emailVerifiedAt: undefined,
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[Auth/Me] Error:", message);
