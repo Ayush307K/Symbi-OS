@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title description">
+  <title id="title">Material image unavailable</title>
+  <desc id="description">Neutral placeholder for an industrial material listing</desc>
+  <rect width="800" height="600" fill="#e7e5e4"/>
+  <path d="M0 460 210 285l126 104 88-75 376 286H0Z" fill="#d6d3d1"/>
+  <circle cx="615" cy="155" r="64" fill="#f97316" opacity=".72"/>
+  <path d="M252 185h296v210H252z" fill="none" stroke="#78716c" stroke-width="18"/>
+  <path d="m282 357 82-82 64 63 44-43 46 45" fill="none" stroke="#78716c" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
