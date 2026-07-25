@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { SAFE_CATEGORIES } from "@/server/safety";
 
 export interface SupplyRoute {
   producer: string;
@@ -57,8 +58,18 @@ export async function POST(
   const minCapacity = body.minCapacity ?? 0;
 
   try {
-    const material = await prisma.wasteMaterial.findUnique({
-      where: { name: materialName },
+    const material = await prisma.wasteMaterial.findFirst({
+      where: {
+        name: materialName,
+        toxicityLevel: { in: ["none", "low"] },
+        category: { in: [...SAFE_CATEGORIES] },
+        listings: {
+          some: {
+            status: { in: ["ACTIVE", "active"] },
+            sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
+          },
+        },
+      },
       include: {
         producers: { include: { company: true } },
         upcyclers: {

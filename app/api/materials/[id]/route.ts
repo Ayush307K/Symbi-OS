@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { publicListingWhere } from "@/server/listings/policy";
 
 function mapListing(listing: any) {
   return {
@@ -25,18 +26,19 @@ function mapListing(listing: any) {
     state: listing.state,
     country: listing.country,
     imageUrl: listing.imageUrl,
-    price: listing.pricePerUnit,
+    price: listing.priceMode === "ON_REQUEST" ? null : listing.pricePerUnit,
+    priceMode: listing.priceMode,
     currency: listing.currency,
     quantity: listing.quantityAvailable,
     unit: listing.unit,
     minOrderQuantity: listing.minOrderQuantity,
     leadTimeDays: listing.leadTimeDays,
-    rating: listing.rating,
-    responseRate: listing.responseRate,
-    verified: listing.verified,
-    tradeAssurance: listing.tradeAssurance,
+    rating: 0,
+    responseRate: 0,
+    verified: false,
+    tradeAssurance: false,
     yearsActive: listing.yearsActive,
-    ordersCompleted: listing.ordersCompleted,
+    ordersCompleted: 0,
     description: listing.description,
     packaging: listing.packaging,
     paymentTerms: listing.paymentTerms,
@@ -48,6 +50,7 @@ function mapListing(listing: any) {
     rawLocationText: listing.rawLocationText,
     createdAt: listing.createdAt,
     updatedAt: listing.updatedAt,
+    lastVerifiedAt: listing.lastVerifiedAt ?? listing.updatedAt,
   };
 }
 
@@ -61,7 +64,7 @@ export async function GET(
     const listing = await prisma.marketplaceListing.findFirst({
       where: {
         OR: [{ id }, { slug: id }, { externalId: id }],
-        status: "active",
+        ...publicListingWhere,
       },
       include: {
         material: true,
@@ -79,29 +82,32 @@ export async function GET(
       return NextResponse.json({ error: "Listing not found." }, { status: 404 });
     }
 
-    const [sellerUser, sellerListingCount, categoryListingCount, fulfilledOrders, related, sameSeller] =
+    const [sellerUser, sellerListingCount, categoryListingCount, fulfilledOrders, related, sameSeller, sellerOnboarding, messageThreads] =
       await Promise.all([
         prisma.user.findFirst({
           where: { companyId: listing.sellerCompanyId },
           select: { id: true },
         }),
         prisma.marketplaceListing.count({
-          where: { sellerCompanyId: listing.sellerCompanyId, status: "active" },
+          where: { sellerCompanyId: listing.sellerCompanyId, ...publicListingWhere },
         }),
         prisma.marketplaceListing.count({
-          where: { category: listing.category, status: "active" },
+          where: { ...publicListingWhere, category: listing.category },
         }),
         prisma.purchaseOrderItem.count({
           where: {
             sellerCompanyId: listing.sellerCompanyId,
-            status: { in: ["CONFIRMED", "SHIPPED", "DELIVERED"] },
+            status: { in: ["FULFILLED", "DELIVERED"] },
+            order: {
+              fulfillmentStatus: { in: ["FULFILLED", "DELIVERED"] },
+            },
           },
         }),
         prisma.marketplaceListing.findMany({
           where: {
             id: { not: listing.id },
+            ...publicListingWhere,
             category: listing.category,
-            status: "active",
           },
           include: { material: true, seller: true },
           orderBy: [{ rating: "desc" }, { updatedAt: "desc" }],
@@ -111,11 +117,25 @@ export async function GET(
           where: {
             id: { not: listing.id },
             sellerCompanyId: listing.sellerCompanyId,
-            status: "active",
+            ...publicListingWhere,
           },
           include: { material: true, seller: true },
           orderBy: [{ updatedAt: "desc" }],
           take: 8,
+        }),
+        prisma.sellerOnboarding.findFirst({
+          where: {
+            status: "APPROVED",
+            user: { companyId: listing.sellerCompanyId },
+          },
+          select: { verifiedAt: true },
+        }),
+        prisma.messageThread.findMany({
+          where: { listingId: listing.id },
+          select: {
+            buyerUserId: true,
+            messages: { select: { senderUserId: true } },
+          },
         }),
       ]);
 
@@ -125,7 +145,26 @@ export async function GET(
         : listing.reviews.reduce((sum, review) => sum + review.rating, 0) / listing.reviews.length;
 
     return NextResponse.json({
-      listing: { ...mapListing(listing), sellerUserId: sellerUser?.id ?? null },
+      listing: {
+        ...mapListing(listing),
+        sellerUserId: sellerUser?.id ?? null,
+        rating: reviewAverage ?? 0,
+        responseRate: messageThreads.length
+          ? Math.round(
+              (messageThreads.filter((thread) =>
+                thread.messages.some(
+                  (message) => message.senderUserId !== thread.buyerUserId,
+                ),
+              ).length /
+                messageThreads.length) *
+                100,
+            )
+          : 0,
+        verified:
+          listing.sourceType === "seller_submitted" &&
+          Boolean(sellerOnboarding),
+        ordersCompleted: fulfilledOrders,
+      },
       reviews: listing.reviews.map((review) => ({
         id: review.id,
         rating: review.rating,

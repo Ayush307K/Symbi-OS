@@ -14,7 +14,7 @@ function getClient(): OpenAI {
 
 export async function embedQuery(text: string): Promise<number[]> {
   const response = await getClient().embeddings.create({
-    model: "text-embedding-3-small",
+    model: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
     input: text,
   });
   return response.data[0].embedding;
@@ -23,7 +23,7 @@ export async function embedQuery(text: string): Promise<number[]> {
 export async function embedDocuments(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
   const response = await getClient().embeddings.create({
-    model: "text-embedding-3-small",
+    model: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
     input: texts,
   });
   return response.data.map((item) => item.embedding);

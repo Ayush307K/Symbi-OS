@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { SAFE_CATEGORIES } from "@/server/safety";
 
 export interface HybridSearchResult {
   id: string;
@@ -70,7 +71,14 @@ export async function POST(
   try {
     const candidates = await prisma.wasteMaterial.findMany({
       where: {
-        status: "available",
+        toxicityLevel: { in: ["none", "low"] },
+        category: { in: [...SAFE_CATEGORIES] },
+        listings: {
+          some: {
+            status: { in: ["ACTIVE", "active"] },
+            sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
+          },
+        },
         OR: [
           { name: { contains: query } },
           { description: { contains: query } },
@@ -90,7 +98,18 @@ export async function POST(
       candidates.length > 0
         ? candidates
         : await prisma.wasteMaterial.findMany({
-            where: { status: "available" },
+            where: {
+              toxicityLevel: { in: ["none", "low"] },
+              category: { in: [...SAFE_CATEGORIES] },
+              listings: {
+                some: {
+                  status: { in: ["ACTIVE", "active"] },
+                  sourceType: {
+                    in: ["real_api", "real_public_provider", "seller_submitted"],
+                  },
+                },
+              },
+            },
             include: {
               producers: { include: { company: { select: { name: true } } } },
               upcyclers: { include: { company: { select: { name: true } } } },

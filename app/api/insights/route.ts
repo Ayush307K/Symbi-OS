@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { publicListingWhere } from "@/server/listings/policy";
 
 export interface PartnershipInsight {
   company1: string;
@@ -18,6 +19,10 @@ export async function GET(): Promise<
 > {
   try {
     const matches = await prisma.potentialMatch.findMany({
+      where: {
+        company1: { listings: { some: publicListingWhere } },
+        company2: { listings: { some: publicListingWhere } },
+      },
       orderBy: { score: "desc" },
       take: 30,
       include: {

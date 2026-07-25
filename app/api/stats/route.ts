@@ -1,26 +1,28 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { publicListingWhere } from "@/server/listings/policy";
 
-export interface StatsResponse {
-  matches: number;
-  co2Saved: number;
-  landfillDiverted: number;
-}
-
-export async function GET(): Promise<
-  NextResponse<StatsResponse | { error: string }>
-> {
+export async function GET() {
   try {
-    const [matches, co2Saved, landfillDiverted] = await Promise.all([
-      prisma.materialUpcycler.count(),
-      prisma.company.count({ where: { carbonRating: { in: ["A", "B"] } } }),
-      prisma.wasteMaterial.count(),
+    const [matches, confirmedOrders] = await Promise.all([
+      prisma.marketplaceListing.count({ where: publicListingWhere }),
+      prisma.purchaseOrder.count({
+        where: { status: "CONFIRMED", paymentStatus: "PAID" },
+      }),
     ]);
-
-    return NextResponse.json({ matches, co2Saved, landfillDiverted });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[Stats API] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({
+      matches,
+      co2Saved: 0,
+      landfillDiverted: 0,
+      confirmedOrders,
+      methodology:
+        "Impact values remain zero until a verified unit-normalized measurement pipeline is configured.",
+    });
+  } catch (error) {
+    console.error("[Stats API]", error);
+    return NextResponse.json(
+      { error: "Unable to load marketplace metrics." },
+      { status: 500 }
+    );
   }
 }

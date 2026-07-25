@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { SAFE_CATEGORIES } from "@/server/safety";
 
 export interface Recommendation {
   id: string;
@@ -36,8 +37,12 @@ export async function POST(
   }
 
   try {
-    const source = await prisma.wasteMaterial.findUnique({
-      where: { name: materialName },
+    const source = await prisma.wasteMaterial.findFirst({
+      where: {
+        name: materialName,
+        toxicityLevel: { in: ["none", "low"] },
+        category: { in: [...SAFE_CATEGORIES] },
+      },
       include: {
         complements: {
           include: {
@@ -53,7 +58,13 @@ export async function POST(
     });
 
     const recommendations =
-      source?.complements.map((edge) => ({
+      source?.complements
+        .filter(
+          (edge) =>
+            ["none", "low"].includes(edge.target.toxicityLevel) &&
+            (SAFE_CATEGORIES as readonly string[]).includes(edge.target.category)
+        )
+        .map((edge) => ({
         id: edge.target.id,
         name: edge.target.name,
         category: edge.target.category,
@@ -61,7 +72,7 @@ export async function POST(
         baseElement: edge.target.baseElement,
         upcyclers: edge.target.upcyclers.map((u) => u.company.name).slice(0, 5),
         producers: edge.target.producers.map((p) => p.company.name).slice(0, 3),
-      })) ?? [];
+        })) ?? [];
 
     return NextResponse.json({ source: materialName, recommendations });
   } catch (err: unknown) {

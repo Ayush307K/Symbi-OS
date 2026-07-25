@@ -1,188 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import prisma from "@/lib/prisma";
-import type {
-  GraphData,
-  GraphEdge,
-  GraphNode,
-  GraphRAGRequest,
-  GraphRAGResponse,
-  GraphRAGErrorResponse,
-} from "@/lib/types";
+import { answerWithRag } from "@/server/rag/query";
+import { rebuildKnowledgeIndex } from "@/server/rag/index";
+import { apiError, assertTrustedOrigin, parseJson, requireUser } from "@/server/http";
 
-function companyNode(company: {
-  id: string;
-  name: string;
-  industry: string;
-  location: string;
-  carbonRating: string;
-  latitude: number;
-  longitude: number;
-  capacity: number;
-}): GraphNode {
-  return {
-    id: company.id,
-    label: "Company",
-    properties: {
-      id: company.id,
-      name: company.name,
-      industry: company.industry,
-      location: company.location,
-      carbon_rating: company.carbonRating,
-      latitude: company.latitude,
-      longitude: company.longitude,
-      capacity: company.capacity,
-    },
-  };
-}
+const schema = z.object({
+  query: z.string().trim().min(3).max(1000),
+});
 
-function materialNode(material: {
-  id: string;
-  name: string;
-  toxicityLevel: string;
-  baseElement: string;
-  category: string;
-  description: string;
-}): GraphNode {
-  return {
-    id: material.id,
-    label: "WasteMaterial",
-    properties: {
-      id: material.id,
-      name: material.name,
-      toxicity_level: material.toxicityLevel,
-      base_element: material.baseElement,
-      category: material.category,
-      description: material.description,
-    },
-  };
-}
-
-function regulationNode(regulation: {
-  id: string;
-  code: string;
-  description: string;
-}): GraphNode {
-  return {
-    id: regulation.id,
-    label: "Regulation",
-    properties: {
-      id: regulation.id,
-      code: regulation.code,
-      description: regulation.description,
-    },
-  };
-}
-
-function pushNode(nodes: Map<string, GraphNode>, node: GraphNode) {
-  if (!nodes.has(node.id)) nodes.set(node.id, node);
-}
-
-function pushEdge(edges: GraphEdge[], edge: GraphEdge) {
-  if (!edges.some((e) => e.source === edge.source && e.target === edge.target && e.type === edge.type)) {
-    edges.push(edge);
-  }
-}
-
-export async function POST(
-  request: NextRequest
-): Promise<NextResponse<GraphRAGResponse | GraphRAGErrorResponse>> {
-  let body: GraphRAGRequest;
+export async function POST(request: NextRequest) {
   try {
-    body = (await request.json()) as GraphRAGRequest;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-
-  const query = body.query?.trim();
-  if (!query) {
-    return NextResponse.json({ error: "Missing required field: query" }, { status: 400 });
-  }
-
-  try {
-    const materials = await prisma.wasteMaterial.findMany({
-      where: {
-        OR: [
-          { name: { contains: query } },
-          { description: { contains: query } },
-          { category: { contains: query } },
-          { baseElement: { contains: query } },
-        ],
-      },
-      include: {
-        producers: { include: { company: true } },
-        upcyclers: { include: { company: true } },
-        regulations: { include: { regulation: true } },
-      },
-      take: 5,
+    assertTrustedOrigin(request);
+    await requireUser();
+    const { query } = await parseJson(request, schema);
+    const count = await prisma.knowledgeChunk.count({
+      where: { document: { status: "ACTIVE" } },
     });
-
-    const fallback =
-      materials.length > 0
-        ? materials
-        : await prisma.wasteMaterial.findMany({
-            include: {
-              producers: { include: { company: true } },
-              upcyclers: { include: { company: true } },
-              regulations: { include: { regulation: true } },
-            },
-            orderBy: { name: "asc" },
-            take: 3,
-          });
-
-    const nodes = new Map<string, GraphNode>();
-    const edges: GraphEdge[] = [];
-    const answerLines: string[] = [];
-
-    for (const material of fallback) {
-      pushNode(nodes, materialNode(material));
-      for (const producer of material.producers.slice(0, 4)) {
-        pushNode(nodes, companyNode(producer.company));
-        pushEdge(edges, {
-          source: producer.company.id,
-          target: material.id,
-          type: "PRODUCES",
-        });
-      }
-      for (const upcycler of material.upcyclers.slice(0, 5)) {
-        pushNode(nodes, companyNode(upcycler.company));
-        pushEdge(edges, {
-          source: upcycler.company.id,
-          target: material.id,
-          type: "CAN_UPCYCLE",
-        });
-      }
-      for (const compliance of material.regulations.slice(0, 3)) {
-        pushNode(nodes, regulationNode(compliance.regulation));
-        pushEdge(edges, {
-          source: material.id,
-          target: compliance.regulation.id,
-          type: "REQUIRES_COMPLIANCE",
-        });
-      }
-
-      answerLines.push(
-        `${material.name}: ${material.category}, ${material.toxicityLevel} risk, based on ${material.baseElement}. ` +
-          `${material.producers.length} producer(s), ${material.upcyclers.length} upcycler(s), ` +
-          `${material.regulations.length} compliance requirement(s).`
-      );
-    }
-
-    const graphData: GraphData = {
-      nodes: Array.from(nodes.values()),
-      edges,
-    };
-
+    if (!count) await rebuildKnowledgeIndex();
+    const rag = await answerWithRag(query, 6);
+    const listingIds = [
+      ...new Set(
+        rag.chunks
+          .map((chunk) => chunk.document.sourceId)
+          .filter((value): value is string => Boolean(value))
+      ),
+    ];
+    const listings = await prisma.marketplaceListing.findMany({
+      where: { id: { in: listingIds } },
+      include: { material: true, seller: true },
+    });
+    const nodes = listings.flatMap((listing) => [
+      {
+        id: listing.seller.id,
+        label: "Company",
+        properties: {
+          id: listing.seller.id,
+          name: listing.seller.name,
+          industry: listing.seller.industry,
+          location: listing.seller.location,
+        },
+      },
+      {
+        id: listing.material.id,
+        label: "WasteMaterial",
+        properties: {
+          id: listing.material.id,
+          name: listing.material.name,
+          category: listing.material.category,
+          toxicity_level: listing.material.toxicityLevel,
+          description: listing.material.description,
+        },
+      },
+    ]);
+    const uniqueNodes = [...new Map(nodes.map((node) => [node.id, node])).values()];
     return NextResponse.json({
-      answer:
-        fallback.length > 0
-          ? answerLines.join("\n")
-          : "No matching materials found. Try searching by material, category, element, or industry.",
-      cypher: "Prisma relational lookup over companies, waste materials, regulations, and edge tables.",
-      graphData,
+      answer: rag.answer,
+      citations: rag.citations,
+      retrieval: rag.retrieval,
+      cypher: "Grounded hybrid retrieval over approved listing knowledge chunks.",
+      graphData: {
+        nodes: uniqueNodes,
+        edges: listings.map((listing) => ({
+          source: listing.seller.id,
+          target: listing.material.id,
+          type: "PRODUCES",
+        })),
+      },
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[GraphRAG] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return apiError(error);
   }
 }
