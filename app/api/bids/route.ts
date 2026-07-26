@@ -1,132 +1,205 @@
-// ---------------------------------------------------------------------------
-//  /api/bids — POST (place bid) + GET (list bids)
-// ---------------------------------------------------------------------------
-
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthFromCookie } from "@/lib/auth";
+import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { notifySellerOfNewBid } from "@/lib/mailer";
+import { notify } from "@/lib/marketplace";
+import {
+  apiError,
+  ApiError,
+  assertTrustedOrigin,
+  parseJson,
+  requireUser,
+} from "@/server/http";
+import { publicListingWhere } from "@/server/listings/policy";
+import { enforceRateLimit } from "@/server/rate-limit";
+import { releaseExpiredReservations } from "@/server/inventory";
 
-interface PlaceBidBody {
-  materialName: string;
-  materialId?: string;
-  quantity: number;
-  pricePerUnit: number;
-  sellerUserId?: string | null;
-  producerId?: string;
-}
+const schema = z
+  .object({
+    listingId: z.string().min(1),
+    quantity: z.coerce.number().int().positive().max(1_000_000_000),
+    pricePerUnit: z.coerce.number().positive().max(1_000_000_000),
+    terms: z.string().trim().max(1000).optional(),
+  })
+  .strict();
 
-// POST — buyer places a bid
 export async function POST(request: NextRequest) {
-  const auth = await getAuthFromCookie();
-  if (!auth) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-
-  let body: PlaceBidBody;
   try {
-    body = (await request.json()) as PlaceBidBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-
-  const { materialName, materialId, quantity, pricePerUnit, producerId } = body;
-  let { sellerUserId } = body;
-
-  if (!materialName || !quantity || !pricePerUnit) {
-    return NextResponse.json(
-      { error: "Missing required fields: materialName, quantity, pricePerUnit" },
-      { status: 400 }
-    );
-  }
-
-  // If no sellerUserId provided, try to look up by producerId (Company id)
-  if (!sellerUserId && producerId) {
-    const sellerUser = await prisma.user.findFirst({
-      where: { companyId: producerId },
-      select: { id: true },
+    assertTrustedOrigin(request);
+    const auth = await requireUser(["BUYER"]);
+    await releaseExpiredReservations();
+    await enforceRateLimit(`bid:${auth.userId}`, {
+      max: 20,
+      windowMs: 60 * 60 * 1000,
     });
-    if (sellerUser) sellerUserId = sellerUser.id;
-  }
-
-  if (sellerUserId && sellerUserId === auth.userId) {
-    return NextResponse.json({ error: "Cannot bid on your own listing." }, { status: 400 });
-  }
-
-  try {
-    const bid = await prisma.bid.create({
-      data: {
-        materialName,
-        materialId: materialId ?? null,
-        quantity,
-        pricePerUnit,
-        bidderUserId: auth.userId,
-        bidderEmail: auth.email,
-        bidderCompany: auth.companyName,
-        sellerUserId: sellerUserId ?? null,
-        producerId: producerId ?? null,
-      },
+    const idempotencyKey = request.headers.get("idempotency-key");
+    if (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 100) {
+      throw new ApiError(
+        400,
+        "A valid Idempotency-Key header is required.",
+        "IDEMPOTENCY_KEY_REQUIRED",
+      );
+    }
+    const body = await parseJson(request, schema);
+    const existing = await prisma.bid.findUnique({
+      where: { idempotencyKey },
+      include: { revisions: { orderBy: { sequence: "asc" } } },
     });
-
-    // Email seller about new bid (only if real user)
-    if (sellerUserId) {
-      const seller = await prisma.user.findUnique({ where: { id: sellerUserId } });
-      if (seller) {
-        notifySellerOfNewBid({
-          sellerEmail: seller.email,
-          materialName,
-          bidderCompany: auth.companyName,
-          quantity,
-          pricePerUnit,
-        });
+    if (existing) {
+      if (existing.bidderUserId !== auth.userId) {
+        throw new ApiError(409, "Idempotency key is already in use.", "KEY_CONFLICT");
       }
+      return NextResponse.json({
+        success: true,
+        bid: existing,
+        idempotentReplay: true,
+      });
     }
 
-    return NextResponse.json({ success: true, bid });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[Bids POST] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const listing = await prisma.marketplaceListing.findFirst({
+      where: { id: body.listingId, ...publicListingWhere },
+      include: { material: true, seller: true },
+    });
+    if (!listing) {
+      throw new ApiError(404, "Listing is unavailable.", "LISTING_UNAVAILABLE");
+    }
+    if (listing.expiresAt && listing.expiresAt <= new Date()) {
+      throw new ApiError(409, "Listing has expired.", "LISTING_EXPIRED");
+    }
+    if (body.quantity > listing.quantityAvailable) {
+      throw new ApiError(
+        409,
+        `Only ${listing.quantityAvailable} ${listing.unit} is available.`,
+        "INSUFFICIENT_INVENTORY",
+      );
+    }
+    if (body.quantity < listing.minOrderQuantity) {
+      throw new ApiError(
+        422,
+        `Minimum order quantity is ${listing.minOrderQuantity} ${listing.unit}.`,
+        "MOQ_NOT_MET",
+      );
+    }
+    if (
+      (body.quantity - listing.minOrderQuantity) % listing.lotIncrement !==
+      0
+    ) {
+      throw new ApiError(
+        422,
+        `Quantity must follow ${listing.lotIncrement} ${listing.unit} increments from the MOQ.`,
+        "LOT_INCREMENT_INVALID",
+      );
+    }
+    if (listing.sellerCompanyId === auth.companyId) {
+      throw new ApiError(409, "You cannot bid on your own listing.", "SELF_BID");
+    }
+    const seller = await prisma.user.findFirst({
+      where: { companyId: listing.sellerCompanyId },
+    });
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const bid = await prisma.$transaction(async (tx) => {
+      const created = await tx.bid.create({
+        data: {
+          listingId: listing.id,
+          materialName: listing.material.name,
+          materialId: listing.materialId,
+          quantity: body.quantity,
+          pricePerUnit: body.pricePerUnit,
+          currency: listing.currency,
+          unit: listing.unit,
+          terms: body.terms,
+          status: "PENDING",
+          currentSequence: 1,
+          idempotencyKey,
+          bidderUserId: auth.userId,
+          bidderEmail: auth.email,
+          bidderCompany: auth.companyName,
+          sellerUserId: seller?.id ?? null,
+          producerId: listing.sellerCompanyId,
+          expiresAt,
+        },
+      });
+      await tx.offerRevision.create({
+        data: {
+          bidId: created.id,
+          sequence: 1,
+          createdByUserId: auth.userId,
+          kind: "INITIAL",
+          quantity: body.quantity,
+          pricePerUnit: body.pricePerUnit,
+          currency: listing.currency,
+          unit: listing.unit,
+          terms: body.terms,
+          expiresAt,
+        },
+      });
+      await tx.offerEvent.create({
+        data: {
+          bidId: created.id,
+          actorUserId: auth.userId,
+          type: "OFFER_CREATED",
+          toStatus: "PENDING",
+          sequence: 1,
+          metadataJson: JSON.stringify({ idempotencyKey }),
+        },
+      });
+      return created;
+    });
+    if (seller) {
+      await notify(
+        seller.id,
+        "BID_CREATED",
+        "New offer received",
+        `${auth.companyName} offered ₹${body.pricePerUnit.toLocaleString("en-IN")} per ${listing.unit} for ${body.quantity} ${listing.unit}.`,
+        "/seller",
+      );
+      void notifySellerOfNewBid({
+        sellerEmail: seller.email,
+        materialName: listing.material.name,
+        bidderCompany: auth.companyName,
+        quantity: body.quantity,
+        pricePerUnit: body.pricePerUnit,
+      });
+    }
+    return NextResponse.json({ success: true, bid }, { status: 201 });
+  } catch (error) {
+    return apiError(error);
   }
 }
 
-// GET — list bids (incoming or outgoing)
 export async function GET(request: NextRequest) {
-  const auth = await getAuthFromCookie();
-  if (!auth) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-
-  const role = request.nextUrl.searchParams.get("role") ?? "buyer";
-
   try {
-    let bids;
-    if (role === "seller") {
-      // Match bids where this user is seller BY userId OR by producerId (Company id)
-      bids = await prisma.bid.findMany({
-        where: {
-          OR: [
-            { sellerUserId: auth.userId },
-            ...(auth.companyId
-              ? [{ producerId: auth.companyId }]
-              : []),
-          ],
-          // Exclude bids placed by the same user
-          NOT: { bidderUserId: auth.userId },
+    const auth = await requireUser();
+    await releaseExpiredReservations();
+    const role =
+      request.nextUrl.searchParams.get("role") === "seller"
+        ? "seller"
+        : "buyer";
+    const ownership =
+      role === "seller"
+        ? {
+            OR: [
+              { sellerUserId: auth.userId },
+              ...(auth.companyId ? [{ producerId: auth.companyId }] : []),
+            ],
+            NOT: { bidderUserId: auth.userId },
+          }
+        : { bidderUserId: auth.userId };
+    const bids = await prisma.bid.findMany({
+      where: ownership,
+      include: {
+        revisions: { orderBy: { sequence: "asc" } },
+        events: { orderBy: { createdAt: "asc" } },
+        order: { select: { id: true, orderNumber: true, status: true } },
+        reservation: {
+          select: { status: true, expiresAt: true, quantity: true },
         },
-        orderBy: { createdAt: "desc" },
-      });
-    } else {
-      bids = await prisma.bid.findMany({
-        where: { bidderUserId: auth.userId },
-        orderBy: { createdAt: "desc" },
-      });
-    }
-
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
     return NextResponse.json(bids);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[Bids GET] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return apiError(error);
   }
 }

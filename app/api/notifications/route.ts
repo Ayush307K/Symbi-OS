@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/marketplace";
+import { assertTrustedOrigin } from "@/server/http";
 
 export async function GET() {
   const guard = await requireAuth();
@@ -18,6 +19,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  assertTrustedOrigin(request);
   const guard = await requireAuth();
   if ("response" in guard) return guard.response;
 
