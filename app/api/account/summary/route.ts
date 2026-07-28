@@ -10,7 +10,12 @@ export async function GET() {
     await Promise.all([
       prisma.purchaseOrder.findMany({
         where: { buyerUserId: guard.auth.userId },
-        include: { items: true, shippingAddress: true },
+        include: {
+          items: true,
+          shippingAddress: true,
+          invoice: true,
+          reservations: true,
+        },
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
@@ -45,6 +50,13 @@ export async function GET() {
       }),
       prisma.bid.findMany({
         where: { bidderUserId: guard.auth.userId },
+        include: {
+          revisions: { orderBy: { sequence: "asc" } },
+          order: { select: { id: true, orderNumber: true, status: true } },
+          reservation: {
+            select: { status: true, expiresAt: true, quantity: true },
+          },
+        },
         orderBy: { createdAt: "desc" },
         take: 20,
       }),
@@ -65,7 +77,9 @@ export async function GET() {
       addresses: addresses.length,
       openMessages: threads.filter((thread) => thread.status === "OPEN").length,
       unreadNotifications: notifications.filter((item) => !item.readAt).length,
-      activeBids: bids.filter((bid) => bid.status === "pending").length,
+      activeBids: bids.filter((bid) =>
+        ["PENDING", "COUNTERED"].includes(bid.status),
+      ).length,
       cartTotal,
       orderTotal,
     },
