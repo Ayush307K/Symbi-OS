@@ -88,8 +88,8 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
   // Sell form state
   const [showSellForm, setShowSellForm] = useState(false);
   const [sellName, setSellName] = useState("");
-  const [sellCategory, setSellCategory] = useState("Uncategorized");
-  const [sellToxicity, setSellToxicity] = useState("low");
+  const [sellCategory, setSellCategory] = useState("Plastic Scrap");
+  const [sellToxicity, setSellToxicity] = useState("none");
   const [sellDescription, setSellDescription] = useState("");
   const [sellPrice, setSellPrice] = useState("");
   const [sellQuantity, setSellQuantity] = useState("");
@@ -119,7 +119,8 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
           name: sellName.trim(),
           category: sellCategory,
           toxicity: sellToxicity,
-          description: sellDescription.trim() || undefined,
+          baseElement: sellName.trim(),
+          description: sellDescription.trim(),
           price: sellPrice ? parseFloat(sellPrice) : undefined,
           quantity: sellQuantity ? parseInt(sellQuantity) : undefined,
         }),
@@ -137,7 +138,10 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
       setSellQuantity("");
       const matRes = await fetch("/api/materials");
       if (matRes.ok) {
-        const matData: MaterialListing[] = await matRes.json();
+        const payload = await matRes.json();
+        const matData: MaterialListing[] = Array.isArray(payload)
+          ? payload
+          : payload.items || [];
         setListings(matData);
       }
     } catch (err: unknown) {
@@ -158,14 +162,14 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
     try {
       const res = await fetch("/api/bids", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify({
-          materialName: bidTarget.name,
-          materialId: bidTarget.id,
+          listingId: bidTarget.id,
           quantity: parseInt(bidQty),
           pricePerUnit: parseFloat(bidPrice),
-          sellerUserId: bidTarget.sellerUserId || undefined,
-          producerId: bidTarget.producerId || undefined,
         }),
       });
       const data = await res.json();
@@ -188,7 +192,10 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
       try {
         const res = await fetch("/api/materials");
         if (!res.ok) throw new Error("Failed to fetch materials");
-        const data: MaterialListing[] = await res.json();
+        const payload = await res.json();
+        const data: MaterialListing[] = Array.isArray(payload)
+          ? payload
+          : payload.items || [];
         setListings(data);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Unknown error");
@@ -320,24 +327,23 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
                   onChange={(e) => setSellCategory(e.target.value)}
                   className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-amber-500/50"
                 >
-                  <option value="Uncategorized">Category…</option>
-                  <option value="Metals & Alloys">Metals & Alloys</option>
-                  <option value="Polymers & Plastics">Polymers & Plastics</option>
-                  <option value="Chemicals">Chemicals</option>
-                  <option value="E-Waste">E-Waste</option>
-                  <option value="Energy Materials">Energy Materials</option>
-                  <option value="Bio-Materials">Bio-Materials</option>
-                  <option value="Textiles">Textiles</option>
-                  <option value="Construction">Construction</option>
+                  <option value="Metal Scrap">Metal Scrap</option>
+                  <option value="Plastic Scrap">Plastic Scrap</option>
+                  <option value="Paper & Cardboard">Paper & Cardboard</option>
+                  <option value="Textile Waste">Textile Waste</option>
+                  <option value="Rubber">Rubber</option>
+                  <option value="Glass">Glass</option>
+                  <option value="Fly Ash & Minerals">Fly Ash & Minerals</option>
+                  <option value="Agricultural Residue">Agricultural Residue</option>
+                  <option value="Non-hazardous Chemicals">Non-hazardous Chemicals</option>
                 </select>
                 <select
                   value={sellToxicity}
                   onChange={(e) => setSellToxicity(e.target.value)}
                   className="w-24 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 outline-none focus:border-amber-500/50"
                 >
-                  <option value="low">Low tox</option>
-                  <option value="medium">Medium tox</option>
-                  <option value="high">High tox</option>
+                  <option value="none">Non-hazardous</option>
+                  <option value="low">Low risk</option>
                 </select>
               </div>
 
@@ -349,7 +355,7 @@ export default function MarketplaceFeed({ onAnalyze }: MarketplaceFeedProps) {
                     value={sellPrice}
                     onChange={(e) => setSellPrice(e.target.value)}
                     placeholder="Price/unit"
-                    min="0"
+                    min="1"
                     step="0.01"
                     className="w-full rounded-md border border-zinc-700 bg-zinc-900 pl-6 pr-2 py-1.5 text-xs text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-amber-500/50"
                   />

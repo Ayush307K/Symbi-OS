@@ -194,11 +194,15 @@ export default function AccountPage() {
                   </Panel>
                 </div>
               )}
-              {activeTab === "Orders" && <OrderList orders={data.orders} />}
+              {activeTab === "Orders" && (
+                <OrderList orders={data.orders} onChanged={load} />
+              )}
               {activeTab === "Cart" && <CartList items={data.cartItems} />}
               {activeTab === "Saved" && <SavedList items={data.wishlistItems} />}
               {activeTab === "Addresses" && <AddressList items={data.addresses} />}
-              {activeTab === "Bids" && <BidList items={data.bids} />}
+              {activeTab === "Bids" && (
+                <BidList items={data.bids} onChanged={load} />
+              )}
               {activeTab === "Messages" && <ThreadList items={data.threads} />}
             </>
           )}
@@ -227,7 +231,82 @@ function Empty({ label }: { label: string }) {
   );
 }
 
-function OrderList({ orders }: { orders: Array<any> }) {
+function OrderList({
+  orders,
+  onChanged,
+}: {
+  orders: Array<any>;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function pay(order: any) {
+    if (!order.sourceBidId) return;
+    setBusy(order.id);
+    try {
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({ bidId: order.sourceBidId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Payment failed.");
+      onChanged();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Payment failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function cancel(order: any) {
+    const note = window.prompt("Optional cancellation note") ?? "";
+    setBusy(order.id);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "CANCEL",
+          reasonCode: "BUYER_CHANGED_REQUIREMENT",
+          note: note || undefined,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Cancellation failed.");
+      onChanged();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Cancellation failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function orderAction(order: any, action: string) {
+    const note =
+      action === "OPEN_DISPUTE"
+        ? window.prompt("Describe the dispute") ?? ""
+        : undefined;
+    setBusy(order.id);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          reasonCode: action === "OPEN_DISPUTE" ? "OTHER" : undefined,
+          note,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Action failed.");
+      onChanged();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Action failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
   if (!orders.length) return <Empty label="No orders yet. Use Buy now from any product detail panel." />;
   return (
     <Panel title="Purchase history">
@@ -243,6 +322,62 @@ function OrderList({ orders }: { orders: Array<any> }) {
               </div>
               <p className="text-lg font-semibold">{money(order.totalAmount)}</p>
             </div>
+            {order.status === "AWAITING_BUYER_CONFIRMATION" && (
+              <button
+                onClick={() => void pay(order)}
+                disabled={busy === order.id}
+                className="mt-3 min-h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Confirm and pay in sandbox
+              </button>
+            )}
+            {order.invoice && (
+              <a
+                href={`/api/orders/${order.id}/invoice`}
+                className="mt-3 inline-flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-sm font-semibold"
+              >
+                Download sandbox invoice PDF
+              </a>
+            )}
+            {order.invoice && order.paymentStatus === "REFUNDED" && (
+              <a
+                href={`/api/orders/${order.id}/invoice?document=credit-note`}
+                className="ml-2 mt-3 inline-flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-sm font-semibold"
+              >
+                Download sandbox credit note
+              </a>
+            )}
+            {["AWAITING_BUYER_CONFIRMATION", "CONFIRMED"].includes(
+              order.status,
+            ) &&
+              order.fulfillmentStatus === "UNFULFILLED" && (
+                <button
+                  onClick={() => void cancel(order)}
+                  disabled={busy === order.id}
+                  className="ml-2 mt-3 min-h-10 rounded-md border border-red-300 px-3 text-sm font-semibold text-red-700 disabled:opacity-50"
+                >
+                  Cancel order
+                </button>
+              )}
+            {order.fulfillmentStatus === "DISPATCHED" && (
+              <button
+                onClick={() => void orderAction(order, "CONFIRM_DELIVERY")}
+                disabled={busy === order.id}
+                className="ml-2 mt-3 min-h-10 rounded-md bg-emerald-700 px-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Confirm delivery
+              </button>
+            )}
+            {order.paymentStatus === "PAID" &&
+              order.disputeStatus === "NONE" && (
+                <button
+                  onClick={() => void orderAction(order, "OPEN_DISPUTE")}
+                  disabled={busy === order.id}
+                  className="ml-2 mt-3 min-h-10 rounded-md border border-amber-300 px-3 text-sm font-semibold text-amber-800 disabled:opacity-50"
+                >
+                  Open dispute
+                </button>
+              )}
           </div>
         ))}
       </div>
@@ -307,18 +442,93 @@ function AddressList({ items }: { items: Array<any> }) {
   );
 }
 
-function BidList({ items }: { items: Array<any> }) {
+function BidList({
+  items,
+  onChanged,
+}: {
+  items: Array<any>;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function act(item: any, action: string) {
+    const counter =
+      action === "COUNTER"
+        ? {
+            quantity: Number(
+              window.prompt("Counter quantity", String(item.quantity)),
+            ),
+            pricePerUnit: Number(
+              window.prompt("Counter price per unit", String(item.pricePerUnit)),
+            ),
+          }
+        : {};
+    if (
+      action === "COUNTER" &&
+      (!counter.quantity || !counter.pricePerUnit)
+    ) {
+      return;
+    }
+    setBusy(item.id);
+    try {
+      const response = await fetch(`/api/bids/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...counter }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Action failed.");
+      onChanged();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Action failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
   if (!items.length) return <Empty label="No bids placed yet." />;
   return (
     <Panel title="Buyer bids">
       <div className="divide-y divide-stone-100">
         {items.map((item) => (
-          <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+          <div key={item.id} className="py-3">
+            <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-semibold">{item.materialName}</p>
-              <p className="text-sm text-stone-500">Qty {item.quantity} · {item.status}</p>
+              <p className="text-sm text-stone-500">
+                Qty {item.quantity} {item.unit} · {item.status}
+              </p>
             </div>
             <p className="font-semibold">{money(item.pricePerUnit)}</p>
+            </div>
+            {["PENDING", "COUNTERED"].includes(item.status) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ["ACCEPT", "Accept current offer"],
+                  ["COUNTER", "Counter"],
+                  ["REJECT", "Reject"],
+                  ["WITHDRAW", "Withdraw"],
+                ].map(([action, label]) => (
+                  <button
+                    key={action}
+                    disabled={busy === item.id}
+                    onClick={() => void act(item, action)}
+                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {item.revisions?.length > 1 && (
+              <details className="mt-2 text-xs text-stone-500">
+                <summary>{item.revisions.length} offer revisions</summary>
+                {item.revisions.map((revision: any) => (
+                  <p key={revision.id} className="mt-1">
+                    #{revision.sequence}: {revision.quantity} {revision.unit} at{" "}
+                    {money(revision.pricePerUnit)} · {revision.status}
+                  </p>
+                ))}
+              </details>
+            )}
           </div>
         ))}
       </div>
@@ -332,12 +542,12 @@ function ThreadList({ items }: { items: Array<any> }) {
     <Panel title="Messages">
       <div className="divide-y divide-stone-100">
         {items.map((thread) => (
-          <div key={thread.id} className="py-3">
+          <Link key={thread.id} href={`/messages/${thread.id}`} className="block py-3">
             <p className="font-semibold">{thread.subject}</p>
             <p className="mt-1 line-clamp-1 text-sm text-stone-500">
               {thread.messages[0]?.body ?? "No messages yet"}
             </p>
-          </div>
+          </Link>
         ))}
       </div>
     </Panel>

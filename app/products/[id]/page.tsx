@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import ListingImage from "@/components/ListingImage";
 
 interface MaterialListing {
   id: string;
@@ -233,14 +234,14 @@ export default function ProductDetailPage() {
     runAction("quote", async () => {
       const res = await fetch("/api/bids", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify({
-          materialName: listing.title,
-          materialId: listing.materialId,
+          listingId: listing.id,
           quantity,
           pricePerUnit: listing.price && listing.price > 0 ? listing.price : 1,
-          sellerUserId: listing.sellerUserId,
-          producerId: listing.producerId,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -257,8 +258,6 @@ export default function ProductDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           listingId: listing.id,
-          sellerUserId: listing.sellerUserId,
-          sellerCompanyId: listing.producerId,
           subject: `Enquiry for ${listing.title}`,
           body: `Hello, I want to discuss ${displayQuantity(listing)} of ${listing.title}.`,
         }),
@@ -266,6 +265,7 @@ export default function ProductDetailPage() {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || "Unable to message seller.");
       showToast({ type: "success", message: "Message thread created." });
+      router.push(`/messages/${payload.threadId}`);
     });
   };
 
@@ -274,7 +274,10 @@ export default function ProductDetailPage() {
     runAction("buy", async () => {
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify({ listingId: listing.id, quantity }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -374,7 +377,7 @@ export default function ProductDetailPage() {
         <section className="grid gap-5 lg:grid-cols-[420px_minmax(0,1fr)_320px]">
           <div className="space-y-3">
             <div className="overflow-hidden rounded-lg border border-stone-200 bg-white">
-              <img src={listing.imageUrl} alt={listing.title} className="aspect-square w-full object-cover" />
+              <ListingImage src={listing.imageUrl} alt={listing.title} className="aspect-square w-full object-cover" />
             </div>
             <div className="grid grid-cols-4 gap-2">
               {[listing.imageUrl, listing.imageUrl, listing.imageUrl, listing.imageUrl].map((src, index) => (
@@ -383,7 +386,7 @@ export default function ProductDetailPage() {
                   className="overflow-hidden rounded-md border border-stone-200 bg-white p-1 hover:border-orange-400"
                   title={`Image ${index + 1}`}
                 >
-                  <img src={src} alt="" className="aspect-square w-full rounded-sm object-cover" />
+                  <ListingImage src={src} alt="" className="aspect-square w-full rounded-sm object-cover" />
                 </button>
               ))}
             </div>
@@ -714,7 +717,7 @@ function ListingRail({ title, listings }: { title: string; listings: MaterialLis
             href={`/products/${listing.id}`}
             className="group overflow-hidden rounded-lg border border-stone-200 bg-white hover:border-orange-300 hover:shadow-sm"
           >
-            <img src={listing.imageUrl} alt={listing.title} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+            <ListingImage src={listing.imageUrl} alt={listing.title} className="aspect-[4/3] w-full object-cover" loading="lazy" />
             <div className="p-3">
               <h3 className="line-clamp-2 text-sm font-semibold text-stone-950 group-hover:text-orange-600">
                 {listing.title}

@@ -18,13 +18,13 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
 const CATEGORIES = [
-  "Metals",
-  "Chemicals",
-  "Polymers",
-  "Minerals",
-  "E-Waste",
-  "Textiles",
-  "Energy",
+  "Metal Scrap",
+  "Plastic Scrap",
+  "Paper & Cardboard",
+  "Textile Waste",
+  "Rubber",
+  "Glass",
+  "Fly Ash & Minerals",
   "RFQ",
 ];
 
@@ -178,6 +178,22 @@ export default function NavBar({
           </button>
           {user && (
             <>
+              {user.role === "ADMIN" && (
+                <>
+                  <Link
+                    href="/admin/moderation"
+                    className="hidden rounded-sm px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100 sm:block"
+                  >
+                    Moderation
+                  </Link>
+                  <Link
+                    href="/admin/sellers"
+                    className="hidden rounded-sm px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100 sm:block"
+                  >
+                    Seller review
+                  </Link>
+                </>
+              )}
               <Link
                 href="/account"
                 className="hidden items-center gap-2 rounded-sm px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100 sm:flex"

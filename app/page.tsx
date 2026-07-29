@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   Bell,
@@ -30,8 +31,21 @@ import {
   X,
 } from "lucide-react";
 import NavBar from "@/components/NavBar";
+import ListingImage from "@/components/ListingImage";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/context/AuthContext";
+
+const SELLER_SAFE_CATEGORIES = [
+  "Agricultural Residue",
+  "Fly Ash & Minerals",
+  "Glass",
+  "Metal Scrap",
+  "Non-hazardous Chemicals",
+  "Paper & Cardboard",
+  "Plastic Scrap",
+  "Rubber",
+  "Textile Waste",
+];
 
 interface MaterialListing {
   id: string;
@@ -76,6 +90,12 @@ interface MaterialListing {
 interface BidDraft {
   quantity: string;
   pricePerUnit: string;
+}
+
+interface MarketplaceSearch {
+  q: string;
+  category: string;
+  location: string;
 }
 
 type ActiveView =
@@ -276,7 +296,7 @@ function HomeLanding({
             )}
           </div>
 
-          <img
+          <ListingImage
             src={featuredDeals[1]?.imageUrl ?? featuredDeals[0]?.imageUrl}
             alt="Verified industrial supplier"
             className="absolute bottom-0 right-0 h-56 w-[44%] object-cover opacity-20 mix-blend-multiply"
@@ -364,7 +384,7 @@ function HomeLanding({
                 className="group overflow-hidden rounded-lg border border-stone-200 bg-white text-left shadow-sm transition hover:border-orange-300 hover:shadow-md"
               >
                 <div className="aspect-[5/3] overflow-hidden bg-stone-100">
-                  <img
+                  <ListingImage
                     src={item.imageUrl}
                     alt={item.name}
                     className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
@@ -449,8 +469,8 @@ function HomeLanding({
         </aside>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+      <section className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold tracking-tight text-stone-950">
             Active sourcing lanes
           </h2>
@@ -462,9 +482,9 @@ function HomeLanding({
               <button
                 key={listing.id}
                 onClick={() => onBid(listing)}
-                className="flex gap-3 rounded-lg border border-stone-200 p-3 text-left hover:border-orange-300 hover:bg-orange-50"
+                className="flex min-w-0 gap-3 rounded-lg border border-stone-200 p-3 text-left hover:border-orange-300 hover:bg-orange-50"
               >
-                <img
+                <ListingImage
                   src={listing.imageUrl}
                   alt={listing.name}
                   className="h-16 w-16 rounded-md object-cover"
@@ -486,7 +506,7 @@ function HomeLanding({
           </div>
         </div>
 
-        <div className="rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold tracking-tight text-stone-950">
             Active source clusters
           </h2>
@@ -562,7 +582,7 @@ function CompactListingCard({
   return (
     <article className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
       <div className="aspect-[4/3] overflow-hidden bg-stone-100">
-        <img
+        <ListingImage
           src={listing.imageUrl}
           alt={listing.name}
           className="h-full w-full object-cover"
@@ -636,7 +656,12 @@ function MarketplaceFooter({
       <div className="border-t border-stone-200 bg-[#fbfaf7] px-6 py-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-stone-500">
-            {["GST-ready suppliers", "Escrow supported", "Verified documents", "Dispatch monitoring"].map(
+            {[
+              "Non-hazardous materials only",
+              "Seller review required",
+              "Sandbox transactions",
+              "Source provenance shown",
+            ].map(
               (item) => (
                 <span key={item} className="rounded-sm border border-stone-200 bg-white px-2 py-1">
                   {item}
@@ -669,6 +694,7 @@ function MarketplaceFooter({
 
 export default function Home() {
   const { user } = useAuth();
+  const router = useRouter();
   const [listings, setListings] = useState<MaterialListing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -691,9 +717,9 @@ export default function Home() {
   const [isListingModalOpen, setIsListingModalOpen] = useState(false);
   const [listingDraft, setListingDraft] = useState<ListingDraft>({
     name: "",
-    category: "Polymers & Plastics",
+    category: "Plastic Scrap",
     baseElement: "",
-    toxicity: "medium",
+    toxicity: "none",
     description: "",
     price: "",
     quantity: "",
@@ -702,6 +728,19 @@ export default function Home() {
   const [isCreatingListing, setIsCreatingListing] = useState(false);
   const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
   const [rfqQuery, setRfqQuery] = useState("");
+  const [rfqCategory, setRfqCategory] = useState("Plastic Scrap");
+  const [rfqQuantity, setRfqQuantity] = useState("1");
+  const [rfqUnit, setRfqUnit] = useState("ton");
+  const [rfqMaxPrice, setRfqMaxPrice] = useState("");
+  const [rfqCity, setRfqCity] = useState("");
+  const [rfqState, setRfqState] = useState("");
+  const [rfqAvailableBy, setRfqAvailableBy] = useState("");
+  const [rfqMatches, setRfqMatches] = useState<Array<{
+    listingId: string;
+    title: string;
+    score: number;
+    explanations: string[];
+  }>>([]);
   const [rfqMessage, setRfqMessage] = useState<string | null>(null);
   const [isSubmittingRfq, setIsSubmittingRfq] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -723,18 +762,39 @@ export default function Home() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewBody, setReviewBody] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMoreListings, setHasMoreListings] = useState(false);
+  const [appliedSearch, setAppliedSearch] = useState<MarketplaceSearch>({
+    q: "",
+    category: "",
+    location: "",
+  });
 
-  const fetchMaterials = useCallback(async () => {
+  const fetchMaterials = useCallback(async (
+    search: MarketplaceSearch = { q: "", category: "", location: "" },
+    cursor?: string,
+  ) => {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetch("/api/materials");
+      const params = new URLSearchParams({ limit: "24" });
+      if (search.q) params.set("q", search.q);
+      if (search.category) params.set("category", search.category);
+      if (search.location) params.set("location", search.location);
+      if (cursor) params.set("cursor", cursor);
+      const res = await fetch(`/api/materials?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch marketplace listings");
-      const data: MaterialListing[] = await res.json();
-      setListings(data);
+      const payload = await res.json();
+      const data: MaterialListing[] = Array.isArray(payload)
+        ? payload
+        : payload.items || [];
+      setListings((current) => cursor ? [...current, ...data] : data);
+      setNextCursor(payload.pageInfo?.nextCursor ?? null);
+      setHasMoreListings(Boolean(payload.pageInfo?.hasMore));
+      setAppliedSearch(search);
       setSelected((current) => {
-        if (!current) return data[0] ?? null;
-        return data.find((item) => item.id === current.id) ?? data[0] ?? null;
+        if (cursor && current) return current;
+        return data.find((item) => item.id === current?.id) ?? data[0] ?? null;
       });
     } catch (err) {
       setListings([]);
@@ -750,8 +810,46 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchMaterials();
+    const params = new URLSearchParams(window.location.search);
+    const initial: MarketplaceSearch = {
+      q: params.get("q")?.trim() ?? "",
+      category: params.get("category")?.trim() ?? "",
+      location: params.get("location")?.trim() ?? "",
+    };
+    setQuery(initial.q);
+    setCategory(initial.category || "All");
+    if (initial.location) {
+      setMarketplaceLocation({
+        label: initial.location,
+        query: initial.location,
+      });
+    }
+    fetchMaterials(initial);
   }, [fetchMaterials]);
+
+  const applyMarketplaceSearch = useCallback(
+    async (overrides: Partial<MarketplaceSearch> = {}) => {
+      const search: MarketplaceSearch = {
+        q: overrides.q ?? query.trim(),
+        category:
+          overrides.category ??
+          (category === "All" ? "" : category),
+        location: overrides.location ?? marketplaceLocation.query.trim(),
+      };
+      const params = new URLSearchParams();
+      if (search.q) params.set("q", search.q);
+      if (search.category) params.set("category", search.category);
+      if (search.location) params.set("location", search.location);
+      window.history.replaceState(
+        null,
+        "",
+        params.size ? `/?${params.toString()}` : "/",
+      );
+      setActiveView("Marketplace");
+      await fetchMaterials(search);
+    },
+    [category, fetchMaterials, marketplaceLocation.query, query],
+  );
 
   useEffect(() => {
     async function fetchWishlist() {
@@ -768,7 +866,15 @@ export default function Home() {
   }, []);
 
   const categories = useMemo(() => {
-    return ["All", ...Array.from(new Set(listings.map((item) => item.category))).sort()];
+    return [
+      "All",
+      ...Array.from(
+        new Set([
+          ...SELLER_SAFE_CATEGORIES,
+          ...listings.map((item) => item.category),
+        ]),
+      ).sort(),
+    ];
   }, [listings]);
 
   const filteredListings = useMemo(() => {
@@ -962,14 +1068,18 @@ export default function Home() {
           item.toLowerCase().includes(value.toLowerCase()) ||
           value.toLowerCase().includes(item.toLowerCase().split(" ")[0])
       );
-      setCategory(match ?? "All");
+      const nextCategory = match ?? "All";
+      setCategory(nextCategory);
       setActiveView("Marketplace");
+      void applyMarketplaceSearch({
+        category: nextCategory === "All" ? "" : nextCategory,
+      });
       document.getElementById("marketplace-listings")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     },
-    [categories]
+    [applyMarketplaceSearch, categories]
   );
 
   const showToast = useCallback((message: string) => {
@@ -1004,21 +1114,21 @@ export default function Home() {
       setListingMessage(data.message ?? "Listing created.");
       setListingDraft({
         name: "",
-        category: "Polymers & Plastics",
+        category: "Plastic Scrap",
         baseElement: "",
-        toxicity: "medium",
+        toxicity: "none",
         description: "",
         price: "",
         quantity: "",
       });
-      await fetchMaterials();
+      await fetchMaterials(appliedSearch);
       window.setTimeout(() => setIsListingModalOpen(false), 900);
     } catch (err) {
       setListingMessage(err instanceof Error ? err.message : "Unable to create listing");
     } finally {
       setIsCreatingListing(false);
     }
-  }, [fetchMaterials, listingDraft]);
+  }, [appliedSearch, fetchMaterials, listingDraft]);
 
   const submitRfq = useCallback(async () => {
     const demand = rfqQuery.trim();
@@ -1028,26 +1138,56 @@ export default function Home() {
     }
     setIsSubmittingRfq(true);
     setRfqMessage(null);
+    setRfqMatches([]);
 
     try {
       const res = await fetch("/api/demand/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: demand }),
+        body: JSON.stringify({
+          query: demand,
+          category: rfqCategory,
+          subcategory: demand,
+          quantity: Number(rfqQuantity),
+          unit: rfqUnit,
+          maxPrice: rfqMaxPrice ? Number(rfqMaxPrice) : undefined,
+          city: rfqCity.trim() || undefined,
+          state: rfqState.trim() || undefined,
+          availableBy: rfqAvailableBy
+            ? new Date(`${rfqAvailableBy}T23:59:59.999Z`).toISOString()
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Unable to post RFQ");
       setRfqMessage(data.message ?? "RFQ posted.");
+      setRfqMatches(data.results ?? []);
       if (data.results?.length) {
         setQuery(demand);
+        setCategory(rfqCategory);
         setActiveView("Marketplace");
+        void applyMarketplaceSearch({
+          q: demand,
+          category: rfqCategory,
+          location: [rfqCity, rfqState].filter(Boolean).join(" "),
+        });
       }
     } catch (err) {
       setRfqMessage(err instanceof Error ? err.message : "Unable to post RFQ");
     } finally {
       setIsSubmittingRfq(false);
     }
-  }, [rfqQuery]);
+  }, [
+    applyMarketplaceSearch,
+    rfqAvailableBy,
+    rfqCategory,
+    rfqCity,
+    rfqMaxPrice,
+    rfqQuery,
+    rfqQuantity,
+    rfqState,
+    rfqUnit,
+  ]);
 
   const submitBid = useCallback(async () => {
     if (!bidTarget || !bidDraft.quantity || !bidDraft.pricePerUnit) return;
@@ -1057,14 +1197,14 @@ export default function Home() {
     try {
       const res = await fetch("/api/bids", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify({
-          materialName: bidTarget.name,
-          materialId: bidTarget.materialId,
+          listingId: bidTarget.id,
           quantity: Number(bidDraft.quantity),
           pricePerUnit: Number(bidDraft.pricePerUnit),
-          sellerUserId: bidTarget.sellerUserId || undefined,
-          producerId: bidTarget.producerId || undefined,
         }),
       });
       const data = await res.json();
@@ -1135,8 +1275,6 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             listingId: listing.id,
-            sellerUserId: listing.sellerUserId,
-            sellerCompanyId: listing.producerId,
             subject: `Enquiry for ${listing.title}`,
             body: `Hi, I am interested in ${listing.title}. Please share availability, latest price, MOQ, dispatch timeline, and GST invoice terms.`,
           }),
@@ -1144,11 +1282,12 @@ export default function Home() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Unable to message seller");
         showToast("Message thread created.");
+        router.push(`/messages/${data.threadId}`);
       } catch (err) {
         showToast(err instanceof Error ? err.message : "Unable to message seller.");
       }
     },
-    [showToast]
+    [router, showToast]
   );
 
   const submitCheckout = useCallback(async () => {
@@ -1171,7 +1310,10 @@ export default function Home() {
 
       const orderRes = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify({
           listingId: checkoutListing.id,
           quantity: Math.max(1, checkoutListing.minOrderQuantity || 1),
@@ -1181,7 +1323,9 @@ export default function Home() {
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error ?? "Unable to create order");
-      setCheckoutMessage(`Order ${orderData.order.orderNumber} created. Payment is pending.`);
+      setCheckoutMessage(
+        `Order ${orderData.order.orderNumber} confirmed with sandbox payment. No real funds were transferred.`
+      );
       showToast(`Order ${orderData.order.orderNumber} created.`);
       window.setTimeout(() => setCheckoutListing(null), 1200);
     } catch (err) {
@@ -1227,15 +1371,16 @@ export default function Home() {
         onCategorySelect={handleCategorySelect}
         onLocationChange={(location) => {
           setMarketplaceLocation(location);
+          void applyMarketplaceSearch({ location: location.query });
           showToast(
             location.query
               ? `Showing suppliers near ${location.label}.`
               : "Showing suppliers across all locations."
           );
         }}
-        onSearchSubmit={() => setActiveView("Marketplace")}
+        onSearchSubmit={() => void applyMarketplaceSearch()}
         onPostRfq={() => setIsRfqModalOpen(true)}
-        onSell={() => setIsListingModalOpen(true)}
+        onSell={() => router.push("/seller/listings/new")}
         onHelp={() =>
           showToast("Use search, category tabs, Request quote, or Create listing to start a workflow.")
         }
@@ -1251,7 +1396,7 @@ export default function Home() {
         {activeView !== "Home" && (
         <aside className="hidden w-64 shrink-0 border-r border-stone-200 bg-[#fbfaf7] px-4 py-5 lg:block">
           <button
-            onClick={() => setIsListingModalOpen(true)}
+            onClick={() => router.push("/seller/listings/new")}
             className="mb-5 flex w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800"
           >
             <Plus size={16} />
@@ -1307,7 +1452,7 @@ export default function Home() {
               onCategorySelect={handleCategorySelect}
               onOpenMarketplace={() => setActiveView("Marketplace")}
               onPostRfq={() => setIsRfqModalOpen(true)}
-              onCreateListing={() => setIsListingModalOpen(true)}
+              onCreateListing={() => router.push("/seller/listings/new")}
               onBid={openBidModal}
             />
           ) : (
@@ -1331,9 +1476,10 @@ export default function Home() {
                 </span>
                 {marketplaceLocation.query && (
                   <button
-                    onClick={() =>
-                      setMarketplaceLocation({ label: "All locations", query: "" })
-                    }
+                    onClick={() => {
+                      setMarketplaceLocation({ label: "All locations", query: "" });
+                      void applyMarketplaceSearch({ location: "" });
+                    }}
                     className="ml-1 text-xs font-semibold text-orange-700 hover:text-orange-800"
                   >
                     Clear
@@ -1351,7 +1497,7 @@ export default function Home() {
                 Demand alerts
               </button>
               <button
-                onClick={() => setIsListingModalOpen(true)}
+                onClick={() => router.push("/seller/listings/new")}
                 className="flex items-center gap-2 rounded-md bg-stone-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-stone-800"
               >
                 <Plus size={16} />
@@ -1423,13 +1569,22 @@ export default function Home() {
                       <input
                         value={query ?? ""}
                         onChange={(event) => setQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") void applyMarketplaceSearch();
+                        }}
                         placeholder="Search material, seller, city..."
                         className="h-10 w-full rounded-md border border-stone-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10 sm:w-72"
                       />
                     </div>
                     <select
                       value={category}
-                      onChange={(event) => setCategory(event.target.value)}
+                      onChange={(event) => {
+                        const nextCategory = event.target.value;
+                        setCategory(nextCategory);
+                        void applyMarketplaceSearch({
+                          category: nextCategory === "All" ? "" : nextCategory,
+                        });
+                      }}
                       className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
                     >
                       {categories.map((item) => (
@@ -1450,6 +1605,7 @@ export default function Home() {
                     <button
                       onClick={() => {
                         setQuery("public source");
+                        void applyMarketplaceSearch({ q: "public source" });
                         showToast("Showing public-source marketplace listings.");
                       }}
                       className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left font-medium text-stone-700 hover:border-orange-300"
@@ -1466,6 +1622,9 @@ export default function Home() {
                             label: `${topLocation.city}, ${topLocation.state}`,
                             query: `${topLocation.city} ${topLocation.state}`,
                           });
+                          void applyMarketplaceSearch({
+                            location: `${topLocation.city} ${topLocation.state}`,
+                          });
                           showToast(`Filtered toward ${topLocation.city}, ${topLocation.state}.`);
                         }
                       }}
@@ -1479,6 +1638,11 @@ export default function Home() {
                         setCategory("All");
                         setMarketplaceLocation({ label: "All locations", query: "" });
                         setFiltersOpen(false);
+                        void applyMarketplaceSearch({
+                          q: "",
+                          category: "",
+                          location: "",
+                        });
                       }}
                       className="rounded-md border border-stone-200 bg-white px-3 py-2 text-left font-medium text-stone-700 hover:border-orange-300"
                     >
@@ -1496,21 +1660,65 @@ export default function Home() {
 
               {error && (
                 <div className="m-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  {error}
+                  <p>{error}</p>
+                  <button
+                    onClick={() => void fetchMaterials(appliedSearch)}
+                    className="mt-2 min-h-10 rounded-md border border-amber-300 px-3 text-xs font-semibold"
+                  >
+                    Retry marketplace search
+                  </button>
+                </div>
+              )}
+
+              {!isLoading && !error && visibleListings.length === 0 && (
+                <div className="m-4 rounded-md border border-stone-200 bg-stone-50 p-8 text-center">
+                  <p className="font-semibold text-stone-800">
+                    No listings match these filters.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setQuery("");
+                      setCategory("All");
+                      setMarketplaceLocation({
+                        label: "All locations",
+                        query: "",
+                      });
+                      void applyMarketplaceSearch({
+                        q: "",
+                        category: "",
+                        location: "",
+                      });
+                    }}
+                    className="mt-3 min-h-10 rounded-md border border-stone-300 px-3 text-sm font-semibold"
+                  >
+                    Clear search
+                  </button>
                 </div>
               )}
 
               {!isLoading && (
-                <div className="grid gap-3 p-4 lg:grid-cols-2 2xl:grid-cols-3">
-                  {visibleListings.map((listing) => (
-                    <ListingCard
-                      key={`${listing.id}-${listing.producerId}`}
-                      listing={listing}
-                      isSelected={selected?.id === listing.id}
-                      onSelect={() => setSelected(listing)}
-                      onBid={() => openBidModal(listing)}
-                    />
-                  ))}
+                <div>
+                  <div className="grid gap-3 p-4 lg:grid-cols-2 2xl:grid-cols-3">
+                    {visibleListings.map((listing) => (
+                      <ListingCard
+                        key={`${listing.id}-${listing.producerId}`}
+                        listing={listing}
+                        isSelected={selected?.id === listing.id}
+                        onSelect={() => setSelected(listing)}
+                        onBid={() => openBidModal(listing)}
+                      />
+                    ))}
+                  </div>
+                  {hasMoreListings && nextCursor && (
+                    <div className="border-t border-stone-200 p-4 text-center">
+                      <button
+                        onClick={() => void fetchMaterials(appliedSearch, nextCursor)}
+                        className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+                      >
+                        Load more listings
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -1533,7 +1741,7 @@ export default function Home() {
               activeView={activeView}
               listings={filteredListings}
               onPostRfq={() => setIsRfqModalOpen(true)}
-              onCreateListing={() => setIsListingModalOpen(true)}
+              onCreateListing={() => router.push("/seller/listings/new")}
               onOpenMarketplace={() => setActiveView("Marketplace")}
             />
           )}
@@ -1583,7 +1791,7 @@ export default function Home() {
                   }
                   className="mt-1 h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
                 >
-                  {categories.filter((item) => item !== "All").map((item) => (
+                  {SELLER_SAFE_CATEGORIES.map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>
@@ -1607,7 +1815,7 @@ export default function Home() {
                     setListingDraft((draft) => ({ ...draft, price: event.target.value }))
                   }
                   type="number"
-                  min="0"
+                  min="1"
                   className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
                   placeholder="INR"
                 />
@@ -1628,15 +1836,14 @@ export default function Home() {
               <label className="block">
                 <span className="text-sm font-medium text-stone-700">Risk level</span>
                 <select
-                  value={listingDraft.toxicity ?? "medium"}
+                  value={listingDraft.toxicity ?? "none"}
                   onChange={(event) =>
                     setListingDraft((draft) => ({ ...draft, toxicity: event.target.value }))
                   }
                   className="mt-1 h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
                 >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
+                  <option value="none">Non-hazardous</option>
+                  <option value="low">Low risk</option>
                 </select>
               </label>
               <label className="block sm:col-span-2">
@@ -1706,9 +1913,109 @@ export default function Home() {
                   placeholder="Example: copper cable scrap, HDPE flakes"
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Category</span>
+                  <select
+                    value={rfqCategory}
+                    onChange={(event) => setRfqCategory(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:border-emerald-700"
+                  >
+                    {SELLER_SAFE_CATEGORIES.map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Required by</span>
+                  <input
+                    type="date"
+                    value={rfqAvailableBy}
+                    onChange={(event) => setRfqAvailableBy(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Quantity</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={rfqQuantity}
+                    onChange={(event) => setRfqQuantity(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Unit</span>
+                  <select
+                    value={rfqUnit}
+                    onChange={(event) => setRfqUnit(event.target.value)}
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none focus:border-emerald-700"
+                  >
+                    {["kg", "ton", "lot"].map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">
+                    Maximum price per unit
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={rfqMaxPrice}
+                    onChange={(event) => setRfqMaxPrice(event.target.value)}
+                    placeholder="Optional, INR"
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">City</span>
+                  <input
+                    value={rfqCity}
+                    onChange={(event) => setRfqCity(event.target.value)}
+                    placeholder="Optional"
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="text-sm font-medium text-stone-700">State</span>
+                  <input
+                    value={rfqState}
+                    onChange={(event) => setRfqState(event.target.value)}
+                    placeholder="Optional"
+                    className="mt-1 h-11 w-full rounded-md border border-stone-300 px-3 text-sm outline-none focus:border-emerald-700"
+                  />
+                </label>
+              </div>
               {rfqMessage && (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                   {rfqMessage}
+                </div>
+              )}
+              {rfqMatches.length > 0 && (
+                <div className="max-h-52 space-y-2 overflow-y-auto">
+                  {rfqMatches.slice(0, 5).map((match) => (
+                    <button
+                      key={match.listingId}
+                      onClick={() => {
+                        setIsRfqModalOpen(false);
+                        router.push(`/products/${match.listingId}`);
+                      }}
+                      className="w-full rounded-md border border-stone-200 p-3 text-left hover:border-emerald-300"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold text-stone-900">{match.title}</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                          {match.score}% match
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {match.explanations.slice(0, 2).join(" · ")}
+                      </p>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -1722,7 +2029,12 @@ export default function Home() {
               </button>
               <button
                 onClick={submitRfq}
-                disabled={isSubmittingRfq || !rfqQuery.trim()}
+                disabled={
+                  isSubmittingRfq ||
+                  !rfqQuery.trim() ||
+                  !rfqCategory ||
+                  Number(rfqQuantity) <= 0
+                }
                 className="flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmittingRfq && <Loader2 size={16} className="animate-spin" />}
@@ -1859,7 +2171,35 @@ export default function Home() {
               ))}
 
               <div className="rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-700 sm:col-span-2">
-                Order summary: {displayQuantity(checkoutListing)} · {formatMoney(checkoutListing.price)} / {checkoutListing.unit}. GST and shipping are calculated when the order is created.
+                <p className="font-semibold">Sandbox order summary</p>
+                <p className="mt-1">
+                  {checkoutListing.minOrderQuantity} {checkoutListing.unit} ×{" "}
+                  {formatMoney(checkoutListing.price)} ={" "}
+                  {formatMoney(
+                    (checkoutListing.price ?? 0) *
+                      checkoutListing.minOrderQuantity,
+                  )}
+                </p>
+                <p className="mt-1">
+                  Buyer platform fee (1%):{" "}
+                  {formatMoney(
+                    (checkoutListing.price ?? 0) *
+                      checkoutListing.minOrderQuantity *
+                      0.01,
+                  )}
+                </p>
+                <p>
+                  Total:{" "}
+                  {formatMoney(
+                    (checkoutListing.price ?? 0) *
+                      checkoutListing.minOrderQuantity *
+                      1.01,
+                  )}
+                </p>
+                <p className="mt-2 text-xs text-amber-800">
+                  GST/TDS and shipping are not calculated in sandbox v0. No real
+                  funds or settlement occur.
+                </p>
               </div>
 
               {checkoutMessage && (
@@ -2011,7 +2351,7 @@ function ListingCard({
     >
       <button onClick={onSelect} className="flex-1 text-left">
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
-          <img
+          <ListingImage
             src={listing.imageUrl}
             alt={listing.name}
             className="h-full w-full object-cover transition duration-300 hover:scale-[1.03]"
@@ -2150,7 +2490,7 @@ function ListingDetail({
 
       <div className="space-y-4 p-5">
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-stone-100">
-          <img
+          <ListingImage
             src={listing.imageUrl}
             alt={listing.name}
             className="h-44 w-full object-cover"

@@ -18,6 +18,7 @@ import {
   Star,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { SellerOnboardingForm } from "@/components/SellerOnboardingForm";
 
 type Tab = "Overview" | "Listings" | "Orders" | "Bids" | "Onboarding" | "Reviews" | "Messages";
 
@@ -62,7 +63,6 @@ export default function SellerPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [onboardingMessage, setOnboardingMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -95,31 +95,6 @@ export default function SellerPage() {
     [data]
   );
 
-  async function submitOnboarding() {
-    setOnboardingMessage(null);
-    try {
-      const res = await fetch("/api/seller/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          step: "BUSINESS",
-          submit: true,
-          payload: {
-            companyName: data?.user.companyName,
-            natureOfBusiness: "Industrial secondary materials marketplace seller",
-            submittedFrom: "seller-dashboard",
-          },
-        }),
-      });
-      const payload = await res.json();
-      if (!res.ok) throw new Error(payload.error ?? "Unable to submit onboarding.");
-      setOnboardingMessage("Seller onboarding submitted for review.");
-      await load();
-    } catch (err) {
-      setOnboardingMessage(err instanceof Error ? err.message : "Unable to submit onboarding.");
-    }
-  }
-
   return (
     <main className="min-h-screen bg-[#f4f2ed] text-stone-950">
       <header className="border-b border-stone-200 bg-white">
@@ -134,6 +109,13 @@ export default function SellerPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Link
+              href="/seller/listings/new"
+              className="flex items-center gap-2 rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+            >
+              <Package size={16} />
+              New listing
+            </Link>
             <button
               onClick={load}
               className="flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
@@ -213,24 +195,27 @@ export default function SellerPage() {
                         <p className="mt-1 text-sm text-stone-500">Current step: {data.onboarding.currentStep}</p>
                       </div>
                       <button
-                        onClick={submitOnboarding}
+                        onClick={() => setActiveTab("Onboarding")}
                         className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
                       >
-                        Submit for review
+                        Complete onboarding
                       </button>
                     </div>
-                    {onboardingMessage && <p className="mt-3 text-sm text-emerald-700">{onboardingMessage}</p>}
                   </Panel>
                 </div>
               )}
-              {activeTab === "Listings" && <ListingList items={data.listings} />}
-              {activeTab === "Orders" && <OrderItemList items={data.orderItems} />}
-              {activeTab === "Bids" && <BidList items={data.bids} />}
+              {activeTab === "Listings" && (
+                <ListingList items={data.listings} onChanged={load} />
+              )}
+              {activeTab === "Orders" && (
+                <OrderItemList items={data.orderItems} onChanged={load} />
+              )}
+              {activeTab === "Bids" && (
+                <BidList items={data.bids} onChanged={load} />
+              )}
               {activeTab === "Onboarding" && (
                 <Panel title="Seller onboarding">
-                  <pre className="overflow-auto rounded-md bg-stone-950 p-4 text-xs text-stone-100">
-                    {JSON.stringify(data.onboarding, null, 2)}
-                  </pre>
+                  <SellerOnboardingForm onboarding={data.onboarding} onChanged={load} />
                 </Panel>
               )}
               {activeTab === "Reviews" && <ReviewList items={data.reviews} />}
@@ -262,16 +247,130 @@ function Empty({ label }: { label: string }) {
   );
 }
 
-function ListingList({ items }: { items: Array<any> }) {
-  if (!items.length) return <Empty label="No seller-owned listings yet. Use Create listing from the marketplace." />;
+function ListingList({
+  items,
+  onChanged,
+}: {
+  items: Array<any>;
+  onChanged: () => Promise<void>;
+}) {
+  const [message, setMessage] = useState("");
+  const act = async (
+    item: any,
+    action: "PAUSE" | "RESUME" | "CLOSE" | "ARCHIVE" | "RENEW",
+  ) => {
+    const response = await fetch(`/api/listings/${item.id}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, version: item.version }),
+    });
+    const payload = await response.json();
+    setMessage(
+      response.ok
+        ? `${item.title} is now ${payload.listing.status.toLowerCase()}.`
+        : payload.error || "Unable to update listing.",
+    );
+    if (response.ok) await onChanged();
+  };
+  if (!items.length) {
+    return (
+      <Panel title="Seller listings">
+        <Empty label="No seller-owned listings yet." />
+        <Link
+          href="/seller/listings/new"
+          className="mt-3 flex min-h-11 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white"
+        >
+          Create your first listing
+        </Link>
+      </Panel>
+    );
+  }
   return (
     <Panel title="Seller listings">
+      {message && (
+        <div className="mb-3 rounded-md bg-stone-100 p-3 text-sm text-stone-700">
+          {message}
+        </div>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((item) => (
           <div key={item.id} className="rounded-md border border-stone-200 p-3">
-            <p className="line-clamp-2 font-semibold">{item.title}</p>
-            <p className="mt-1 text-sm text-stone-500">{item.category} · {item.city}, {item.state}</p>
-            <p className="mt-2 text-sm font-semibold">{money(item.pricePerUnit)} · Qty {item.quantityAvailable}</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="line-clamp-2 font-semibold">{item.title}</p>
+              <span className="rounded-full bg-stone-100 px-2 py-1 text-[11px] font-semibold">
+                {item.status}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-stone-500">
+              {item.category} · {item.city}, {item.state}
+            </p>
+            <p className="mt-2 text-sm font-semibold">
+              {item.priceMode === "ON_REQUEST"
+                ? "Price on request"
+                : money(item.pricePerUnit)}{" "}
+              · Qty {item.quantityAvailable}
+            </p>
+            {item.moderationNote && (
+              <p className="mt-2 rounded-md bg-amber-50 p-2 text-xs text-amber-900">
+                Moderator: {item.moderationNote}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["ACTIVE", "active"].includes(item.status) && (
+                <>
+                  <Link
+                    href={`/products/${item.slug}`}
+                    className="flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                  >
+                    View/share
+                  </Link>
+                  <button
+                    onClick={() => act(item, "PAUSE")}
+                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                  >
+                    Pause
+                  </button>
+                  <button
+                    onClick={() => act(item, "CLOSE")}
+                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                  >
+                    Close
+                  </button>
+                </>
+              )}
+              {item.status === "PAUSED" && (
+                <>
+                  <button
+                    onClick={() => act(item, "RESUME")}
+                    className="min-h-10 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white"
+                  >
+                    Resume
+                  </button>
+                  <button
+                    onClick={() => act(item, "ARCHIVE")}
+                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                  >
+                    Archive
+                  </button>
+                </>
+              )}
+              {item.status === "EXPIRED" && (
+                <button
+                  onClick={() => act(item, "RENEW")}
+                  className="min-h-10 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white"
+                >
+                  Renew
+                </button>
+              )}
+              {["DRAFT", "REJECTED"].includes(item.status) && (
+                <Link
+                  href={`/seller/listings/new?id=${item.id}`}
+                  className="flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                >
+                  Continue draft
+                </Link>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -279,7 +378,31 @@ function ListingList({ items }: { items: Array<any> }) {
   );
 }
 
-function OrderItemList({ items }: { items: Array<any> }) {
+function OrderItemList({
+  items,
+  onChanged,
+}: {
+  items: Array<any>;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function act(orderId: string, action: string) {
+    setBusy(orderId);
+    try {
+      const response = await fetch(`/api/seller/orders/${orderId}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Action failed.");
+      onChanged();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Action failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
   if (!items.length) return <Empty label="No seller orders yet." />;
   return (
     <Panel title="Seller order items">
@@ -295,6 +418,28 @@ function OrderItemList({ items }: { items: Array<any> }) {
               </div>
               <p className="font-semibold">{money(item.lineTotal)}</p>
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {item.order.status === "CONFIRMED" &&
+                item.order.fulfillmentStatus === "UNFULFILLED" && (
+                  <button
+                    disabled={busy === item.order.id}
+                    onClick={() => void act(item.order.id, "ACCEPT_ORDER")}
+                    className="min-h-10 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Accept order
+                  </button>
+                )}
+              {item.order.status === "PROCESSING" &&
+                item.order.fulfillmentStatus === "PROCESSING" && (
+                  <button
+                    disabled={busy === item.order.id}
+                    onClick={() => void act(item.order.id, "MARK_DISPATCHED")}
+                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold disabled:opacity-50"
+                  >
+                    Mark dispatched
+                  </button>
+                )}
+            </div>
           </div>
         ))}
       </div>
@@ -302,18 +447,104 @@ function OrderItemList({ items }: { items: Array<any> }) {
   );
 }
 
-function BidList({ items }: { items: Array<any> }) {
+function BidList({
+  items,
+  onChanged,
+}: {
+  items: Array<any>;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  async function act(item: any, action: string) {
+    const counter =
+      action === "COUNTER"
+        ? {
+            quantity: Number(
+              window.prompt("Counter quantity", String(item.quantity)),
+            ),
+            pricePerUnit: Number(
+              window.prompt("Counter price per unit", String(item.pricePerUnit)),
+            ),
+          }
+        : {};
+    if (
+      action === "COUNTER" &&
+      (!counter.quantity || !counter.pricePerUnit)
+    ) {
+      return;
+    }
+    setBusy(item.id);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/bids/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...counter }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Action failed.");
+      setMessage(`Offer ${payload.bid.status.toLowerCase()}.`);
+      onChanged();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Action failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
   if (!items.length) return <Empty label="No incoming bids yet." />;
   return (
     <Panel title="Incoming bids">
+      {message && (
+        <p className="mb-3 rounded-md bg-stone-100 p-2 text-sm">{message}</p>
+      )}
       <div className="divide-y divide-stone-100">
         {items.map((item) => (
-          <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+          <div key={item.id} className="py-3">
+            <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-semibold">{item.materialName}</p>
-              <p className="text-sm text-stone-500">{item.bidderCompany} · Qty {item.quantity} · {item.status}</p>
+              <p className="text-sm text-stone-500">
+                {item.bidderCompany} · Qty {item.quantity} {item.unit} · {item.status}
+              </p>
             </div>
             <p className="font-semibold">{money(item.pricePerUnit)}</p>
+            </div>
+            {["PENDING", "COUNTERED"].includes(item.status) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ["ACCEPT", "Accept"],
+                  ["COUNTER", "Counter"],
+                  ["REJECT", "Reject"],
+                  ["CANCEL", "Cancel"],
+                ].map(([action, label]) => (
+                  <button
+                    key={action}
+                    disabled={busy === item.id}
+                    onClick={() => void act(item, action)}
+                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {item.order && (
+              <p className="mt-2 text-xs text-emerald-700">
+                Order {item.order.orderNumber} · {item.order.status}
+              </p>
+            )}
+            {item.revisions?.length > 1 && (
+              <details className="mt-2 text-xs text-stone-500">
+                <summary>{item.revisions.length} offer revisions</summary>
+                {item.revisions.map((revision: any) => (
+                  <p key={revision.id} className="mt-1">
+                    #{revision.sequence}: {revision.quantity} {revision.unit} at{" "}
+                    {money(revision.pricePerUnit)} · {revision.status}
+                  </p>
+                ))}
+              </details>
+            )}
           </div>
         ))}
       </div>
@@ -344,12 +575,12 @@ function ThreadList({ items }: { items: Array<any> }) {
     <Panel title="Messages">
       <div className="divide-y divide-stone-100">
         {items.map((thread) => (
-          <div key={thread.id} className="py-3">
+          <Link key={thread.id} href={`/messages/${thread.id}`} className="block py-3">
             <p className="font-semibold">{thread.subject}</p>
             <p className="mt-1 line-clamp-1 text-sm text-stone-500">
               {thread.messages[0]?.body ?? "No messages yet"}
             </p>
-          </div>
+          </Link>
         ))}
       </div>
     </Panel>
