@@ -1,110 +1,164 @@
 # Symbi-OS
 
-AI-assisted B2B marketplace for industrial by-products, scrap, and secondary raw materials.
+Symbi-OS is a modular-monolith B2B marketplace for verified, non-hazardous
+industrial by-products. The Next.js application contains the web UI, thin Route
+Handlers, domain services, Prisma persistence, real listing-provider adapters,
+grounded RAG, seller onboarding, bids, and sandbox transactions in one
+deployable unit.
 
-Symbi-OS connects industrial waste generators with verified buyers and upcyclers. The current implementation uses a marketplace-first UI backed by a Prisma-managed SQLite database seeded from the generated supply-chain dataset.
+## Safety boundary
 
-## Current Stack
+The v0 marketplace rejects radioactive, nuclear, biomedical, infectious,
+explosive, asbestos, heavy-metal battery, e-waste, and other hazardous
+materials. Only canonical non-hazardous categories are accepted. The same
+policy runs during provider ingestion, seller listing creation, search, RAG
+indexing, bids, and checkout.
 
-| Layer | Technology |
-| --- | --- |
-| App | Next.js 15, React 19, TypeScript |
-| UI | Tailwind CSS, lucide-react |
-| Database | SQLite via Prisma |
-| Auth | JWT + HttpOnly cookies + bcrypt |
-| Optional AI | OpenAI embeddings stored on material rows |
-| Email | Nodemailer SMTP |
+Synthetic listings are not returned by production APIs and are not part of the
+default ingestion workflow. A database file must never be committed.
 
-## Data Model
+## Architecture
 
-The generated industrial graph is stored relationally:
+| Layer | Location | Responsibility |
+| --- | --- | --- |
+| Web UI | `app/`, `components/` | Marketplace and account workflows |
+| HTTP boundary | `app/api/`, `server/http.ts` | Authentication, origin checks, validation, safe errors |
+| Domains | `server/auth`, `server/listings`, `server/rag` | Business rules and provider integrations |
+| Persistence | `prisma/` | Versioned schema and migrations |
+| Background/CLI | `scripts/` | Real listing ingestion and RAG indexing |
 
-- `Company`
-- `WasteMaterial`
-- `Regulation`
-- `MaterialProducer`
-- `MaterialUpcycler`
-- `MaterialRegulation`
-- `MaterialComplement`
-- `PotentialMatch`
-- `MarketplaceListing`
-- `Demand`
-- `User`
-- `Bid`
+This is intentionally not a microservice system. Domain modules have clear
+boundaries but share one process and one database for v0.
 
-The seed dataset contains:
+## Local setup
 
-- 140 companies
-- 100 waste materials
-- 18 regulations
-- 472 producer edges
-- 1,094 upcycler edges
-- 156 compliance edges
-- 56 complement edges
-- 10,000 marketplace listings with category, region, supplier, price, MOQ, lead time, ratings, wholesale terms, and image URLs
-
-## Getting Started
+Requirements: Node.js 20.9 through 25.x and npm. Node.js 26 is not yet in the
+declared support range of the pinned Prisma toolchain.
 
 ```bash
 npm install
-npx prisma db push
-npm run ingest
-node scripts/compute_matches.js
+cp .env.example .env
+openssl rand -base64 48
+```
+
+Paste the generated value into `JWT_SECRET`, configure the remaining
+environment variables, then:
+
+```bash
+npm run db:deploy
+npm run ingest:real
+npm run rag:index
 npm run dev
 ```
 
-The app runs at:
-
-```text
-http://localhost:3000
-```
+Open `http://localhost:3000`.
 
 ## Environment
 
-Create `.env`:
+The complete template is in `.env.example`.
 
-```env
-DATABASE_URL=file:./placeholder.db
-TURSO_AUTH_TOKEN=
-JWT_SECRET=dev-secret-change-me
-OPENAI_API_KEY=
-SMTP_USER=
-SMTP_PASS=
+- `DATABASE_URL`: SQLite locally or a persistent libSQL/Turso database.
+- `JWT_SECRET`: required, random, at least 32 characters.
+- `IP_HASH_PEPPER`: independent secret used to pseudonymize IP addresses.
+- `FIELD_ENCRYPTION_KEY`: independent secret used to encrypt seller tax, bank,
+  and KYC payloads with AES-256-GCM.
+- `DEMO_VERIFICATION_ENABLED`: exposes deterministic onboarding verification
+  only when explicitly set to `true`.
+- `DEMO_PAYMENTS_ENABLED`: enables the sandbox payment transaction.
+- `LISTINGS_PROVIDER`: `recycleinme` for the public provider feed or `json` for
+  an authenticated listing API.
+- `REAL_LISTINGS_API_URL` and `REAL_LISTINGS_API_KEY`: configured JSON API.
+- `OPENAI_API_KEY`: enables embeddings and generated RAG answers. Without it,
+  the same cited retrieval pipeline returns an extractive answer.
+- `OPENAI_RAG_MODEL`: defaults to `gpt-5.6-terra`.
+- `OPENAI_EMBEDDING_MODEL`: defaults to `text-embedding-3-small`.
+
+### JSON listing API contract
+
+The configured API may return an array or an object containing `items`, `data`,
+`results`, or `listings`. Each row should provide:
+
+```json
+{
+  "id": "supplier-record-id",
+  "title": "Washed HDPE regrind",
+  "description": "Post-industrial, uncontaminated material...",
+  "category": "plastic",
+  "subcategory": "HDPE",
+  "companyName": "Example Supplier",
+  "city": "Bengaluru",
+  "state": "Karnataka",
+  "country": "India",
+  "quantity": 25,
+  "unit": "ton",
+  "price": 42000,
+  "currency": "INR",
+  "url": "https://provider.example/listings/123",
+  "imageUrl": "https://provider.example/images/123.jpg"
+}
 ```
 
-For Vercel, set `DATABASE_URL` to a hosted libSQL/Turso URL and set
-`TURSO_AUTH_TOKEN`. The local SQLite file under `prisma/` is intentionally not
-committed and is only for local development.
+Rows outside India, with unsupported categories, missing provenance, or
+containing prohibited material terms are rejected and counted in
+`ListingImportRun`.
 
-`OPENAI_API_KEY` is optional unless you run:
+## Working demo flows
+
+### Seller
+
+1. Register as Seller or Buyer and Seller.
+2. In demo mode, email verification is completed using the one-time sandbox
+   token returned by registration.
+3. Complete all six onboarding steps.
+4. Submit and run the clearly labelled sandbox verification.
+5. Publish a non-hazardous listing.
+6. Review and accept valid, inventory-bounded bids.
+
+### Buyer and transaction
+
+1. Add a verified address.
+2. Place a quantity- and price-validated bid, or buy a priced listing.
+3. Checkout sends an `Idempotency-Key`.
+4. The sandbox payment, order, inventory decrement, and inventory movement are
+   committed atomically. No real funds are moved.
+
+### RAG
+
+`npm run rag:index` turns approved real/seller listings and their connected
+compliance/upcycler data into versioned knowledge documents and chunks. Query
+`POST /api/rag/query` or use the existing Copilot UI. Responses are grounded in
+retrieved chunks and return explicit source citations. Source text is treated
+as untrusted data to reduce prompt-injection risk.
+
+## Quality commands
 
 ```bash
-npm run embed
+npm run security:scan
+npm run typecheck
+npm test
+npm run build
+npm audit --omit=dev
 ```
 
-## Scripts
+`npm run verify` runs all five checks. The sensitive-file scan rejects tracked
+databases, environment files other than `.env.example`, private-key bundles,
+credential bundles, and common high-confidence secret formats.
 
-| Script | Purpose |
-| --- | --- |
-| `npm run generate` | Regenerate `supply_chain_graph.json` |
-| `npm run ingest` | Seed Prisma tables from `supply_chain_graph.json` |
-| `node scripts/compute_matches.js` | Compute latent company partnerships |
-| `npm run embed` | Generate optional OpenAI embeddings into Prisma |
-| `npm run dev` | Start local dev server |
-| `npm run build` | Production build |
+The GitHub Actions workflow repeats these checks on pull requests and pushes to
+`main`. Its security job rejects forbidden filenames anywhere in Git history
+and runs Gitleaks against the complete history. Actions are pinned to immutable
+commit SHAs and run with read-only repository permissions. Run
+`npm run security:scan:history` locally from a full clone to perform the
+filename portion of that historical check.
 
-## API Surface
+> Removing a secret from the current branch does not remove it from Git history.
+> Rotate exposed credentials first, then perform a coordinated history rewrite
+> and require every contributor to re-clone.
 
-| Endpoint | Description |
-| --- | --- |
-| `/api/materials` | Marketplace listings |
-| `/api/materials/add` | Seller listing creation |
-| `/api/bids` | Place/list bids |
-| `/api/bids/[id]` | Accept/reject bids |
-| `/api/demand/search` | Demand capture |
-| `/api/hybrid-search` | Text-ranked material search |
-| `/api/multi-hop` | Producer-to-upcycler route discovery |
-| `/api/insights` | Latent partnership suggestions |
-| `/api/recommendations` | Complementary materials |
-| `/api/graphrag` | Lightweight analyst response + graph payload |
-| `/api/stats` | Dashboard metrics |
+## Important production boundaries
+
+The verification and payment providers are deliberately sandboxed for v0.
+Production launch still requires contracted GST/PAN/KYC/bank providers, a real
+payment/escrow integration, secrets management, backups, monitoring, legal
+review, and a managed production database. The code does not label sandbox
+results as government- or bank-verified.
