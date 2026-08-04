@@ -42,11 +42,33 @@ jobs:
     timeout-minutes: 20
     env:
       CI: "true"
-      DATABASE_URL: file:./ci.db
+      # Ephemeral service container below. No pooler sits in front of it, so the
+      # pooled and direct URLs are the same host; they diverge only on managed
+      # providers. TEST_DATABASE_URL is the same database because the runner is
+      # torn down after the job.
+      DATABASE_URL: postgresql://symbi:symbi_local_dev@localhost:5432/symbi_dev
+      DIRECT_URL: postgresql://symbi:symbi_local_dev@localhost:5432/symbi_dev
+      TEST_DATABASE_URL: postgresql://symbi:symbi_local_dev@localhost:5432/symbi_dev
       APP_URL: http://localhost:3000
       DEMO_VERIFICATION_ENABLED: "false"
       DEMO_PAYMENTS_ENABLED: "false"
       NEXT_TELEMETRY_DISABLED: "1"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: symbi
+          POSTGRES_PASSWORD: symbi_local_dev
+          POSTGRES_DB: symbi_dev
+        ports:
+          - 5432:5432
+        # The job starts as soon as the container does, which is before the
+        # server accepts connections. Gate on pg_isready instead.
+        options: >-
+          --health-cmd "pg_isready -U symbi -d symbi_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -69,17 +91,10 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Reject sensitive tracked files
-        run: npm run security:scan
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Run automated tests
-        run: npm test
-
-      - name: Build production application
-        run: npm run build
-
-      - name: Audit production dependencies
-        run: npm audit --omit=dev
+      - name: Verify
+        # security:scan, typecheck, test, build, and audit. Kept as one step so
+        # CI cannot drift from what `npm run verify` does locally.
+        run: npm run verify
