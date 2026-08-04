@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/register", "/login"];
 
+// Ungated, but not auth pages: reachable signed in or out, and never redirected
+// away from either way. The design-system reference is static and reads no
+// product data. Keep this list to routes that touch neither.
+const UNGATED_PATHS = ["/", "/style-guide"];
+
 function secure(response: NextResponse) {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
@@ -58,6 +63,9 @@ export async function proxy(request: NextRequest) {
     );
   }
   if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) {
+    return secure(NextResponse.next());
+  }
+  if (UNGATED_PATHS.includes(pathname)) {
     return secure(NextResponse.next());
   }
   const authenticated = await hasValidSession(request);

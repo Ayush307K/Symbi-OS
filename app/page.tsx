@@ -34,6 +34,9 @@ import NavBar from "@/components/NavBar";
 import ListingImage from "@/components/ListingImage";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/context/AuthContext";
+import { CatalogSection } from "@/components/marketplace/CatalogSection";
+import { Hero } from "@/components/marketplace/Hero";
+import { PublicLanding } from "@/components/marketplace/PublicLanding";
 
 const SELLER_SAFE_CATEGORIES = [
   "Agricultural Residue",
@@ -1361,6 +1364,12 @@ export default function Home() {
     }
   }, [reviewBody, reviewListing, reviewRating, showToast]);
 
+  // Unauthenticated visitors get the public landing — hero, then the browsable
+  // catalogue. Everything below is the signed-in workspace, unchanged.
+  if (!user) {
+    return <PublicLanding />;
+  }
+
   return (
     <div className="min-h-screen bg-[#f4f2ed] text-stone-950">
       <NavBar
@@ -1441,20 +1450,31 @@ export default function Home() {
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 xl:px-8">
           {activeView === "Home" ? (
-            <HomeLanding
-              categories={homeCategoryCards}
-              featuredDeals={featuredDeals}
-              localDeals={localDeals}
-              suppliers={supplierHighlights}
-              marketplaceStats={marketplaceStats}
-              locationLabel={marketplaceLocation.label}
-              isLoading={isLoading}
-              onCategorySelect={handleCategorySelect}
-              onOpenMarketplace={() => setActiveView("Marketplace")}
-              onPostRfq={() => setIsRfqModalOpen(true)}
-              onCreateListing={() => router.push("/seller/listings/new")}
-              onBid={openBidModal}
-            />
+            // Migrated: the signed-in home is now the same hero + catalogue the
+            // public landing uses, so both audiences browse identical surfaces.
+            <div className="-mx-4 -my-5 sm:-mx-6 xl:-mx-8">
+              <Hero
+                onSearch={(nextQuery) => {
+                  const params = new URLSearchParams(window.location.search);
+                  if (nextQuery) params.set("q", nextQuery);
+                  else params.delete("q");
+                  window.history.pushState(
+                    null,
+                    "",
+                    params.size ? `/?${params}` : "/",
+                  );
+                  window.dispatchEvent(new PopStateEvent("popstate"));
+                  document
+                    .getElementById("catalogue")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                listingCount={listings.length}
+                isAuthenticated
+              />
+              <div className="py-10">
+                <CatalogSection isAuthenticated />
+              </div>
+            </div>
           ) : (
             <>
           <section className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
