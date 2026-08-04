@@ -80,10 +80,10 @@ export async function POST(
           },
         },
         OR: [
-          { name: { contains: query } },
-          { description: { contains: query } },
-          { category: { contains: query } },
-          { baseElement: { contains: query } },
+          { name: { contains: query, mode: "insensitive" } },
+          { description: { contains: query, mode: "insensitive" } },
+          { category: { contains: query, mode: "insensitive" } },
+          { baseElement: { contains: query, mode: "insensitive" } },
         ],
       },
       include: {
