@@ -13,8 +13,12 @@ import {
   RefreshCw,
   Save,
   Send,
+  ShieldAlert,
   Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { SAFE_CATEGORIES } from "@/lib/listing-constants";
 
 type Draft = {
@@ -215,6 +219,7 @@ function draftFromListing(record: ListingRecord): Draft {
 }
 
 export default function NewSellerListingPage() {
+  const router = useRouter();
   const [draft, setDraft] = useState<Draft>(initialDraft);
   const [listing, setListing] = useState<ListingRecord | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -453,6 +458,48 @@ export default function NewSellerListingPage() {
     setMessage(payload.message);
     window.localStorage.removeItem(STORAGE_KEY);
   }, [draft, photos.length, saveDraft]);
+
+  // The API refuses to create a listing without approved onboarding. Ask first,
+  // so the requirement is visible before any of the form is filled in.
+  const [onboardingStatus, setOnboardingStatus] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/seller/onboarding", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled) return;
+        setOnboardingStatus(payload?.onboarding?.status ?? "UNKNOWN");
+      })
+      .catch(() => {
+        if (!cancelled) setOnboardingStatus("UNKNOWN");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (onboardingStatus && onboardingStatus !== "APPROVED") {
+    return (
+      <main className="min-h-dvh bg-surface-page text-ink-900">
+        <div className="mx-auto max-w-2xl px-4 py-16">
+          <EmptyState
+            icon={<ShieldAlert />}
+            title="Seller verification is required first"
+            description={
+              onboardingStatus === "SUBMITTED"
+                ? "Your onboarding is submitted and awaiting review. Listing creation unlocks once it is approved."
+                : "Complete seller onboarding and verification before creating a listing. Buyers only see listings from verified sellers."
+            }
+            action={
+              <Button variant="primary" size="sm" onClick={() => router.push("/seller")}>
+                {onboardingStatus === "SUBMITTED" ? "Back to dashboard" : "Complete onboarding"}
+              </Button>
+            }
+          />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-dvh bg-stone-100 text-stone-950">

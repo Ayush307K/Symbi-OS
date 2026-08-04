@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, Heart, MapPin, Package, Send } from "lucide-react";
+import { BadgeCheck, Heart, Info, MapPin, Package, Send } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -62,15 +62,31 @@ export function ListingCard({
           />
         </Link>
 
+        {/* Verification is stated either way. A listing carried in from a public
+            provider feed is real and attributed, but its seller has not been
+            verified — saying nothing would let it read as verified by default. */}
         {listing.verified ? (
           <Badge
             tone="brand"
             icon={<BadgeCheck />}
             className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
           >
-            Verified
+            Verified seller
           </Badge>
-        ) : null}
+        ) : (
+          <Badge
+            tone="neutral"
+            icon={<Info />}
+            title={
+              listing.sourceName
+                ? `Imported from ${listing.sourceName}. The seller has not completed verification.`
+                : "The seller has not completed verification."
+            }
+            className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
+          >
+            Unverified source
+          </Badge>
+        )}
 
         <button
           type="button"
