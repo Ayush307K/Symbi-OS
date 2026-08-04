@@ -82,6 +82,22 @@ Note that a native PostgreSQL bound to `127.0.0.1:5432` silently wins over a
 container published on `*:5432`: connections reach the native server instead,
 and the failure looks like an authentication error rather than a port clash.
 
+### Integration tests
+
+`tests/inventory-concurrency.test.ts` runs against this container rather than
+the application database, so its fixtures never touch real data. It defaults to
+the `docker-compose.yml` credentials; set `TEST_DATABASE_URL` to point at a
+different local server. Apply the schema before the first run:
+
+```bash
+DATABASE_URL=postgresql://symbi:symbi_local_dev@localhost:5432/symbi_dev \
+DIRECT_URL=postgresql://symbi:symbi_local_dev@localhost:5432/symbi_dev \
+npx prisma migrate deploy
+```
+
+The test skips itself when the container is not running, so `npm test` stays
+green without Docker.
+
 ## Environment
 
 The complete template is in `.env.example`.
