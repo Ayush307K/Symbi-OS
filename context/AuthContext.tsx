@@ -41,6 +41,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const AUTH_PAGES = ["/login", "/register"];
 
+// Routes that are neither gated nor auth pages. The middleware lets these
+// through; this keeps the client from redirecting them away a moment later.
+// Must stay in sync with UNGATED_PATHS in proxy.ts.
+const UNGATED_PAGES = ["/", "/style-guide"];
+
 // ---------------------------------------------------------------------------
 //  Provider
 // ---------------------------------------------------------------------------
@@ -75,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Client-side redirect logic
   useEffect(() => {
     if (isLoading) return;
+    if (UNGATED_PAGES.includes(pathname)) return;
 
     const onAuthPage = AUTH_PAGES.includes(pathname);
 

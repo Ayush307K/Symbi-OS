@@ -63,6 +63,16 @@ export async function POST(request: NextRequest) {
     const onboarding = await prisma.sellerOnboarding.findUnique({
       where: { userId: auth.userId },
     });
+    // Submission already refuses an unapproved seller, but only after the whole
+    // listing has been filled in. Refuse at creation too, so the requirement is
+    // met before any work is done and no orphan drafts accumulate.
+    if (!onboarding || onboarding.status !== "APPROVED") {
+      throw new ApiError(
+        403,
+        "Complete seller onboarding and verification before creating a listing.",
+        "SELLER_NOT_VERIFIED",
+      );
+    }
     const warehouse = JSON.parse(onboarding?.warehouseJson || "{}") as {
       addressLine?: string;
       city?: string;
