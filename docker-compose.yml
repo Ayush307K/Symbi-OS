@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: symbi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: symbi
+      POSTGRES_PASSWORD: symbi_local_dev
+      POSTGRES_DB: symbi_dev
+    ports:
+      # If a native PostgreSQL is running it will hold 127.0.0.1:5432, and
+      # publishing here on *:5432 does not win for localhost connections —
+      # clients silently reach the native server instead. Stop it, or change the
+      # host port here and in the URLs.
+      - "5432:5432"
+    volumes:
+      - symbi-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U symbi -d symbi_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  symbi-postgres-data:

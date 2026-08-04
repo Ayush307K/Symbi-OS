@@ -141,21 +141,30 @@ export async function GET(request: NextRequest) {
         publicListingWhere,
         filters.category ? { category: filters.category } : {},
         filters.subtype
-          ? { subcategory: { contains: filters.subtype } }
+          ? { subcategory: { contains: filters.subtype, mode: "insensitive" } }
           : {},
         filters.location
           ? {
               OR: [
-                { area: { contains: filters.location } },
-                { city: { contains: filters.location } },
-                { state: { contains: filters.location } },
-                { pincode: { contains: filters.location } },
-                { rawLocationText: { contains: filters.location } },
+                { area: { contains: filters.location, mode: "insensitive" } },
+                { city: { contains: filters.location, mode: "insensitive" } },
+                { state: { contains: filters.location, mode: "insensitive" } },
+                { pincode: { contains: filters.location, mode: "insensitive" } },
+                {
+                  rawLocationText: {
+                    contains: filters.location,
+                    mode: "insensitive",
+                  },
+                },
               ],
             }
           : {},
-        filters.state ? { state: { contains: filters.state } } : {},
-        filters.city ? { city: { contains: filters.city } } : {},
+        filters.state
+          ? { state: { contains: filters.state, mode: "insensitive" } }
+          : {},
+        filters.city
+          ? { city: { contains: filters.city, mode: "insensitive" } }
+          : {},
         filters.pincode ? { pincode: filters.pincode } : {},
         filters.unit ? { unit: filters.unit } : {},
         filters.verified
@@ -213,12 +222,24 @@ export async function GET(request: NextRequest) {
         filters.q
           ? {
               OR: [
-                { title: { contains: filters.q } },
-                { description: { contains: filters.q } },
-                { subcategory: { contains: filters.q } },
-                { seller: { name: { contains: filters.q } } },
-                { material: { name: { contains: filters.q } } },
-                { material: { description: { contains: filters.q } } },
+                { title: { contains: filters.q, mode: "insensitive" } },
+                { description: { contains: filters.q, mode: "insensitive" } },
+                { subcategory: { contains: filters.q, mode: "insensitive" } },
+                {
+                  seller: {
+                    name: { contains: filters.q, mode: "insensitive" },
+                  },
+                },
+                {
+                  material: {
+                    name: { contains: filters.q, mode: "insensitive" },
+                  },
+                },
+                {
+                  material: {
+                    description: { contains: filters.q, mode: "insensitive" },
+                  },
+                },
               ],
             }
           : {},

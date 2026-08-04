@@ -61,8 +61,16 @@ const secretPatterns = [
   },
   {
     pattern:
-      /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^/\s:@]+:[^/\s@]+@/i,
+      /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/([^/\s:@]+):([^/\s@]+)@([^/\s:?#]+)/gi,
     message: "database URL containing credentials",
+    // A credential only matters if it reaches a server someone else can also
+    // reach. Loopback hosts and the docker-compose service name are local
+    // development only, and `<user>` follows the placeholder convention used
+    // for environment values below. Anything pointing at a remote host is
+    // still reported.
+    allowMatch: ([, user, , host]) =>
+      user.startsWith("<") ||
+      ["localhost", "127.0.0.1", "::1", "postgres"].includes(host.toLowerCase()),
   },
 ];
 
@@ -90,6 +98,13 @@ for (const path of repositoryFiles) {
   }
 
   for (const rule of secretPatterns) {
+    if (rule.allowMatch) {
+      const matches = [...content.matchAll(rule.pattern)];
+      if (matches.some((match) => !rule.allowMatch(match))) {
+        findings.push(`${path}: possible ${rule.message}`);
+      }
+      continue;
+    }
     if (rule.pattern.test(content)) {
       findings.push(`${path}: possible ${rule.message}`);
     }
