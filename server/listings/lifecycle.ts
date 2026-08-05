@@ -54,7 +54,25 @@ export const listingDraftSchema = z
     authorityDeclaration: z.boolean().optional(),
     version: z.coerce.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  // A FIXED listing states a price a buyer can act on, so zero is not a valid
+  // fixed price — it is the absence of one, and must be declared ON_REQUEST
+  // instead. Submission already refused this combination, but only at the end;
+  // rejecting it here stops the row ever being written. Drafts send partial
+  // bodies, so this fires only when the request carries both fields.
+  .superRefine((input, ctx) => {
+    if (
+      input.priceMode === "FIXED" &&
+      input.pricePerUnit !== undefined &&
+      input.pricePerUnit <= 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["pricePerUnit"],
+        message: "Add a positive price or choose price on request.",
+      });
+    }
+  });
 
 export type ListingDraftInput = z.infer<typeof listingDraftSchema>;
 

@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { LISTING_UNITS, SAFE_CATEGORIES } from "@/lib/listing-constants";
 import { apiError, ApiError } from "@/server/http";
 import { expireListings } from "@/server/listings/lifecycle";
-import { publicListingWhere } from "@/server/listings/policy";
+import { catalogOrderBy, publicListingWhere } from "@/server/listings/policy";
 
 const querySchema = z.object({
   q: z.string().trim().max(160).optional(),
@@ -263,14 +263,7 @@ export async function GET(request: NextRequest) {
           : {},
       ],
     };
-    const orderBy: Prisma.MarketplaceListingOrderByWithRelationInput[] =
-      filters.sort === "price_asc"
-        ? [{ pricePerUnit: "asc" }, { id: "asc" }]
-        : filters.sort === "price_desc"
-          ? [{ pricePerUnit: "desc" }, { id: "asc" }]
-          : filters.sort === "quantity_desc"
-            ? [{ quantityAvailable: "desc" }, { id: "asc" }]
-            : [{ updatedAt: "desc" }, { id: "desc" }];
+    const orderBy = catalogOrderBy(filters.sort);
     const cursorId = decodeCursor(filters.cursor);
 
     const rows = await prisma.marketplaceListing.findMany({

@@ -502,18 +502,18 @@ export default function NewSellerListingPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-stone-100 text-stone-950">
-      <header className="sticky top-0 z-20 border-b border-stone-200 bg-white">
+    <main className="min-h-dvh bg-surface-page text-ink-900">
+      <header className="sticky top-0 z-20 border-b border-ink-200 bg-surface-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <Link
             href="/seller"
-            className="flex min-h-11 items-center gap-2 text-sm font-semibold text-stone-600"
+            className="flex min-h-11 items-center gap-2 text-sm font-semibold text-ink-600"
           >
             <ArrowLeft size={17} /> Seller dashboard
           </Link>
           <div className="text-right">
             <p className="text-sm font-semibold">Create wholesale listing</p>
-            <p className="text-xs text-stone-500">
+            <p className="text-xs text-ink-500">
               {listing?.status || "Unsaved draft"}
             </p>
           </div>
@@ -761,11 +761,11 @@ export default function NewSellerListingPage() {
           </Section>
 
           <Section title="Photos">
-            <p className="mb-3 text-sm text-stone-500">
+            <p className="mb-3 text-sm text-ink-500">
               Upload 1–5 genuine JPG/PNG files, maximum 10 MB each. Images are
               decoded, stripped of metadata, and thumbnail-generated.
             </p>
-            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-stone-400 bg-stone-50 px-4 text-sm font-semibold hover:bg-stone-100">
+            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-ink-400 bg-surface-sunken px-4 text-sm font-semibold hover:bg-surface-page">
               <ImagePlus size={18} /> Choose photos
               <input
                 type="file"
@@ -781,13 +781,13 @@ export default function NewSellerListingPage() {
               />
             </label>
             {errors.photos && (
-              <p className="mt-2 text-sm text-red-600">{errors.photos}</p>
+              <p className="mt-2 text-sm text-danger">{errors.photos}</p>
             )}
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {photos.map((photo, index) => (
                 <div
                   key={photo.id}
-                  className="overflow-hidden rounded-md border border-stone-200 bg-white"
+                  className="overflow-hidden rounded-md border border-ink-200 bg-surface-card"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -829,7 +829,7 @@ export default function NewSellerListingPage() {
           </Section>
 
           <Section title="Private test reports and certificates">
-            <p className="mb-3 text-sm text-stone-500">
+            <p className="mb-3 text-sm text-ink-500">
               PDFs are private and available only to authorized listing owners
               and moderators. Maximum 15 MB.
             </p>
@@ -837,7 +837,7 @@ export default function NewSellerListingPage() {
               {(["TEST_REPORT", "CERTIFICATE"] as const).map((kind) => (
                 <label
                   key={kind}
-                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-stone-300 px-3 text-sm font-semibold hover:bg-stone-50"
+                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-ink-300 px-3 text-sm font-semibold hover:bg-surface-sunken"
                 >
                   <FileText size={16} />
                   Add {kind === "TEST_REPORT" ? "test report" : "certificate"}
@@ -858,7 +858,7 @@ export default function NewSellerListingPage() {
               {documents.map((document) => (
                 <div
                   key={document.id}
-                  className="flex min-h-11 items-center justify-between rounded-md bg-stone-50 px-3 text-sm"
+                  className="flex min-h-11 items-center justify-between rounded-md bg-surface-sunken px-3 text-sm"
                 >
                   <span className="truncate">
                     {document.kind.replace("_", " ")} · {document.originalName}
@@ -908,7 +908,7 @@ export default function NewSellerListingPage() {
               key={`${item.file.name}-${index}`}
               className={`rounded-md border p-3 text-sm ${
                 item.state === "failed"
-                  ? "border-red-200 bg-red-50"
+                  ? "border-danger-border bg-danger-subtle"
                   : "border-blue-200 bg-blue-50"
               }`}
             >
@@ -922,7 +922,7 @@ export default function NewSellerListingPage() {
                     setUploads((values) => values.filter((value) => value !== item));
                     void upload(item.file, item.kind);
                   }}
-                  className="mt-2 flex min-h-10 items-center gap-2 font-semibold text-red-700"
+                  className="mt-2 flex min-h-10 items-center gap-2 font-semibold text-danger-strong"
                 >
                   <RefreshCw size={15} /> Retry
                 </button>
@@ -932,9 +932,9 @@ export default function NewSellerListingPage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+          <section className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm">
             <h2 className="font-semibold">Readiness</h2>
-            <p className="mt-2 text-sm text-stone-500">
+            <p className="mt-2 text-sm text-ink-500">
               {Object.keys(fieldErrors(draft, photos.length)).length} required
               item(s) remaining.
             </p>
@@ -944,7 +944,7 @@ export default function NewSellerListingPage() {
               </div>
             )}
             {message && (
-              <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              <div className="mt-3 rounded-md border border-brand-200 bg-brand-50 p-3 text-sm text-brand">
                 {message}
               </div>
             )}
@@ -957,15 +957,15 @@ export default function NewSellerListingPage() {
             )}
           </section>
 
-          <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+          <section className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm">
             <button
               onClick={() => setPreview((value) => !value)}
-              className="min-h-11 w-full rounded-md border border-stone-300 px-4 text-sm font-semibold hover:bg-stone-50"
+              className="min-h-11 w-full rounded-md border border-ink-300 px-4 text-sm font-semibold hover:bg-surface-sunken"
             >
               {preview ? "Hide preview" : "Preview listing"}
             </button>
             {preview && (
-              <div className="mt-4 overflow-hidden rounded-md border border-stone-200">
+              <div className="mt-4 overflow-hidden rounded-md border border-ink-200">
                 {photos[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -979,7 +979,7 @@ export default function NewSellerListingPage() {
                 )}
                 <div className="p-3">
                   <p className="font-semibold">{draft.title || "Untitled listing"}</p>
-                  <p className="mt-1 text-xs text-stone-500">
+                  <p className="mt-1 text-xs text-ink-500">
                     {draft.category} · {draft.subcategory || "Grade pending"}
                   </p>
                   <p className="mt-3 text-sm font-semibold">
@@ -987,7 +987,7 @@ export default function NewSellerListingPage() {
                       ? "Price on request"
                       : `₹${Number(draft.pricePerUnit || 0).toLocaleString("en-IN")} / ${draft.unit}`}
                   </p>
-                  <p className="mt-2 line-clamp-4 text-sm text-stone-600">
+                  <p className="mt-2 line-clamp-4 text-sm text-ink-600">
                     {draft.description || "Description preview"}
                   </p>
                 </div>
@@ -997,12 +997,12 @@ export default function NewSellerListingPage() {
         </aside>
       </div>
 
-      <footer className="sticky bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 backdrop-blur">
+      <footer className="sticky bottom-0 z-20 border-t border-ink-200 bg-surface-card/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             onClick={saveDraft}
             disabled={busy}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 px-5 text-sm font-semibold hover:bg-stone-50 disabled:opacity-50"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-ink-300 px-5 text-sm font-semibold hover:bg-surface-sunken disabled:opacity-50"
           >
             {busy ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
             Save draft
@@ -1010,7 +1010,7 @@ export default function NewSellerListingPage() {
           <button
             onClick={submit}
             disabled={busy || listing?.status === "PENDING_MODERATION"}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand px-5 text-sm font-semibold text-white hover:bg-brand disabled:opacity-50"
           >
             {busy ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
             Submit for moderation
@@ -1029,7 +1029,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm sm:p-5">
       <h2 className="mb-4 font-semibold">{title}</h2>
       {children}
     </section>
@@ -1049,20 +1049,20 @@ function Field({
 }) {
   return (
     <label className={wide ? "block sm:col-span-2 lg:col-span-3" : "block"}>
-      <span className="mb-1.5 block text-sm font-medium text-stone-700">
+      <span className="mb-1.5 block text-sm font-medium text-ink-700">
         {label}
       </span>
       {children}
-      {error && <span className="mt-1 block text-xs text-red-600">{error}</span>}
+      {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
     </label>
   );
 }
 
 function inputClass(error?: string) {
-  return `min-h-11 w-full rounded-md border bg-white px-3 text-sm outline-none focus:ring-2 ${
+  return `min-h-11 w-full rounded-md border bg-surface-card px-3 text-sm outline-none focus:ring-2 ${
     error
       ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-      : "border-stone-300 focus:border-emerald-700 focus:ring-emerald-100"
+      : "border-ink-300 focus:border-emerald-700 focus:ring-emerald-100"
   }`;
 }
 
@@ -1080,7 +1080,7 @@ function Check({
   return (
     <label
       className={`flex min-h-12 cursor-pointer items-start gap-3 rounded-md border p-3 text-sm ${
-        error ? "border-red-300 bg-red-50" : "border-stone-200"
+        error ? "border-red-300 bg-danger-subtle" : "border-ink-200"
       }`}
     >
       <input
@@ -1112,7 +1112,7 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-10 w-10 items-center justify-center rounded-md text-stone-600 hover:bg-stone-100 disabled:opacity-30"
+      className="flex h-10 w-10 items-center justify-center rounded-md text-ink-600 hover:bg-surface-page disabled:opacity-30"
     >
       {children}
     </button>

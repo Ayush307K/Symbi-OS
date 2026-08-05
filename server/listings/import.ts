@@ -115,6 +115,10 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         country: "India",
         imageUrl: row.imageUrl,
         pricePerUnit: row.price,
+        // A source that publishes no price is not selling at zero — it is
+        // quoting on request. Recording that as FIXED would make an absent
+        // price indistinguishable from a real one of ₹0.
+        priceMode: row.price > 0 ? "FIXED" : "ON_REQUEST",
         currency: row.currency || "INR",
         unit: row.unit || "lot",
         minOrderQuantity: 1,
@@ -150,6 +154,10 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         state: row.state,
         imageUrl: row.imageUrl,
         pricePerUnit: row.price,
+        // A source that publishes no price is not selling at zero — it is
+        // quoting on request. Recording that as FIXED would make an absent
+        // price indistinguishable from a real one of ₹0.
+        priceMode: row.price > 0 ? "FIXED" : "ON_REQUEST",
         currency: row.currency || "INR",
         unit: row.unit || "lot",
         quantityAvailable: row.quantity,

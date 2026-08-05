@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
@@ -91,13 +92,14 @@ export default function ModerationPage() {
   };
 
   return (
-    <main className="min-h-dvh bg-stone-100 text-stone-950">
-      <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+    <main className="min-h-dvh bg-surface-page text-ink-900">
+      <MarketplaceNav />
+      <header className="border-b border-ink-200 bg-surface-card">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-4">
           <div>
             <Link
               href="/"
-              className="flex items-center gap-2 text-sm font-semibold text-stone-600"
+              className="flex items-center gap-2 text-sm font-semibold text-ink-600"
             >
               <ArrowLeft size={16} /> Marketplace
             </Link>
@@ -105,20 +107,20 @@ export default function ModerationPage() {
           </div>
           <button
             onClick={load}
-            className="flex min-h-11 items-center gap-2 rounded-md border border-stone-300 px-4 text-sm font-semibold"
+            className="flex min-h-11 items-center gap-2 rounded-md border border-ink-300 px-4 text-sm font-semibold"
           >
             <RefreshCw size={16} /> Refresh
           </button>
         </div>
       </header>
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-5">
+      <div className="mx-auto max-w-[1440px] space-y-4 px-4 py-5">
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md border border-danger-border bg-danger-subtle p-3 text-sm text-danger-strong">
             {error}
           </div>
         )}
         {!error && !listings.length && (
-          <div className="rounded-lg border border-stone-200 bg-white p-10 text-center text-stone-500">
+          <div className="rounded-lg border border-ink-200 bg-surface-card p-10 text-center text-ink-500">
             The moderation queue is clear.
           </div>
         )}
@@ -130,33 +132,33 @@ export default function ModerationPage() {
           return (
             <article
               key={listing.id}
-              className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5"
+              className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm sm:p-5"
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-lg font-semibold">{listing.title}</h2>
                     {listing.moderationOverdue && (
-                      <span className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                      <span className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-danger-strong">
                         <AlertTriangle size={13} /> SLA overdue
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-stone-500">
+                  <p className="mt-1 text-sm text-ink-500">
                     {listing.seller.name} · {listing.seller.location}
                   </p>
-                  <p className="mt-1 text-sm text-stone-500">
+                  <p className="mt-1 text-sm text-ink-500">
                     {listing.category} · {listing.subcategory} ·{" "}
                     {listing.quantityAvailable} {listing.unit}
                   </p>
                 </div>
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-ink-500">
                   Target:{" "}
                   {new Date(listing.moderationTargetAt).toLocaleString("en-IN")}
                 </p>
               </div>
 
-              <p className="mt-4 whitespace-pre-wrap text-sm text-stone-700">
+              <p className="mt-4 whitespace-pre-wrap text-sm text-ink-700">
                 {listing.description}
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -189,7 +191,7 @@ export default function ModerationPage() {
                     <a
                       key={document.id}
                       href={`/api/listings/${listing.id}/assets/${document.id}`}
-                      className="flex min-h-11 items-center gap-2 rounded-md border border-stone-300 px-3 text-sm font-semibold"
+                      className="flex min-h-11 items-center gap-2 rounded-md border border-ink-300 px-3 text-sm font-semibold"
                     >
                       <FileText size={16} /> {document.kind.replace("_", " ")}
                     </a>
@@ -209,7 +211,7 @@ export default function ModerationPage() {
                       [listing.id]: event.target.value,
                     }))
                   }
-                  className="min-h-24 w-full rounded-md border border-stone-300 p-3 text-sm outline-none focus:border-emerald-700"
+                  className="min-h-24 w-full rounded-md border border-ink-300 p-3 text-sm outline-none focus:border-emerald-700"
                   placeholder="State the evidence checked or the exact correction required."
                 />
               </label>
@@ -218,7 +220,7 @@ export default function ModerationPage() {
                 <button
                   onClick={() => decide(listing, "REJECT")}
                   disabled={busyId === listing.id}
-                  className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-red-300 px-4 text-sm font-semibold text-red-700"
+                  className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-red-300 px-4 text-sm font-semibold text-danger-strong"
                 >
                   <XCircle size={16} /> Reject
                 </button>
@@ -232,7 +234,7 @@ export default function ModerationPage() {
                 <button
                   onClick={() => decide(listing, "APPROVE")}
                   disabled={busyId === listing.id}
-                  className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white"
+                  className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand px-4 text-sm font-semibold text-white"
                 >
                   {busyId === listing.id ? (
                     <Loader2 size={16} className="animate-spin" />
@@ -258,8 +260,8 @@ function Detail({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md bg-stone-50 p-3 text-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+    <div className="rounded-md bg-surface-sunken p-3 text-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
         {label}
       </p>
       <p className="mt-1">{children}</p>

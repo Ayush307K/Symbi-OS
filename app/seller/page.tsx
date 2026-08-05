@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
 import Link from "next/link";
 import {
   BadgeCheck,
@@ -96,36 +97,37 @@ export default function SellerPage() {
   );
 
   return (
-    <main className="min-h-screen bg-[#f4f2ed] text-stone-950">
-      <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+    <main className="min-h-screen bg-surface-page text-ink-900">
+      <MarketplaceNav />
+      <header className="border-b border-ink-200 bg-surface-card">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Link href="/" className="text-sm font-semibold text-orange-700 hover:text-orange-800">
+            <Link href="/" className="text-sm font-semibold text-copper-800 hover:text-copper-900">
               Back to marketplace
             </Link>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Seller dashboard</h1>
-            <p className="mt-1 text-sm text-stone-500">
+            <p className="mt-1 text-sm text-ink-500">
               {data?.user.companyName ?? "Company workspace"} · seller operations
             </p>
           </div>
           <div className="flex gap-2">
             <Link
               href="/seller/listings/new"
-              className="flex items-center gap-2 rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+              className="flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand"
             >
               <Package size={16} />
               New listing
             </Link>
             <button
               onClick={load}
-              className="flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+              className="flex items-center gap-2 rounded-md border border-ink-300 bg-surface-card px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-surface-sunken"
             >
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
               Refresh
             </button>
             <Link
               href="/account"
-              className="flex items-center gap-2 rounded-md bg-stone-950 px-3 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+              className="flex items-center gap-2 rounded-md bg-ink-900 px-3 py-2 text-sm font-semibold text-white hover:bg-ink-800"
             >
               <Building2 size={16} />
               Buyer account
@@ -134,8 +136,8 @@ export default function SellerPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="rounded-lg border border-stone-200 bg-white p-3 shadow-sm">
+      <div className="mx-auto grid max-w-[1440px] gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="rounded-lg border border-ink-200 bg-surface-card p-3 shadow-sm">
           <nav className="space-y-1">
             {tabs.map((tab) => (
               <button
@@ -144,8 +146,8 @@ export default function SellerPage() {
                 className={cn(
                   "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                   activeTab === tab.label
-                    ? "bg-emerald-50 text-emerald-800"
-                    : "text-stone-600 hover:bg-stone-50 hover:text-stone-950"
+                    ? "bg-brand-50 text-brand"
+                    : "text-ink-600 hover:bg-surface-sunken hover:text-ink-900"
                 )}
               >
                 <span className="flex items-center gap-2">
@@ -160,12 +162,12 @@ export default function SellerPage() {
 
         <section className="min-w-0">
           {isLoading && (
-            <div className="flex h-80 items-center justify-center rounded-lg border border-stone-200 bg-white">
-              <Loader2 className="animate-spin text-emerald-700" />
+            <div className="flex h-80 items-center justify-center rounded-lg border border-ink-200 bg-surface-card">
+              <Loader2 className="animate-spin text-brand" />
             </div>
           )}
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="rounded-lg border border-danger-border bg-danger-subtle p-4 text-sm text-danger-strong">
               {error}
             </div>
           )}
@@ -177,13 +179,13 @@ export default function SellerPage() {
                     {cards.map((card) => {
                       const Icon = card.icon;
                       return (
-                      <div key={card.label} className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+                      <div key={card.label} className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">{card.label}</p>
-                          <Icon size={18} className="text-emerald-700" />
+                          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{card.label}</p>
+                          <Icon size={18} className="text-brand" />
                         </div>
                         <p className="mt-3 text-2xl font-semibold">{String(card.value)}</p>
-                        <p className="mt-1 text-sm text-stone-500">{card.detail}</p>
+                        <p className="mt-1 text-sm text-ink-500">{card.detail}</p>
                       </div>
                       );
                     })}
@@ -192,11 +194,11 @@ export default function SellerPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="font-semibold">Onboarding status: {data.onboarding.status}</p>
-                        <p className="mt-1 text-sm text-stone-500">Current step: {data.onboarding.currentStep}</p>
+                        <p className="mt-1 text-sm text-ink-500">Current step: {data.onboarding.currentStep}</p>
                       </div>
                       <button
                         onClick={() => setActiveTab("Onboarding")}
-                        className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                        className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand"
                       >
                         Complete onboarding
                       </button>
@@ -230,9 +232,9 @@ export default function SellerPage() {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-stone-200 bg-white shadow-sm">
-      <div className="border-b border-stone-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
+    <section className="rounded-lg border border-ink-200 bg-surface-card shadow-sm">
+      <div className="border-b border-ink-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink-900">{title}</h2>
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -241,7 +243,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Empty({ label }: { label: string }) {
   return (
-    <div className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-stone-500">
+    <div className="rounded-md border border-dashed border-ink-300 bg-surface-sunken p-6 text-center text-sm text-ink-500">
       {label}
     </div>
   );
@@ -278,7 +280,7 @@ function ListingList({
         <Empty label="No seller-owned listings yet." />
         <Link
           href="/seller/listings/new"
-          className="mt-3 flex min-h-11 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white"
+          className="mt-3 flex min-h-11 items-center justify-center rounded-md bg-brand px-4 text-sm font-semibold text-white"
         >
           Create your first listing
         </Link>
@@ -288,20 +290,20 @@ function ListingList({
   return (
     <Panel title="Seller listings">
       {message && (
-        <div className="mb-3 rounded-md bg-stone-100 p-3 text-sm text-stone-700">
+        <div className="mb-3 rounded-md bg-surface-page p-3 text-sm text-ink-700">
           {message}
         </div>
       )}
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((item) => (
-          <div key={item.id} className="rounded-md border border-stone-200 p-3">
+          <div key={item.id} className="rounded-md border border-ink-200 p-3">
             <div className="flex items-start justify-between gap-2">
               <p className="line-clamp-2 font-semibold">{item.title}</p>
-              <span className="rounded-full bg-stone-100 px-2 py-1 text-[11px] font-semibold">
+              <span className="rounded-full bg-surface-page px-2 py-1 text-[11px] font-semibold">
                 {item.status}
               </span>
             </div>
-            <p className="mt-1 text-sm text-stone-500">
+            <p className="mt-1 text-sm text-ink-500">
               {item.category} · {item.city}, {item.state}
             </p>
             <p className="mt-2 text-sm font-semibold">
@@ -320,19 +322,19 @@ function ListingList({
                 <>
                   <Link
                     href={`/products/${item.slug}`}
-                    className="flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                    className="flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-xs font-semibold"
                   >
                     View/share
                   </Link>
                   <button
                     onClick={() => act(item, "PAUSE")}
-                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold"
                   >
                     Pause
                   </button>
                   <button
                     onClick={() => act(item, "CLOSE")}
-                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold"
                   >
                     Close
                   </button>
@@ -342,13 +344,13 @@ function ListingList({
                 <>
                   <button
                     onClick={() => act(item, "RESUME")}
-                    className="min-h-10 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white"
+                    className="min-h-10 rounded-md bg-brand px-3 text-xs font-semibold text-white"
                   >
                     Resume
                   </button>
                   <button
                     onClick={() => act(item, "ARCHIVE")}
-                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold"
                   >
                     Archive
                   </button>
@@ -357,7 +359,7 @@ function ListingList({
               {item.status === "EXPIRED" && (
                 <button
                   onClick={() => act(item, "RENEW")}
-                  className="min-h-10 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white"
+                  className="min-h-10 rounded-md bg-brand px-3 text-xs font-semibold text-white"
                 >
                   Renew
                 </button>
@@ -365,7 +367,7 @@ function ListingList({
               {["DRAFT", "REJECTED"].includes(item.status) && (
                 <Link
                   href={`/seller/listings/new?id=${item.id}`}
-                  className="flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-xs font-semibold"
+                  className="flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-xs font-semibold"
                 >
                   Continue draft
                 </Link>
@@ -406,13 +408,13 @@ function OrderItemList({
   if (!items.length) return <Empty label="No seller orders yet." />;
   return (
     <Panel title="Seller order items">
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-ink-200">
         {items.map((item) => (
           <div key={item.id} className="py-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold">{item.title}</p>
-                <p className="mt-1 text-sm text-stone-500">
+                <p className="mt-1 text-sm text-ink-500">
                   {item.order.orderNumber} · {item.order.buyer.companyName} · {item.status}
                 </p>
               </div>
@@ -424,7 +426,7 @@ function OrderItemList({
                   <button
                     disabled={busy === item.order.id}
                     onClick={() => void act(item.order.id, "ACCEPT_ORDER")}
-                    className="min-h-10 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-50"
+                    className="min-h-10 rounded-md bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
                   >
                     Accept order
                   </button>
@@ -434,7 +436,7 @@ function OrderItemList({
                   <button
                     disabled={busy === item.order.id}
                     onClick={() => void act(item.order.id, "MARK_DISPATCHED")}
-                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold disabled:opacity-50"
+                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold disabled:opacity-50"
                   >
                     Mark dispatched
                   </button>
@@ -496,15 +498,15 @@ function BidList({
   return (
     <Panel title="Incoming bids">
       {message && (
-        <p className="mb-3 rounded-md bg-stone-100 p-2 text-sm">{message}</p>
+        <p className="mb-3 rounded-md bg-surface-page p-2 text-sm">{message}</p>
       )}
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-ink-200">
         {items.map((item) => (
           <div key={item.id} className="py-3">
             <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-semibold">{item.materialName}</p>
-              <p className="text-sm text-stone-500">
+              <p className="text-sm text-ink-500">
                 {item.bidderCompany} · Qty {item.quantity} {item.unit} · {item.status}
               </p>
             </div>
@@ -522,7 +524,7 @@ function BidList({
                     key={action}
                     disabled={busy === item.id}
                     onClick={() => void act(item, action)}
-                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold disabled:opacity-50"
+                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold disabled:opacity-50"
                   >
                     {label}
                   </button>
@@ -530,12 +532,12 @@ function BidList({
               </div>
             )}
             {item.order && (
-              <p className="mt-2 text-xs text-emerald-700">
+              <p className="mt-2 text-xs text-brand">
                 Order {item.order.orderNumber} · {item.order.status}
               </p>
             )}
             {item.revisions?.length > 1 && (
-              <details className="mt-2 text-xs text-stone-500">
+              <details className="mt-2 text-xs text-ink-500">
                 <summary>{item.revisions.length} offer revisions</summary>
                 {item.revisions.map((revision: any) => (
                   <p key={revision.id} className="mt-1">
@@ -558,10 +560,10 @@ function ReviewList({ items }: { items: Array<any> }) {
     <Panel title="Reviews">
       <div className="grid gap-3">
         {items.map((item) => (
-          <div key={item.id} className="rounded-md border border-stone-200 p-3">
+          <div key={item.id} className="rounded-md border border-ink-200 p-3">
             <p className="font-semibold">{item.rating}/5 · {item.user.companyName}</p>
-            <p className="mt-1 text-sm text-stone-500">{item.body}</p>
-            <p className="mt-2 text-xs text-stone-400">{item.listing.title}</p>
+            <p className="mt-1 text-sm text-ink-500">{item.body}</p>
+            <p className="mt-2 text-xs text-ink-400">{item.listing.title}</p>
           </div>
         ))}
       </div>
@@ -573,11 +575,11 @@ function ThreadList({ items }: { items: Array<any> }) {
   if (!items.length) return <Empty label="No seller message threads yet." />;
   return (
     <Panel title="Messages">
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-ink-200">
         {items.map((thread) => (
           <Link key={thread.id} href={`/messages/${thread.id}`} className="block py-3">
             <p className="font-semibold">{thread.subject}</p>
-            <p className="mt-1 line-clamp-1 text-sm text-stone-500">
+            <p className="mt-1 line-clamp-1 text-sm text-ink-500">
               {thread.messages[0]?.body ?? "No messages yet"}
             </p>
           </Link>

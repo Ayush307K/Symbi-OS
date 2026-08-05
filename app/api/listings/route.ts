@@ -140,7 +140,11 @@ export async function POST(request: NextRequest) {
           latitude: body.latitude ?? null,
           longitude: body.longitude ?? null,
           imageUrl: "",
-          priceMode: body.priceMode || "FIXED",
+          // Defaulting to FIXED would create a ₹0 fixed-price row whenever a
+          // seller starts a draft before entering a price. Absent a positive
+          // price, the honest default is ON_REQUEST.
+          priceMode:
+            body.priceMode ?? ((body.pricePerUnit ?? 0) > 0 ? "FIXED" : "ON_REQUEST"),
           pricePerUnit: body.pricePerUnit || 0,
           currency: "INR",
           unit: body.unit || "ton",

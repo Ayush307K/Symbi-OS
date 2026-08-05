@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { PackageSearch, SearchX } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -25,8 +25,12 @@ export interface CatalogGridProps {
   onRetry: () => void;
 }
 
-const GRID =
-  "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+// auto-fill rather than fixed breakpoints: the rail already claims 230px, so
+// the grid must reflow against whatever width is left, not against the viewport.
+const GRID = "grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]";
+
+/** Matches the API's default page size, so each loaded batch cascades on its own. */
+const PAGE_SIZE = 24;
 
 export function CatalogGrid({
   listings,
@@ -94,52 +98,36 @@ export function CatalogGrid({
 
   return (
     <div className="flex flex-col gap-8">
-      <motion.ul
-        className={GRID}
-        initial={reduceMotion ? false : "hidden"}
-        animate="visible"
-        variants={{
-          hidden: {},
-          // Stagger reveals reading order rather than decorating: cards land
-          // left-to-right as the eye would scan them.
-          visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.035 } },
-        }}
-      >
-        <AnimatePresence initial={false}>
-          {listings.map((listing) => (
-            <motion.li
-              key={listing.id}
-              layout={!reduceMotion}
-              variants={{
-                hidden: reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 },
-                visible: reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 },
-              }}
-              transition={{
-                duration: reduceMotion ? 0 : 0.24,
-                ease: [0.16, 1, 0.3, 1],
-              }}
-              className="list-none"
-            >
-              <ListingCard
-                listing={listing}
-                saved={savedIds.has(listing.id)}
-                savePending={pendingSaveIds.has(listing.id)}
-                onToggleSave={onToggleSave}
-                onInquire={onInquire}
-                inquirePending={inquiryPendingId === listing.id}
-              />
-            </motion.li>
-          ))}
-        </AnimatePresence>
-      </motion.ul>
-
-      {isLoadingMore ? (
-        <div className={GRID} aria-hidden="true">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <SkeletonCard key={index} />
-          ))}
-        </div>
-      ) : null}
+      {/* Each card owns its own entrance. Parent-orchestrated variants only
+          fire when the parent's animate prop changes, so appended pages would
+          mount at the `hidden` variant and stay transparent — present in the
+          layout, invisible on screen. Per-item initial/animate runs on mount
+          whenever that mount happens, which is what a growing list needs.
+          The delay is indexed within the page so each batch still cascades. */}
+      <ul className={GRID}>
+        {listings.map((listing, index) => (
+          <motion.li
+            key={listing.id}
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: reduceMotion ? 0 : 0.24,
+              delay: reduceMotion ? 0 : (index % PAGE_SIZE) * 0.03,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            className="list-none"
+          >
+            <ListingCard
+              listing={listing}
+              saved={savedIds.has(listing.id)}
+              savePending={pendingSaveIds.has(listing.id)}
+              onToggleSave={onToggleSave}
+              onInquire={onInquire}
+              inquirePending={inquiryPendingId === listing.id}
+            />
+          </motion.li>
+        ))}
+      </ul>
 
       <div className="flex flex-col items-center gap-2 pb-4">
         {hasMore ? (
