@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
+import { AdminShell } from "@/components/admin/AdminShell";
+import { Button } from "@/components/ui/Button";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
   FileText,
   Loader2,
@@ -92,28 +92,16 @@ export default function ModerationPage() {
   };
 
   return (
-    <main className="min-h-dvh bg-surface-page text-ink-900">
-      <MarketplaceNav />
-      <header className="border-b border-ink-200 bg-surface-card">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-4">
-          <div>
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-sm font-semibold text-ink-600"
-            >
-              <ArrowLeft size={16} /> Marketplace
-            </Link>
-            <h1 className="mt-2 text-2xl font-semibold">Listing moderation</h1>
-          </div>
-          <button
-            onClick={load}
-            className="flex min-h-11 items-center gap-2 rounded-md border border-ink-300 px-4 text-sm font-semibold"
-          >
-            <RefreshCw size={16} /> Refresh
-          </button>
-        </div>
-      </header>
-      <div className="mx-auto max-w-[1440px] space-y-4 px-4 py-5">
+    <AdminShell
+      title="Listing moderation"
+      description="Submitted listings stay invisible to buyers until they are approved."
+      action={
+        <Button variant="secondary" size="sm" onClick={load} leadingIcon={<RefreshCw className="h-4 w-4" />}>
+          Refresh
+        </Button>
+      }
+    >
+      <div className="space-y-4">
         {error && (
           <div className="rounded-md border border-danger-border bg-danger-subtle p-3 text-sm text-danger-strong">
             {error}
@@ -248,7 +236,7 @@ export default function ModerationPage() {
           );
         })}
       </div>
-    </main>
+    </AdminShell>
   );
 }
 
