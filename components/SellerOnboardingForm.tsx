@@ -154,12 +154,12 @@ export function SellerOnboardingForm({
         Verification is in sandbox mode for v0. Validation and state transitions are
         real; GST, PAN, bank, and identity providers are not contacted.
       </div>
-      <div className="rounded-md border border-stone-200 bg-white p-3">
+      <div className="rounded-md border border-ink-200 bg-surface-card p-3">
         <div className="flex items-center justify-between text-sm">
           <span className="font-semibold">Onboarding completion</span>
           <span>{onboarding.completion?.percentage ?? 0}%</span>
         </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-page">
           <div
             className="h-full bg-emerald-700 transition-all"
             style={{ width: `${onboarding.completion?.percentage ?? 0}%` }}
@@ -167,7 +167,7 @@ export function SellerOnboardingForm({
         </div>
         {(onboarding.completion?.missingSteps?.length > 0 ||
           onboarding.completion?.missingDocuments?.length > 0) && (
-          <p className="mt-2 text-xs text-stone-500">
+          <p className="mt-2 text-xs text-ink-500">
             Missing:{" "}
             {[
               ...(onboarding.completion?.missingSteps ?? []),
@@ -188,8 +188,8 @@ export function SellerOnboardingForm({
               step === item
                 ? "bg-emerald-800 text-white"
                 : onboarding[JSON_FIELDS[item]]
-                  ? "bg-emerald-50 text-emerald-800"
-                  : "bg-stone-100 text-stone-600"
+                  ? "bg-brand-50 text-emerald-800"
+                  : "bg-surface-page text-ink-600"
             }`}
           >
             {onboarding[JSON_FIELDS[item]] ? "✓ " : ""}
@@ -198,9 +198,9 @@ export function SellerOnboardingForm({
         ))}
       </div>
 
-      <div className="rounded-md border border-stone-200 p-4">
+      <div className="rounded-md border border-ink-200 p-4">
         <h3 className="font-semibold">Private verification documents</h3>
-        <p className="mt-1 text-sm text-stone-500">
+        <p className="mt-1 text-sm text-ink-500">
           PDF only, maximum 15 MB. Files with scripts, launch actions, or embedded
           content are rejected. Access is restricted to you and moderators.
         </p>
@@ -216,13 +216,13 @@ export function SellerOnboardingForm({
               (item: any) => item.kind === kind,
             );
             return (
-              <div key={kind} className="rounded-md border border-stone-200 p-3">
+              <div key={kind} className="rounded-md border border-ink-200 p-3">
                 <p className="text-sm font-semibold">{label}</p>
                 {document ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <a
                       href={document.url}
-                      className="text-xs font-semibold text-emerald-700 underline"
+                      className="text-xs font-semibold text-brand underline"
                     >
                       {document.originalName}
                     </a>
@@ -236,7 +236,7 @@ export function SellerOnboardingForm({
                     )}
                   </div>
                 ) : editable ? (
-                  <label className="mt-2 flex min-h-10 cursor-pointer items-center justify-center rounded-md border border-dashed border-stone-300 px-3 text-xs font-semibold">
+                  <label className="mt-2 flex min-h-10 cursor-pointer items-center justify-center rounded-md border border-dashed border-ink-300 px-3 text-xs font-semibold">
                     {uploading === kind
                       ? `Uploading ${uploadProgress}%`
                       : "Choose PDF"}
@@ -253,7 +253,7 @@ export function SellerOnboardingForm({
                     />
                   </label>
                 ) : (
-                  <p className="mt-2 text-xs text-stone-400">Not uploaded</p>
+                  <p className="mt-2 text-xs text-ink-400">Not uploaded</p>
                 )}
               </div>
             );
@@ -261,14 +261,14 @@ export function SellerOnboardingForm({
         </div>
       </div>
 
-      <div className="rounded-md border border-stone-200 p-4">
+      <div className="rounded-md border border-ink-200 p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold">{step.replace("_", " ")}</h3>
-            <p className="text-sm text-stone-500">Status: {onboarding.status}</p>
+            <p className="text-sm text-ink-500">Status: {onboarding.status}</p>
           </div>
           {onboarding.status === "APPROVED" && (
-            <BadgeCheck className="text-emerald-700" aria-label="Approved" />
+            <BadgeCheck className="text-brand" aria-label="Approved" />
           )}
         </div>
         {step === "BUSINESS" && (
@@ -328,7 +328,7 @@ export function SellerOnboardingForm({
               type="button"
               disabled={busy}
               onClick={() => save(false)}
-              className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              className="rounded-md border border-ink-300 px-4 py-2 text-sm font-semibold disabled:opacity-50"
             >
               Save step
             </button>
@@ -354,10 +354,10 @@ export function SellerOnboardingForm({
             Run sandbox verification
           </button>
         )}
-        {busy && <Loader2 className="mt-4 animate-spin text-emerald-700" size={18} />}
-        {message && <p className="mt-4 text-sm text-stone-700">{message}</p>}
+        {busy && <Loader2 className="mt-4 animate-spin text-brand" size={18} />}
+        {message && <p className="mt-4 text-sm text-ink-700">{message}</p>}
         {onboarding.reviewerNote && (
-          <p className="mt-3 rounded-md bg-stone-100 p-3 text-sm text-stone-700">
+          <p className="mt-3 rounded-md bg-surface-page p-3 text-sm text-ink-700">
             {onboarding.reviewerNote}
           </p>
         )}
@@ -382,13 +382,13 @@ function Input({
   update: (name: string, value: string) => void;
 }) {
   return (
-    <label className="text-sm font-medium text-stone-700">
+    <label className="text-sm font-medium text-ink-700">
       {label}
       <input
         required
         value={value ?? ""}
         onChange={(event) => update(name, event.target.value)}
-        className="mt-1.5 h-10 w-full rounded-md border border-stone-300 px-3 font-normal outline-none focus:border-emerald-700"
+        className="mt-1.5 h-10 w-full rounded-md border border-ink-300 px-3 font-normal outline-none focus:border-emerald-700"
       />
     </label>
   );
@@ -408,13 +408,13 @@ function Select({
   options: string[];
 }) {
   return (
-    <label className="text-sm font-medium text-stone-700">
+    <label className="text-sm font-medium text-ink-700">
       {label}
       <select
         required
         value={value ?? ""}
         onChange={(event) => update(name, event.target.value)}
-        className="mt-1.5 h-10 w-full rounded-md border border-stone-300 px-3 font-normal outline-none focus:border-emerald-700"
+        className="mt-1.5 h-10 w-full rounded-md border border-ink-300 px-3 font-normal outline-none focus:border-emerald-700"
       >
         <option value="">Select</option>
         {options.map((option) => (
@@ -439,7 +439,7 @@ function Check({
   update: (name: string, value: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-2 text-sm text-stone-700">
+    <label className="flex items-start gap-2 text-sm text-ink-700">
       <input
         type="checkbox"
         checked={Boolean(checked)}

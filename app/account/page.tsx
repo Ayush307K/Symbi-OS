@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
 import Link from "next/link";
 import {
   Bell,
@@ -100,29 +101,30 @@ export default function AccountPage() {
   );
 
   return (
-    <main className="min-h-screen bg-[#f4f2ed] text-stone-950">
-      <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+    <main className="min-h-screen bg-surface-page text-ink-900">
+      <MarketplaceNav />
+      <header className="border-b border-ink-200 bg-surface-card">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Link href="/" className="text-sm font-semibold text-orange-700 hover:text-orange-800">
+            <Link href="/" className="text-sm font-semibold text-copper-800 hover:text-copper-900">
               Back to marketplace
             </Link>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">Buyer account</h1>
-            <p className="mt-1 text-sm text-stone-500">
+            <p className="mt-1 text-sm text-ink-500">
               {data?.user.companyName ?? "Company workspace"} · {data?.user.email ?? "Loading"}
             </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={load}
-              className="flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+              className="flex items-center gap-2 rounded-md border border-ink-300 bg-surface-card px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-surface-sunken"
             >
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
               Refresh
             </button>
             <Link
               href="/seller"
-              className="flex items-center gap-2 rounded-md bg-stone-950 px-3 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+              className="flex items-center gap-2 rounded-md bg-ink-900 px-3 py-2 text-sm font-semibold text-white hover:bg-ink-800"
             >
               <Building2 size={16} />
               Seller dashboard
@@ -131,8 +133,8 @@ export default function AccountPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="rounded-lg border border-stone-200 bg-white p-3 shadow-sm">
+      <div className="mx-auto grid max-w-[1440px] gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="rounded-lg border border-ink-200 bg-surface-card p-3 shadow-sm">
           <nav className="space-y-1">
             {tabs.map((tab) => (
               <button
@@ -141,8 +143,8 @@ export default function AccountPage() {
                 className={cn(
                   "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                   activeTab === tab.label
-                    ? "bg-orange-50 text-orange-800"
-                    : "text-stone-600 hover:bg-stone-50 hover:text-stone-950"
+                    ? "bg-copper-50 text-copper-800"
+                    : "text-ink-600 hover:bg-surface-sunken hover:text-ink-900"
                 )}
               >
                 <span className="flex items-center gap-2">
@@ -157,13 +159,13 @@ export default function AccountPage() {
 
         <section className="min-w-0">
           {isLoading && (
-            <div className="flex h-80 items-center justify-center rounded-lg border border-stone-200 bg-white">
-              <Loader2 className="animate-spin text-orange-600" />
+            <div className="flex h-80 items-center justify-center rounded-lg border border-ink-200 bg-surface-card">
+              <Loader2 className="animate-spin text-copper-700" />
             </div>
           )}
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="rounded-lg border border-danger-border bg-danger-subtle p-4 text-sm text-danger-strong">
               {error}
             </div>
           )}
@@ -176,15 +178,15 @@ export default function AccountPage() {
                     {cards.map((card) => {
                       const Icon = card.icon;
                       return (
-                      <div key={card.label} className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+                      <div key={card.label} className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
                             {card.label}
                           </p>
-                          <Icon size={18} className="text-orange-600" />
+                          <Icon size={18} className="text-copper-700" />
                         </div>
                         <p className="mt-3 text-2xl font-semibold">{String(card.value)}</p>
-                        <p className="mt-1 text-sm text-stone-500">{card.detail}</p>
+                        <p className="mt-1 text-sm text-ink-500">{card.detail}</p>
                       </div>
                       );
                     })}
@@ -214,9 +216,9 @@ export default function AccountPage() {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-stone-200 bg-white shadow-sm">
-      <div className="border-b border-stone-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
+    <section className="rounded-lg border border-ink-200 bg-surface-card shadow-sm">
+      <div className="border-b border-ink-200 px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink-900">{title}</h2>
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -225,7 +227,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Empty({ label }: { label: string }) {
   return (
-    <div className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-stone-500">
+    <div className="rounded-md border border-dashed border-ink-300 bg-surface-sunken p-6 text-center text-sm text-ink-500">
       {label}
     </div>
   );
@@ -310,13 +312,13 @@ function OrderList({
   if (!orders.length) return <Empty label="No orders yet. Use Buy now from any product detail panel." />;
   return (
     <Panel title="Purchase history">
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-ink-200">
         {orders.map((order) => (
           <div key={order.id} className="py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold">{order.orderNumber}</p>
-                <p className="mt-1 text-sm text-stone-500">
+                <p className="mt-1 text-sm text-ink-500">
                   {order.items.length} item{order.items.length === 1 ? "" : "s"} · {order.status} · {order.paymentStatus}
                 </p>
               </div>
@@ -326,7 +328,7 @@ function OrderList({
               <button
                 onClick={() => void pay(order)}
                 disabled={busy === order.id}
-                className="mt-3 min-h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                className="mt-3 min-h-10 rounded-md bg-copper-700 px-4 text-sm font-semibold text-white disabled:opacity-50"
               >
                 Confirm and pay in sandbox
               </button>
@@ -334,7 +336,7 @@ function OrderList({
             {order.invoice && (
               <a
                 href={`/api/orders/${order.id}/invoice`}
-                className="mt-3 inline-flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-sm font-semibold"
+                className="mt-3 inline-flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-sm font-semibold"
               >
                 Download sandbox invoice PDF
               </a>
@@ -342,7 +344,7 @@ function OrderList({
             {order.invoice && order.paymentStatus === "REFUNDED" && (
               <a
                 href={`/api/orders/${order.id}/invoice?document=credit-note`}
-                className="ml-2 mt-3 inline-flex min-h-10 items-center rounded-md border border-stone-300 px-3 text-sm font-semibold"
+                className="ml-2 mt-3 inline-flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-sm font-semibold"
               >
                 Download sandbox credit note
               </a>
@@ -354,7 +356,7 @@ function OrderList({
                 <button
                   onClick={() => void cancel(order)}
                   disabled={busy === order.id}
-                  className="ml-2 mt-3 min-h-10 rounded-md border border-red-300 px-3 text-sm font-semibold text-red-700 disabled:opacity-50"
+                  className="ml-2 mt-3 min-h-10 rounded-md border border-red-300 px-3 text-sm font-semibold text-danger-strong disabled:opacity-50"
                 >
                   Cancel order
                 </button>
@@ -363,7 +365,7 @@ function OrderList({
               <button
                 onClick={() => void orderAction(order, "CONFIRM_DELIVERY")}
                 disabled={busy === order.id}
-                className="ml-2 mt-3 min-h-10 rounded-md bg-emerald-700 px-3 text-sm font-semibold text-white disabled:opacity-50"
+                className="ml-2 mt-3 min-h-10 rounded-md bg-brand px-3 text-sm font-semibold text-white disabled:opacity-50"
               >
                 Confirm delivery
               </button>
@@ -391,11 +393,11 @@ function CartList({ items }: { items: Array<any> }) {
     <Panel title="Cart">
       <div className="grid gap-3">
         {items.map((item) => (
-          <div key={item.id} className="flex gap-3 rounded-md border border-stone-200 p-3">
+          <div key={item.id} className="flex gap-3 rounded-md border border-ink-200 p-3">
             <img src={item.listing.imageUrl} alt="" className="h-16 w-16 rounded object-cover" />
             <div className="min-w-0 flex-1">
               <p className="line-clamp-1 font-semibold">{item.listing.title}</p>
-              <p className="text-sm text-stone-500">
+              <p className="text-sm text-ink-500">
                 Qty {item.quantity} · {money(item.priceSnapshot)}
               </p>
             </div>
@@ -412,9 +414,9 @@ function SavedList({ items }: { items: Array<any> }) {
     <Panel title="Saved products">
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((item) => (
-          <div key={item.id} className="rounded-md border border-stone-200 p-3">
+          <div key={item.id} className="rounded-md border border-ink-200 p-3">
             <p className="line-clamp-2 font-semibold">{item.listing.title}</p>
-            <p className="mt-1 text-sm text-stone-500">{item.listing.city}, {item.listing.state}</p>
+            <p className="mt-1 text-sm text-ink-500">{item.listing.city}, {item.listing.state}</p>
           </div>
         ))}
       </div>
@@ -428,13 +430,13 @@ function AddressList({ items }: { items: Array<any> }) {
     <Panel title="Saved addresses">
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((item) => (
-          <div key={item.id} className="rounded-md border border-stone-200 p-4">
+          <div key={item.id} className="rounded-md border border-ink-200 p-4">
             <p className="font-semibold">{item.label}</p>
-            <p className="mt-1 text-sm text-stone-600">{item.contactName} · {item.phone}</p>
-            <p className="mt-2 text-sm text-stone-500">
+            <p className="mt-1 text-sm text-ink-600">{item.contactName} · {item.phone}</p>
+            <p className="mt-2 text-sm text-ink-500">
               {item.street}, {item.area}, {item.city}, {item.state} - {item.pincode}
             </p>
-            <p className="mt-2 text-xs font-semibold text-emerald-700">{item.verificationStatus}</p>
+            <p className="mt-2 text-xs font-semibold text-brand">{item.verificationStatus}</p>
           </div>
         ))}
       </div>
@@ -487,13 +489,13 @@ function BidList({
   if (!items.length) return <Empty label="No bids placed yet." />;
   return (
     <Panel title="Buyer bids">
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-ink-200">
         {items.map((item) => (
           <div key={item.id} className="py-3">
             <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-semibold">{item.materialName}</p>
-              <p className="text-sm text-stone-500">
+              <p className="text-sm text-ink-500">
                 Qty {item.quantity} {item.unit} · {item.status}
               </p>
             </div>
@@ -511,7 +513,7 @@ function BidList({
                     key={action}
                     disabled={busy === item.id}
                     onClick={() => void act(item, action)}
-                    className="min-h-10 rounded-md border border-stone-300 px-3 text-xs font-semibold disabled:opacity-50"
+                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold disabled:opacity-50"
                   >
                     {label}
                   </button>
@@ -519,7 +521,7 @@ function BidList({
               </div>
             )}
             {item.revisions?.length > 1 && (
-              <details className="mt-2 text-xs text-stone-500">
+              <details className="mt-2 text-xs text-ink-500">
                 <summary>{item.revisions.length} offer revisions</summary>
                 {item.revisions.map((revision: any) => (
                   <p key={revision.id} className="mt-1">
@@ -540,11 +542,11 @@ function ThreadList({ items }: { items: Array<any> }) {
   if (!items.length) return <Empty label="No message threads yet." />;
   return (
     <Panel title="Messages">
-      <div className="divide-y divide-stone-100">
+      <div className="divide-y divide-ink-200">
         {items.map((thread) => (
           <Link key={thread.id} href={`/messages/${thread.id}`} className="block py-3">
             <p className="font-semibold">{thread.subject}</p>
-            <p className="mt-1 line-clamp-1 text-sm text-stone-500">
+            <p className="mt-1 line-clamp-1 text-sm text-ink-500">
               {thread.messages[0]?.body ?? "No messages yet"}
             </p>
           </Link>
@@ -559,9 +561,9 @@ function NotificationList({ items }: { items: Array<any> }) {
   return (
     <div className="grid gap-2">
       {items.slice(0, 5).map((item) => (
-        <div key={item.id} className="rounded-md border border-stone-200 p-3">
+        <div key={item.id} className="rounded-md border border-ink-200 p-3">
           <p className="font-semibold">{item.title}</p>
-          <p className="mt-1 text-sm text-stone-500">{item.body}</p>
+          <p className="mt-1 text-sm text-ink-500">{item.body}</p>
         </div>
       ))}
     </div>
