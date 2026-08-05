@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import { notify } from "@/lib/marketplace";
 import {
   apiError,
   ApiError,
@@ -43,6 +44,18 @@ export async function POST(
     if (!order) {
       throw new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
     }
+
+    // The seller is reached through the line items' company, since an order
+    // holds the buyer directly but the seller only by what was sold.
+    const sellerCompanyId = order.items[0]?.sellerCompanyId ?? null;
+    const sellerUserId = sellerCompanyId
+      ? (
+          await prisma.user.findFirst({
+            where: { companyId: sellerCompanyId },
+            select: { id: true },
+          })
+        )?.id ?? null
+      : null;
     if (body.action === "CONFIRM_DELIVERY") {
       if (order.fulfillmentStatus !== "DISPATCHED") {
         throw new ApiError(
@@ -78,6 +91,13 @@ export async function POST(
           include: { items: true },
         });
       });
+      await notify(
+        sellerUserId,
+        "ORDER_DELIVERED",
+        "Buyer confirmed delivery",
+        `${order.orderNumber} was confirmed delivered by ${auth.companyName}.`,
+        "/seller",
+      );
       return NextResponse.json({ success: true, order: delivered });
     }
     if (body.action === "OPEN_DISPUTE") {
@@ -106,6 +126,13 @@ export async function POST(
         });
         return record;
       });
+      await notify(
+        sellerUserId,
+        "DISPUTE_OPENED",
+        `Dispute opened on ${order.orderNumber}`,
+        `${auth.companyName} raised: ${String(body.reasonCode ?? "").replace(/_/g, " ").toLowerCase()}.`,
+        "/seller",
+      );
       return NextResponse.json({ success: true, order: disputed });
     }
     if (
@@ -214,6 +241,13 @@ export async function POST(
         include: { items: true, reservations: true },
       });
     });
+    await notify(
+      sellerUserId,
+      "ORDER_CANCELLED",
+      `Order ${order.orderNumber} cancelled`,
+      `${auth.companyName} cancelled the order. Reserved inventory has been returned to your listing.`,
+      "/seller",
+    );
     return NextResponse.json({ success: true, order: updated });
   } catch (error) {
     return apiError(error);
