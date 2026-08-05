@@ -80,24 +80,6 @@ export interface GraphData {
 //  API request / response shapes
 // ---------------------------------------------------------------------------
 
-/** POST body for /api/graphrag */
-export interface GraphRAGRequest {
-  query: string;
-}
-
-/** Successful response from /api/graphrag */
-export interface GraphRAGResponse {
-  answer: string;
-  cypher: string;
-  graphData: GraphData;
-}
-
-/** Error response from /api/graphrag */
-export interface GraphRAGErrorResponse {
-  error: string;
-  details?: string;
-}
-
 // ---------------------------------------------------------------------------
 //  Auth types
 // ---------------------------------------------------------------------------
