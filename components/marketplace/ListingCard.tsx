@@ -10,8 +10,14 @@ import ListingImage from "@/components/ListingImage";
 import { cn } from "@/lib/cn";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
+/**
+ * Returns null when there is no published price. The provider feed leaves the
+ * price field empty for quote-on-request offers and the importer stores that as
+ * 0, so a zero here means "not published" — never "free". Callers render
+ * "Ask quote" instead, matching the wording used elsewhere in the product.
+ */
 function formatMoney(value: number | null) {
-  if (value === null || Number.isNaN(value)) return null;
+  if (value === null || Number.isNaN(value) || value <= 0) return null;
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -134,12 +140,17 @@ export function ListingCard({
 
         <div className="flex items-end justify-between gap-2">
           <div>
-            <p className="text-lg font-semibold leading-none text-ink-900">
-              {price ?? "On request"}
+            <p
+              className={cn(
+                "font-semibold leading-none",
+                price ? "text-lg text-ink-900" : "text-base text-ink-600",
+              )}
+            >
+              {price ?? "Ask quote"}
             </p>
-            {price ? (
-              <p className="mt-1 text-[12px] text-ink-500">per {listing.unit}</p>
-            ) : null}
+            <p className="mt-1 text-[12px] text-ink-500">
+              {price ? `per ${listing.unit}` : "Seller has not published a price"}
+            </p>
           </div>
           {quantity ? (
             <p className="text-right text-[13px] text-ink-700">
