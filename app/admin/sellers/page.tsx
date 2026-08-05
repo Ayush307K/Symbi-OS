@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
+import { AdminShell } from "@/components/admin/AdminShell";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
@@ -53,20 +53,10 @@ export default function SellerVerificationAdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-surface-page p-4 sm:p-6">
-      <MarketplaceNav />
-      <div className="mx-auto max-w-[1440px]">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Seller verification queue</h1>
-            <p className="text-sm text-ink-500">
-              Private documents are available only to their seller and admins.
-            </p>
-          </div>
-          <Link href="/admin/moderation" className="rounded-md border border-ink-300 px-3 py-2 text-sm font-semibold">
-            Listing moderation
-          </Link>
-        </div>
+    <AdminShell
+      title="Seller verification queue"
+      description="Private documents are available only to their seller and to platform operators."
+    >
         {error && <p className="mb-4 rounded-md bg-danger-subtle p-3 text-red-800">{error}</p>}
         <div className="grid gap-4">
           {items.map((item) => (
@@ -121,7 +111,6 @@ export default function SellerVerificationAdminPage() {
             </p>
           )}
         </div>
-      </div>
-    </main>
+    </AdminShell>
   );
 }

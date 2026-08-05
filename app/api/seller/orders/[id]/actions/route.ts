@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import { notify } from "@/lib/marketplace";
 import {
   apiError,
   ApiError,
@@ -97,6 +98,20 @@ export async function POST(
         include: { items: true },
       });
     });
+
+    // Outside the transaction: the buyer needs to know their order moved, but a
+    // failed nudge must not roll back a fulfilment that already happened.
+    const accepted = body.action === "ACCEPT_ORDER";
+    await notify(
+      order.buyerUserId,
+      accepted ? "ORDER_CONFIRMED" : "ORDER_DISPATCHED",
+      accepted ? "Seller confirmed your order" : "Your order has been dispatched",
+      accepted
+        ? `${order.orderNumber} is being prepared by ${auth.companyName}.`
+        : `${order.orderNumber} is on its way. Confirm delivery once it arrives.`,
+      "/account",
+    );
+
     return NextResponse.json({ success: true, order: updated });
   } catch (error) {
     return apiError(error);
