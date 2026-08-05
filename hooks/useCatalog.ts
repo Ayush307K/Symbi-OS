@@ -34,6 +34,10 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
   // user changes filters quickly.
   const requestId = useRef(0);
 
+  // The filter set currently rendered, as a query string. Used to tell a real
+  // filter change from a URL change the catalogue does not own.
+  const appliedRef = useRef<string>("");
+
   const load = useCallback(
     async (next: CatalogFilters, cursor?: string) => {
       const id = ++requestId.current;
@@ -74,15 +78,22 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
   // Hydrate from the URL on mount so a shared link opens the same result set.
   useEffect(() => {
     const initial = filtersFromSearchParams(window.location.search);
+    appliedRef.current = filtersToQueryString(initial);
     setFilters(initial);
     load(initial);
   }, [load]);
 
   // Back/forward should restore the result set, not just the address bar.
+  // Only refetch when the filters themselves differ. A history entry can carry
+  // params the catalogue does not own, and re-requesting an identical result set
+  // would flash the whole grid for no change.
   useEffect(() => {
     if (!syncUrl) return;
     function onPopState() {
       const restored = filtersFromSearchParams(window.location.search);
+      const signature = filtersToQueryString(restored);
+      if (signature === appliedRef.current) return;
+      appliedRef.current = signature;
       setFilters(restored);
       load(restored);
     }
@@ -93,6 +104,7 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
   const applyFilters = useCallback(
     (next: CatalogFilters) => {
       setFilters(next);
+      appliedRef.current = filtersToQueryString(next);
       if (syncUrl) {
         const query = filtersToQueryString(next);
         // pushState, not replaceState: each applied filter set is a place the

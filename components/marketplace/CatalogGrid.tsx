@@ -25,8 +25,9 @@ export interface CatalogGridProps {
   onRetry: () => void;
 }
 
-const GRID =
-  "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+// auto-fill rather than fixed breakpoints: the rail already claims 230px, so
+// the grid must reflow against whatever width is left, not against the viewport.
+const GRID = "grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]";
 
 export function CatalogGrid({
   listings,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, Heart, Info, MapPin, Package, Send } from "lucide-react";
+import { BadgeCheck, Gavel, Heart, Info, MapPin, Package } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -128,7 +128,7 @@ export function ListingCard({
           <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-ink-900">
             <Link
               href={`/products/${listing.id}`}
-              className="rounded-sm hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+                  className="rounded-sm hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
             >
               {listing.title}
             </Link>
@@ -180,9 +180,9 @@ export function ListingCard({
             fullWidth
             loading={inquirePending}
             onClick={() => onInquire(listing)}
-            leadingIcon={<Send className="h-3.5 w-3.5" />}
+            leadingIcon={<Gavel className="h-3.5 w-3.5" />}
           >
-            Send inquiry
+            Place bid
           </Button>
         </div>
       </div>

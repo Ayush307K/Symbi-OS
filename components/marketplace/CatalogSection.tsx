@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCatalog, useWishlist } from "@/hooks/useCatalog";
 import { useToast } from "@/components/ui/Toast";
-import { SearchHeader } from "./SearchHeader";
-import { FilterBar } from "./FilterBar";
+import { FilterSidebar } from "./FilterSidebar";
 import { CatalogGrid } from "./CatalogGrid";
 import {
   type CatalogFilters,
   type MaterialListing,
   EMPTY_FILTERS,
+  SORT_OPTIONS,
   countActiveFilters,
 } from "@/lib/marketplace-types";
 
@@ -39,11 +39,6 @@ export function CatalogSection({ isAuthenticated, onCountChange }: CatalogSectio
   const catalog = useCatalog();
   const wishlist = useWishlist();
   const [inquiryPendingId, setInquiryPendingId] = useState<string | null>(null);
-
-  // Lets the hero quote a live figure rather than a hardcoded claim.
-  useEffect(() => {
-    onCountChange?.(catalog.listings.length);
-  }, [catalog.listings.length, onCountChange]);
 
   const categories = useMemo(
     () =>
@@ -125,39 +120,73 @@ export function CatalogSection({ isAuthenticated, onCountChange }: CatalogSectio
   const hasActiveFilters = countActiveFilters(catalog.filters) > 0;
 
   return (
-    <section id="catalogue" className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-      <SearchHeader
-        value={catalog.filters.q}
-        resultCount={catalog.listings.length}
-        isLoading={catalog.isLoading}
-        onSearch={applySearch}
-      />
-
-      <FilterBar
-        filters={catalog.filters}
-        categories={categories}
-        resultCount={catalog.listings.length}
-        isLoading={catalog.isLoading}
-        onApply={(next: CatalogFilters) => catalog.applyFilters(next)}
-      />
-
-      <div className="pt-6">
-        <CatalogGrid
-          listings={catalog.listings}
-          isLoading={catalog.isLoading}
-          isLoadingMore={catalog.isLoadingMore}
-          error={catalog.error}
-          hasMore={catalog.hasMore}
-          hasActiveFilters={hasActiveFilters}
-          savedIds={wishlist.savedIds}
-          pendingSaveIds={wishlist.pendingIds}
-          inquiryPendingId={inquiryPendingId}
-          onToggleSave={handleToggleSave}
-          onInquire={handleInquire}
-          onLoadMore={catalog.loadMore}
-          onClearFilters={() => catalog.applyFilters(EMPTY_FILTERS)}
-          onRetry={() => catalog.applyFilters(catalog.filters)}
+    <section id="catalogue" className="mx-auto w-full max-w-[1440px] px-4 sm:px-6">
+      <div className="flex gap-8 py-6">
+        <FilterSidebar
+          filters={catalog.filters}
+          categories={categories}
+          onApply={(next: CatalogFilters) => catalog.applyFilters(next)}
         />
+
+        <div className="min-w-0 flex-1">
+          {/* Result context and sort share one line, per the wireframe: what is
+              being shown, and the only control that reorders it. */}
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[13px] text-ink-600" aria-live="polite">
+              {catalog.isLoading ? (
+                "Loading listings…"
+              ) : (
+                <>
+                  <span className="font-semibold text-ink-900">
+                    {catalog.listings.length}
+                  </span>{" "}
+                  listing{catalog.listings.length === 1 ? "" : "s"}
+                  {catalog.filters.category ? ` · ${catalog.filters.category}` : ""}
+                  {catalog.filters.location ? ` · ${catalog.filters.location}` : ""}
+                  {catalog.filters.q ? ` · “${catalog.filters.q}”` : ""}
+                </>
+              )}
+            </p>
+
+            <label className="flex items-center gap-2 text-[13px] text-ink-500">
+              <span className="hidden sm:inline">Sort</span>
+              <select
+                value={catalog.filters.sort}
+                onChange={(event) =>
+                  catalog.applyFilters({
+                    ...catalog.filters,
+                    sort: event.target.value as CatalogFilters["sort"],
+                  })
+                }
+                aria-label="Sort listings"
+                className="h-9 cursor-pointer rounded-control border border-ink-200 bg-surface-card px-2.5 pr-7 text-[13px] font-medium text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <CatalogGrid
+            listings={catalog.listings}
+            isLoading={catalog.isLoading}
+            isLoadingMore={catalog.isLoadingMore}
+            error={catalog.error}
+            hasMore={catalog.hasMore}
+            hasActiveFilters={hasActiveFilters}
+            savedIds={wishlist.savedIds}
+            pendingSaveIds={wishlist.pendingIds}
+            inquiryPendingId={inquiryPendingId}
+            onToggleSave={handleToggleSave}
+            onInquire={handleInquire}
+            onLoadMore={catalog.loadMore}
+            onClearFilters={() => catalog.applyFilters(EMPTY_FILTERS)}
+            onRetry={() => catalog.applyFilters(catalog.filters)}
+          />
+        </div>
       </div>
     </section>
   );
