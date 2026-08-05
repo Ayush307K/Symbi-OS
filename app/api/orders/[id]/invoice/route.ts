@@ -37,7 +37,7 @@ export async function GET(
           (item) => item.sellerCompanyId === auth.companyId,
         ),
     );
-    if (!isBuyer && !isSeller && auth.role !== "ADMIN") {
+    if (!isBuyer && !isSeller && !auth.isAdmin) {
       throw new ApiError(403, "You cannot access this invoice.", "FORBIDDEN");
     }
     const wantsCreditNote =

@@ -7,6 +7,7 @@ import {
   ApiError,
   assertTrustedOrigin,
   parseJson,
+  requireAdmin,
   requireUser,
 } from "@/server/http";
 import {
@@ -25,7 +26,7 @@ const decisionSchema = z.object({
 
 export async function GET() {
   try {
-    await requireUser(["ADMIN"]);
+    await requireAdmin();
     const listings = await prisma.marketplaceListing.findMany({
       where: { status: "PENDING_MODERATION" },
       include: {
@@ -67,7 +68,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     assertTrustedOrigin(request);
-    const auth = await requireUser(["ADMIN"]);
+    const auth = await requireAdmin();
     const body = await parseJson(request, decisionSchema);
     const listing = await prisma.marketplaceListing.findUnique({
       where: { id: body.listingId },

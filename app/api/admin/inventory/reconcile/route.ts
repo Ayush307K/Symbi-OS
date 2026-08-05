@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { apiError, requireUser } from "@/server/http";
+import { apiError, requireUser, requireAdmin } from "@/server/http";
 import { releaseExpiredReservations } from "@/server/inventory";
 
 export async function GET() {
   try {
-    await requireUser(["ADMIN"]);
+    await requireAdmin();
     const releasedExpired = await releaseExpiredReservations();
     const listings = await prisma.marketplaceListing.findMany({
       select: {

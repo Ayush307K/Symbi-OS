@@ -21,6 +21,7 @@ export async function GET() {
         id: true,
         email: true,
         role: true,
+        isAdmin: true,
         companyName: true,
         companyId: true,
         accountStatus: true,

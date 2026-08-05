@@ -11,7 +11,10 @@ afterEach(() => {
 });
 
 describe("P0 account safety", () => {
-  const auth = (role: JWTPayload["role"]): JWTPayload => ({
+  const auth = (
+    role: JWTPayload["role"],
+    isAdmin = false,
+  ): JWTPayload => ({
     userId: "user",
     email: "user@example.com",
     role,
@@ -19,6 +22,7 @@ describe("P0 account safety", () => {
     companyId: "company",
     sessionId: "session.secret",
     tokenVersion: 0,
+    isAdmin,
   });
 
   it("applies the explicit role inheritance matrix", () => {
@@ -27,8 +31,19 @@ describe("P0 account safety", () => {
     expect(hasRole(auth("SELLER"), "BUYER")).toBe(false);
     expect(hasRole(auth("BOTH"), "BUYER")).toBe(true);
     expect(hasRole(auth("BOTH"), "SELLER")).toBe(true);
-    expect(hasRole(auth("ADMIN"), "ADMIN")).toBe(true);
-    expect(hasRole(auth("ADMIN"), "BUYER")).toBe(false);
+  });
+
+  it("carries platform administration on isAdmin, not on the market role", () => {
+    // Administration is orthogonal: it is granted by the flag alone, and
+    // granting it must not disturb what the user can do in the market.
+    expect(hasRole(auth("BOTH", true), "ADMIN")).toBe(true);
+    expect(hasRole(auth("BOTH", true), "BUYER")).toBe(true);
+    expect(hasRole(auth("BOTH", true), "SELLER")).toBe(true);
+
+    // No flag, no administration — whatever the market role says.
+    expect(hasRole(auth("BOTH"), "ADMIN")).toBe(false);
+    expect(hasRole(auth("SELLER"), "ADMIN")).toBe(false);
+    expect(hasRole(auth("ADMIN"), "ADMIN")).toBe(false);
   });
 
   it("rejects common and identity-derived passwords", () => {

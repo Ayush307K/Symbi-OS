@@ -21,7 +21,7 @@ export async function GET(
     });
     if (
       !document ||
-      (document.onboarding.userId !== auth.userId && auth.role !== "ADMIN")
+      (document.onboarding.userId !== auth.userId && !auth.isAdmin)
     ) {
       throw new ApiError(404, "Document not found.", "DOCUMENT_NOT_FOUND");
     }

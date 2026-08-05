@@ -7,6 +7,7 @@ import {
   ApiError,
   assertTrustedOrigin,
   parseJson,
+  requireAdmin,
   requireUser,
 } from "@/server/http";
 import { maskOnboarding, onboardingCompletion } from "@/server/onboarding";
@@ -25,7 +26,7 @@ const decisionSchema = z
 
 export async function GET() {
   try {
-    await requireUser(["ADMIN"]);
+    await requireAdmin();
     const records = await prisma.sellerOnboarding.findMany({
       where: {
         status: {
@@ -71,7 +72,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     assertTrustedOrigin(request);
-    const admin = await requireUser(["ADMIN"]);
+    const admin = await requireAdmin();
     const body = await parseJson(request, decisionSchema);
     const onboarding = await prisma.sellerOnboarding.findUnique({
       where: { id: body.onboardingId },
