@@ -11,13 +11,11 @@ import { cn } from "@/lib/cn";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
 /**
- * Returns null when there is no published price. The provider feed leaves the
- * price field empty for quote-on-request offers and the importer stores that as
- * 0, so a zero here means "not published" — never "free". Callers render
- * "Ask quote" instead, matching the wording used elsewhere in the product.
+ * The API maps an ON_REQUEST listing to price: null, so null is the signal for
+ * "no published price" — not a zero sentinel. Callers render "Ask quote".
  */
 function formatMoney(value: number | null) {
-  if (value === null || Number.isNaN(value) || value <= 0) return null;
+  if (value === null || Number.isNaN(value)) return null;
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
