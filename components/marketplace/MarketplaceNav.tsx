@@ -7,6 +7,7 @@ import { ChevronDown, MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/context/AuthContext";
 import { AccountMenu } from "./AccountMenu";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
 import { SAFE_CATEGORIES } from "@/lib/listing-constants";
 
@@ -124,6 +125,7 @@ export function MarketplaceNav({
         </form>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <WorkspaceSwitcher />
           <Button
             variant="secondary"
             size="sm"
