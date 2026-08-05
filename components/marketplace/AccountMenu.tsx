@@ -71,7 +71,7 @@ export function AccountMenu() {
   if (!user) return null;
 
   const canSell = user.role === "SELLER" || user.role === "BOTH";
-  const isAdmin = user.role === "ADMIN";
+  const isAdmin = user.isAdmin === true;
 
   const groups: Array<{ key: string; items: Item[] }> = [
     { key: "buyer", items: BUYER },

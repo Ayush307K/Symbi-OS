@@ -40,7 +40,7 @@ export async function GET(
       const auth = await getAuthFromCookie();
       const owns =
         auth?.companyId === asset.listing.sellerCompanyId ||
-        auth?.role === "ADMIN";
+        auth?.isAdmin === true;
       if (!owns) {
         throw new ApiError(404, "Asset not found.", "ASSET_NOT_FOUND");
       }

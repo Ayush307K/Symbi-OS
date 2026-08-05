@@ -5,6 +5,7 @@ import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
 
+/** What a user does in the market. Platform administration is separate. */
 export type UserRole = "BUYER" | "SELLER" | "BOTH" | "ADMIN";
 
 export interface JWTPayload {
@@ -15,10 +16,16 @@ export interface JWTPayload {
   companyId: string | null;
   sessionId: string;
   tokenVersion: number;
+  /**
+   * Platform operator. Deliberately orthogonal to `role`: an admin still has to
+   * be a BUYER or SELLER to transact, and folding the two into one string meant
+   * granting admin silently revoked the ability to buy or sell.
+   */
+  isAdmin: boolean;
 }
 
 export function hasRole(auth: JWTPayload, role: "BUYER" | "SELLER" | "ADMIN") {
-  if (auth.role === "ADMIN") return role === "ADMIN";
+  if (role === "ADMIN") return auth.isAdmin;
   if (auth.role === "BOTH") return role === "BUYER" || role === "SELLER";
   return auth.role === role;
 }
@@ -63,6 +70,7 @@ export async function signToken(payload: JWTPayload) {
     companyId: payload.companyId,
     sid: payload.sessionId,
     ver: payload.tokenVersion,
+    adm: payload.isAdmin,
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(payload.userId)
@@ -98,6 +106,8 @@ export async function verifyToken(token: string): Promise<JWTPayload | null> {
       companyId:
         typeof payload.companyId === "string" ? payload.companyId : null,
       sessionId: payload.sid,
+      // Absent on tokens issued before admin was split out; those are not admins.
+      isAdmin: payload.adm === true,
       tokenVersion: payload.ver,
     };
   } catch {
@@ -113,6 +123,7 @@ export async function createSession(
     companyName: string;
     companyId: string | null;
     tokenVersion: number;
+    isAdmin?: boolean;
   },
   request?: NextRequest
 ) {
@@ -135,6 +146,7 @@ export async function createSession(
     companyId: user.companyId,
     sessionId: `${session.id}.${sessionSecret}`,
     tokenVersion: user.tokenVersion,
+    isAdmin: user.isAdmin === true,
   });
   await setAuthCookie(token);
   return session;

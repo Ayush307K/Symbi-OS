@@ -60,12 +60,29 @@ export function assertTrustedOrigin(request: NextRequest) {
 export async function requireUser(roles?: UserRole[]): Promise<JWTPayload> {
   const auth = await getAuthFromCookie();
   if (!auth) throw new ApiError(401, "Authentication required.", "UNAUTHORIZED");
-  if (
-    roles &&
-    !roles.includes(auth.role) &&
-    !(auth.role === "BOTH" && roles.some((role) => role === "BUYER" || role === "SELLER"))
-  ) {
+  if (!roles) return auth;
+
+  // "ADMIN" in a role list means platform administration, which is carried by
+  // isAdmin rather than by `role` — an admin is still a BUYER or SELLER in the
+  // market, and conflating the two meant granting admin revoked trading.
+  const satisfied = roles.some((role) => {
+    if (role === "ADMIN") return auth.isAdmin;
+    if (auth.role === "BOTH") return role === "BUYER" || role === "SELLER";
+    return auth.role === role;
+  });
+
+  if (!satisfied) {
     throw new ApiError(403, "You are not allowed to perform this action.", "FORBIDDEN");
+  }
+  return auth;
+}
+
+/** Platform administration only. Market role is irrelevant here. */
+export async function requireAdmin(): Promise<JWTPayload> {
+  const auth = await getAuthFromCookie();
+  if (!auth) throw new ApiError(401, "Authentication required.", "UNAUTHORIZED");
+  if (!auth.isAdmin) {
+    throw new ApiError(403, "Platform administration is required.", "FORBIDDEN");
   }
   return auth;
 }

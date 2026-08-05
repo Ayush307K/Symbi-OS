@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
         id: user.id,
         email: user.email,
         role: user.role,
+        isAdmin: user.isAdmin,
         companyName: user.companyName,
         companyId: user.companyId,
         emailVerified: Boolean(user.emailVerifiedAt),

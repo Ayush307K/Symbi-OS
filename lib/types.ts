@@ -88,6 +88,8 @@ export interface AuthUser {
   id: string;
   email: string;
   role: string;
+  /** Platform operator. Separate from `role`, which is their market position. */
+  isAdmin?: boolean;
   companyName: string;
   companyId: string | null;
 }

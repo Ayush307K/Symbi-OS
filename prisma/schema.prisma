@@ -12,7 +12,8 @@ model User {
   id               String    @id @default(uuid())
   email            String    @unique
   passwordHash     String
-  role             String    @default("BOTH") // BUYER | SELLER | BOTH
+  role             String    @default("BOTH") // BUYER | SELLER | BOTH — what they do in the market
+  isAdmin          Boolean   @default(false) // platform operator; orthogonal to role
   accountStatus    String    @default("ACTIVE") // ACTIVE | LOCKED | DISABLED
   tokenVersion     Int       @default(0)
   companyName      String
