@@ -8,6 +8,10 @@ const PUBLIC_PATHS = ["/register", "/login"];
 // product data. Keep this list to routes that touch neither.
 const UNGATED_PATHS = ["/", "/style-guide"];
 
+// Product detail shows exactly what the public catalogue already shows, so a
+// shared listing link must open rather than bounce to sign-in.
+const UNGATED_PREFIXES = ["/products/"];
+
 function secure(response: NextResponse) {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
@@ -65,7 +69,10 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) {
     return secure(NextResponse.next());
   }
-  if (UNGATED_PATHS.includes(pathname)) {
+  if (
+    UNGATED_PATHS.includes(pathname) ||
+    UNGATED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  ) {
     return secure(NextResponse.next());
   }
   const authenticated = await hasValidSession(request);

@@ -45,6 +45,7 @@ const AUTH_PAGES = ["/login", "/register"];
 // through; this keeps the client from redirecting them away a moment later.
 // Must stay in sync with UNGATED_PATHS in proxy.ts.
 const UNGATED_PAGES = ["/", "/style-guide"];
+const UNGATED_PREFIXES = ["/products/"];
 
 // ---------------------------------------------------------------------------
 //  Provider
@@ -80,7 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Client-side redirect logic
   useEffect(() => {
     if (isLoading) return;
-    if (UNGATED_PAGES.includes(pathname)) return;
+    if (
+      UNGATED_PAGES.includes(pathname) ||
+      UNGATED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+    ) {
+      return;
+    }
 
     const onAuthPage = AUTH_PAGES.includes(pathname);
 
