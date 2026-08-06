@@ -503,12 +503,19 @@ function BidList({
             </div>
             {["PENDING", "COUNTERED"].includes(item.status) && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {[
-                  ["ACCEPT", "Accept current offer"],
-                  ["COUNTER", "Counter"],
-                  ["REJECT", "Reject"],
-                  ["WITHDRAW", "Withdraw"],
-                ].map(([action, label]) => (
+                {(item.status === "COUNTERED"
+                  ? [
+                      // The seller has moved; these respond to their counter.
+                      ["ACCEPT", "Accept counter"],
+                      ["COUNTER", "Counter back"],
+                      ["WITHDRAW", "Withdraw"],
+                    ]
+                  : [
+                      // Still the buyer's own open offer. Rejecting your own bid
+                      // is not an action that exists — withdrawing is.
+                      ["WITHDRAW", "Withdraw bid"],
+                    ]
+                ).map(([action, label]) => (
                   <button
                     key={action}
                     disabled={busy === item.id}
