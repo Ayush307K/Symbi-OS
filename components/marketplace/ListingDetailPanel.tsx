@@ -9,6 +9,7 @@ import {
   Info,
   LayoutList,
   MapPin,
+  Gavel,
   MessageSquare,
   Package,
   ShoppingCart,
@@ -82,6 +83,9 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   const [quantityInput, setQuantityInput] = useState("1");
   const [pending, setPending] = useState<string | null>(null);
   const [isSpecsOpen, setIsSpecsOpen] = useState(false);
+  const [isBidOpen, setIsBidOpen] = useState(false);
+  const [bidPrice, setBidPrice] = useState("");
+  const [bidTerms, setBidTerms] = useState("");
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewTitle, setReviewTitle] = useState("");
@@ -201,10 +205,22 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
       toast({ tone: "success", title: "Added to cart" });
     });
 
-  const requestQuote = () =>
+  // The buyer names their own price. Sending the seller's list price — or 1
+  // when there is no list price — was not a bid; it was a ₹1 offer on every
+  // quote-on-request listing.
+  const bidValue = Number(bidPrice);
+  const bidError: string | null =
+    bidPrice.trim() === ""
+      ? "Enter your price."
+      : !Number.isFinite(bidValue) || bidValue <= 0
+        ? "Enter a price greater than zero."
+        : null;
+
+  const placeBid = () =>
     listing &&
     !quantityError &&
-    run("quote", async () => {
+    !bidError &&
+    run("bid", async () => {
       const res = await fetch("/api/bids", {
         method: "POST",
         headers: {
@@ -214,12 +230,19 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         body: JSON.stringify({
           listingId: listing.id,
           quantity,
-          pricePerUnit: listing.price && listing.price > 0 ? listing.price : 1,
+          pricePerUnit: bidValue,
+          terms: bidTerms.trim() || undefined,
         }),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Unable to submit RFQ.");
-      toast({ tone: "success", title: "RFQ submitted to the seller" });
+      if (!res.ok) throw new Error(payload.error || "Unable to place the bid.");
+      setIsBidOpen(false);
+      setBidTerms("");
+      toast({
+        tone: "success",
+        title: "Bid placed",
+        description: "The seller can accept, counter, or decline it.",
+      });
     });
 
   const messageSeller = () =>
@@ -503,12 +526,18 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
               <Button
                 variant={price ? "secondary" : "primary"}
                 fullWidth
-                loading={pending === "quote"}
-                onClick={requestQuote}
+                leadingIcon={<Gavel className="h-4 w-4" />}
+                onClick={() => {
+                  // Seed with the list price where there is one, so a buyer
+                  // negotiating from a stated price starts at it rather than
+                  // from an empty field.
+                  setBidPrice(price && listing.price ? String(listing.price) : "");
+                  setIsBidOpen(true);
+                }}
                 disabled={Boolean(quantityError)}
                 title={quantityError ?? undefined}
               >
-                Request a quote
+                Place a bid
               </Button>
               <div className="grid grid-cols-2 gap-2">
                 <Button
@@ -559,6 +588,87 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={isBidOpen}
+        onClose={() => setIsBidOpen(false)}
+        title="Place a bid"
+        description={listing.title}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setIsBidOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={pending === "bid"}
+              disabled={Boolean(bidError) || Boolean(quantityError)}
+              title={bidError ?? quantityError ?? undefined}
+              onClick={placeBid}
+            >
+              Send bid
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          {/* The seller's number, where there is one, so the buyer can see what
+              they are negotiating against rather than guessing. */}
+          <div className="flex items-baseline justify-between rounded-control border border-ink-200 bg-surface-sunken px-3 py-2.5">
+            <span className="text-[13px] text-ink-500">Seller asks</span>
+            <span className="text-sm font-semibold text-ink-900">
+              {price ? `${price} per ${listing.unit}` : "Price on request"}
+            </span>
+          </div>
+
+          <Input
+            label="Quantity"
+            type="number"
+            inputMode="numeric"
+            min={listing.minOrderQuantity}
+            max={listing.quantity ?? undefined}
+            value={quantityInput}
+            suffix={listing.unit}
+            error={quantityError ?? undefined}
+            hint={
+              quantityError
+                ? undefined
+                : `MOQ ${num(listing.minOrderQuantity)} · ${num(listing.quantity)} ${listing.unit} available`
+            }
+            onChange={(event) => setQuantityInput(event.target.value)}
+          />
+
+          <Input
+            label={`Your price per ${listing.unit}`}
+            type="number"
+            inputMode="decimal"
+            min={0}
+            value={bidPrice}
+            suffix="₹"
+            error={bidError ?? undefined}
+            hint={bidError ? undefined : "The seller can accept, counter, or decline."}
+            onChange={(event) => setBidPrice(event.target.value)}
+          />
+
+          <Textarea
+            label="Terms"
+            rows={3}
+            placeholder="Delivery window, packaging, payment terms, inspection."
+            hint="Optional. Anything the seller should know before deciding."
+            value={bidTerms}
+            onChange={(event) => setBidTerms(event.target.value)}
+          />
+
+          {!bidError && !quantityError ? (
+            <div className="flex items-baseline justify-between border-t border-ink-200 pt-3">
+              <span className="text-[13px] text-ink-500">Bid total</span>
+              <span className="text-lg font-semibold text-ink-900">
+                {money(quantity * bidValue)}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
 
       <Modal
         open={isSpecsOpen}
