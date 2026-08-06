@@ -20,8 +20,45 @@ const BASE = process.argv[2] || "http://localhost:3000";
 // Only used to grant this run's moderator. Administration is deliberately not
 // reachable over HTTP — see scripts/grant-admin.ts for the same reasoning.
 const prisma = new PrismaClient({
-  datasourceUrl: process.env.DIRECT_URL || process.env.DATABASE_URL,
+  datasourceUrl: process.env.TEST_DATABASE_URL || process.env.DIRECT_URL || process.env.DATABASE_URL,
 });
+
+/**
+ * This harness registers users, uploads documents, and writes encrypted tax and
+ * bank records. Run against a shared database it leaves test accounts in the
+ * product and — because encrypted fields are only readable with the key that
+ * wrote them — records a deployment with a different key cannot read at all.
+ * That is exactly how it took down the deployed verification queue once.
+ *
+ * So it refuses anything that is not local. Point TEST_DATABASE_URL at the
+ * docker-compose database, or pass a localhost base URL.
+ */
+function assertLocalTarget() {
+  const target =
+    process.env.TEST_DATABASE_URL || process.env.DIRECT_URL || process.env.DATABASE_URL || "";
+  const host = (() => {
+    try {
+      return new URL(target).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  const local = ["localhost", "127.0.0.1", "::1", "postgres"].includes(host);
+  if (!local) {
+    console.error(
+      `\n  Refusing to run: the database is ${host || "not a URL"}, not a local one.\n` +
+        `  This harness writes test accounts and encrypted records. Set TEST_DATABASE_URL\n` +
+        `  to the docker-compose database first:\n\n` +
+        `    TEST_DATABASE_URL=postgresql://symbi:symbi_local_dev@localhost:5432/symbi_dev \\\n` +
+        `      npx tsx scripts/smoke-transaction.ts\n`,
+    );
+    process.exit(1);
+  }
+  if (!BASE.includes("localhost") && !BASE.includes("127.0.0.1")) {
+    console.error(`\n  Refusing to run against ${BASE}. Use a local server.\n`);
+    process.exit(1);
+  }
+}
 const stamp = Date.now().toString(36);
 
 interface Session {
@@ -106,6 +143,7 @@ async function registerUser(label: string, role: "BUYER" | "SELLER" | "BOTH"): P
 }
 
 async function main() {
+  assertLocalTarget();
   console.log(`\nTransaction smoke test against ${BASE}\n`);
 
   // This run registers three accounts in quick succession from one address,
