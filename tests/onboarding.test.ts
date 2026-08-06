@@ -58,4 +58,35 @@ describe("seller onboarding", () => {
       "123456789012"
     );
   });
+
+  it("degrades instead of throwing when a field cannot be decrypted", () => {
+    // AES-GCM authenticates, so a record written under a different key throws
+    // on decrypt. In production that took down the whole verification queue,
+    // because one unreadable record aborted the request that listed all of
+    // them. A single bad record must cost only that record.
+    const unreadable = maskOnboarding({
+      bankJson: "enc:v1:AAAAAAAAAAAAAAAA:BBBBBBBBBBBBBBBBBBBBBBBB:CCCCCCCC",
+      taxJson: null as string | null,
+      kycJson: null as string | null,
+    });
+
+    expect(unreadable.undecryptableFields).toEqual(["bank"]);
+    expect(unreadable.bankJson).toBeNull();
+  });
+
+  it("reports nothing undecryptable when the key matches", () => {
+    const masked = maskOnboarding({
+      bankJson: serializeOnboardingPayload("BANK", {
+        accountHolder: "Smoke Seller",
+        accountNumber: "123456789012",
+        ifsc: "HDFC0001234",
+        consent: true,
+      }),
+      taxJson: null as string | null,
+      kycJson: null as string | null,
+    });
+
+    expect(masked.undecryptableFields).toEqual([]);
+    expect(JSON.parse(masked.bankJson!).accountNumber).toBe("••••9012");
+  });
 });

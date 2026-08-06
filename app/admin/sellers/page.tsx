@@ -65,6 +65,13 @@ export default function SellerVerificationAdminPage() {
                 <div>
                   <h2 className="font-semibold">{item.user.companyName}</h2>
                   <p className="text-sm text-ink-500">{item.user.email} · {item.status}</p>
+                  {item.undecryptableFields?.length ? (
+                    <p className="mt-1 rounded-control border border-warning-border bg-warning-subtle px-2 py-1 text-[12px] text-warning-strong">
+                      Encrypted fields unreadable ({item.undecryptableFields.join(", ")}).
+                      This deployment&rsquo;s FIELD_ENCRYPTION_KEY does not match the
+                      key these records were written with.
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-xs text-ink-500">
                     {item.completion.percentage}% complete
                   </p>

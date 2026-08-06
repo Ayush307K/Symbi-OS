@@ -191,6 +191,26 @@ export function serializeOnboardingPayload(
     : JSON.stringify(payload);
 }
 
+/**
+ * Decrypt one field, or report that it could not be read.
+ *
+ * AES-GCM authenticates, so a key that does not match the one used to encrypt
+ * throws rather than returning nonsense. That is the right behaviour for a
+ * single field and the wrong behaviour for a queue: one unreadable record
+ * should not take down the entire verification list, which is exactly what it
+ * did in production when the deployed FIELD_ENCRYPTION_KEY differed from the
+ * key the records were written with.
+ */
+function decryptField(value: string | null | undefined, field: string) {
+  if (!value) return { data: null as Record<string, unknown> | null, failed: false };
+  try {
+    return { data: decryptJson<Record<string, unknown>>(value), failed: false };
+  } catch {
+    console.error(`[onboarding] could not decrypt ${field}; check FIELD_ENCRYPTION_KEY`);
+    return { data: null as Record<string, unknown> | null, failed: true };
+  }
+}
+
 export function maskOnboarding<
   T extends {
     bankJson: string | null;
@@ -198,12 +218,23 @@ export function maskOnboarding<
     kycJson?: string | null;
   },
 >(record: T) {
-  const bank = record.bankJson ? decryptJson<Record<string, unknown>>(record.bankJson) : null;
-  const tax = record.taxJson ? decryptJson<Record<string, unknown>>(record.taxJson) : null;
-  const kyc = record.kycJson ? decryptJson<Record<string, unknown>>(record.kycJson) : null;
+  const bankResult = decryptField(record.bankJson, "bankJson");
+  const taxResult = decryptField(record.taxJson, "taxJson");
+  const kycResult = decryptField(record.kycJson, "kycJson");
+  const bank = bankResult.data;
+  const tax = taxResult.data;
+  const kyc = kycResult.data;
+  // Surfaced so an operator sees "this record is unreadable" rather than a
+  // record that looks merely incomplete.
+  const undecryptable = [
+    bankResult.failed ? "bank" : null,
+    taxResult.failed ? "tax" : null,
+    kycResult.failed ? "kyc" : null,
+  ].filter(Boolean) as string[];
   const account = String(bank?.accountNumber ?? "");
   return {
     ...record,
+    undecryptableFields: undecryptable,
     bankJson: bank
       ? JSON.stringify({
           accountHolder: bank.accountHolder,
