@@ -222,25 +222,14 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
       router.push(`/messages/${payload.threadId}`);
     });
 
-  const buyNow = () =>
-    listing &&
-    run("buy", async () => {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
-        },
-        body: JSON.stringify({ listingId: listing.id, quantity }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Checkout failed.");
-      toast({
-        tone: "success",
-        title: `Order ${payload.order.orderNumber} created`,
-        description: "Sandbox settlement — no funds moved.",
-      });
-    });
+  // Navigates rather than posting. Money should not move from one click with
+  // no address chosen and no total shown — checkout owns that.
+  const buyNow = () => {
+    if (!listing) return;
+    router.push(
+      `/checkout?listingId=${encodeURIComponent(listing.id)}&quantity=${quantity}`,
+    );
+  };
 
   const submitReview = () =>
     listing &&
@@ -474,7 +463,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
             <div className="mt-4 flex flex-col gap-2">
               {price ? (
-                <Button variant="primary" fullWidth loading={pending === "buy"} onClick={buyNow}>
+                <Button variant="primary" fullWidth onClick={buyNow}>
                   Buy now
                 </Button>
               ) : null}
