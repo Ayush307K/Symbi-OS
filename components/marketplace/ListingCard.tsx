@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, Gavel, Heart, Info, MapPin, Package } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { BadgeCheck, Heart, Info, MapPin, MessageSquare, Package, ShoppingCart } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -33,6 +34,7 @@ export interface ListingCardProps {
   saved: boolean;
   savePending?: boolean;
   onToggleSave: (listing: MaterialListing) => void;
+  /** Opens a message thread with the seller. Only offered where there is no price. */
   onInquire: (listing: MaterialListing) => void;
   inquirePending?: boolean;
 }
@@ -45,6 +47,7 @@ export function ListingCard({
   onInquire,
   inquirePending = false,
 }: ListingCardProps) {
+  const router = useRouter();
   const price = formatMoney(listing.price);
   const quantity = formatQuantity(listing.quantity);
   const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
@@ -173,17 +176,45 @@ export function ListingCard({
           </div>
         </dl>
 
-        <div className="mt-auto pt-1">
-          <Button
-            variant="primary"
-            size="sm"
-            fullWidth
-            loading={inquirePending}
-            onClick={() => onInquire(listing)}
-            leadingIcon={<Gavel className="h-3.5 w-3.5" />}
-          >
-            Place bid
-          </Button>
+        {/* The card offers only what the listing supports. Neither buying nor
+            bidding can honestly happen in one click — both need a quantity —
+            so these lead to the surface that collects it rather than firing an
+            action from here. */}
+        <div className="mt-auto flex flex-col gap-1.5 pt-1">
+          {price ? (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth
+                onClick={() =>
+                  router.push(
+                    `/checkout?listingId=${encodeURIComponent(listing.id)}&quantity=${Math.max(1, listing.minOrderQuantity || 1)}`,
+                  )
+                }
+                leadingIcon={<ShoppingCart className="h-3.5 w-3.5" />}
+              >
+                Buy now
+              </Button>
+              <Link
+                href={`/products/${listing.id}`}
+                className="rounded-sm text-center text-[12px] font-semibold text-ink-600 hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+              >
+                Place a bid instead →
+              </Link>
+            </>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              fullWidth
+              loading={inquirePending}
+              onClick={() => onInquire(listing)}
+              leadingIcon={<MessageSquare className="h-3.5 w-3.5" />}
+            >
+              Ask quote
+            </Button>
+          )}
         </div>
       </div>
     </Card>
