@@ -12,14 +12,16 @@
     "test": "vitest run",
     "security:scan": "node scripts/check-sensitive-files.mjs",
     "security:scan:history": "node scripts/check-sensitive-files.mjs --history",
-    "verify": "npm run security:scan && npm run typecheck && npm test && npm run build && npm audit --omit=dev",
+    "verify": "npm run check:env && npm run security:scan && npm run typecheck && npm test && npm run build && npm audit --omit=dev",
     "db:deploy": "node scripts/ensure-local-db.mjs && prisma migrate deploy",
     "start": "next start",
     "ingest": "npm run ingest:real",
     "ingest:real": "tsx scripts/import-real-listings.ts",
     "rag:index": "tsx scripts/rebuild-rag-index.ts",
     "onboarding:cleanup-documents": "tsx scripts/cleanup-expired-onboarding-documents.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "check:env": "tsx scripts/check-env.ts",
+    "db:reset": "docker compose down -v && docker compose up -d --wait && npm run db:deploy && npm run ingest:real"
   },
   "keywords": [],
   "author": "",

@@ -98,6 +98,52 @@ npx prisma migrate deploy
 The test skips itself when the container is not running, so `npm test` stays
 green without Docker.
 
+## Environments
+
+Local development and production are deliberately separate. They were not, and
+every serious incident on this project came from that: a test harness wrote
+accounts into the live product, an encryption key diverged so a deployment
+could not read its own records, and a migration landed on one database and not
+the other.
+
+| | Database | Secrets | Data |
+| --- | --- | --- | --- |
+| Local dev | docker-compose PostgreSQL | `.env`, generated locally | Real listings via `npm run ingest:real` |
+| Tests | the same docker database | test values | Fixtures each run, cleaned up after |
+| Production | Supabase | Vercel dashboard | Live |
+
+Rules that follow from that split:
+
+- **`.env` must point at localhost.** `npm run check:env` fails loudly if it
+  does not. Nothing you run locally should be able to reach production.
+- **Secrets are per-environment and never copied between them.** Vercel is the
+  source of truth for production; `.env.production.local` holds only the
+  connection strings, so there is nothing to drift.
+- **`FIELD_ENCRYPTION_KEY` cannot be rotated casually.** Seller tax, bank, and
+  KYC data is AES-GCM encrypted, which authenticates: a different key does not
+  decode to nonsense, it throws. There is no re-encryption path, so changing it
+  makes existing records permanently unreadable.
+- **Migrations must be applied to every database.** `npm run db:deploy` targets
+  whatever `.env` points at; CI runs it against its own service container.
+
+Run `npm run check:env` after any environment change. It is the first step of
+`npm run verify`, so a misconfiguration fails in a second rather than after a
+full build.
+
+To rebuild local data from scratch:
+
+```bash
+npm run db:reset
+```
+
+To run a one-off against production deliberately — a backfill, say — pass the
+production values explicitly rather than editing `.env`:
+
+```bash
+env $(grep -v "^#" .env.production.local | xargs) npx tsx scripts/backfill-price-mode.ts
+```
+
+
 ## Environment
 
 The complete template is in `.env.example`.
