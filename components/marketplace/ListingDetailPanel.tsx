@@ -79,7 +79,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [quantityInput, setQuantityInput] = useState("1");
   const [pending, setPending] = useState<string | null>(null);
   const [isSpecsOpen, setIsSpecsOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
@@ -88,6 +88,22 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   const [reviewBody, setReviewBody] = useState("");
 
   const listing = data?.listing ?? null;
+
+  const quantity = Number(quantityInput);
+  // Derived once, above everything that reads it: the field, the buttons, and
+  // the handlers must never disagree about whether a quantity is usable.
+  const quantityError: string | null = !listing
+    ? null
+    : quantityInput.trim() === ""
+      ? "Enter a quantity."
+      : !Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0
+        ? "Enter a whole number greater than zero."
+        : quantity < listing.minOrderQuantity
+          ? `Minimum order is ${num(listing.minOrderQuantity)} ${listing.unit}.`
+          : listing.quantity !== null && quantity > listing.quantity
+            ? `Only ${num(listing.quantity)} ${listing.unit} available.`
+            : null;
+
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +116,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         const payload = await res.json();
         if (cancelled) return;
         setData(payload);
-        setQuantity(Math.max(1, payload.listing?.minOrderQuantity || 1));
+        setQuantityInput(String(Math.max(1, payload.listing?.minOrderQuantity || 1)));
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Unable to load this listing.");
@@ -173,6 +189,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
   const addToCart = () =>
     listing &&
+    !quantityError &&
     run("cart", async () => {
       const res = await fetch("/api/cart", {
         method: "POST",
@@ -186,6 +203,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
   const requestQuote = () =>
     listing &&
+    !quantityError &&
     run("quote", async () => {
       const res = await fetch("/api/bids", {
         method: "POST",
@@ -225,7 +243,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   // Navigates rather than posting. Money should not move from one click with
   // no address chosen and no total shown — checkout owns that.
   const buyNow = () => {
-    if (!listing) return;
+    if (!listing || quantityError) return;
     router.push(
       `/checkout?listingId=${encodeURIComponent(listing.id)}&quantity=${quantity}`,
     );
@@ -287,6 +305,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   const price = money(listing.price);
   const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
   const stats = data?.sellerStats;
+
 
   // Everything the API knows, for the overview overlay. Kept out of the page so
   // the buying decision is not buried under a specification table.
@@ -454,16 +473,30 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
               <Input
                 label="Quantity"
                 type="number"
+                inputMode="numeric"
                 min={listing.minOrderQuantity || 1}
-                value={quantity}
+                max={listing.quantity ?? undefined}
+                value={quantityInput}
                 suffix={listing.unit}
-                onChange={(event) => setQuantity(Number(event.target.value) || 1)}
+                error={quantityError ?? undefined}
+                hint={
+                  quantityError
+                    ? undefined
+                    : `MOQ ${num(listing.minOrderQuantity)} · ${num(listing.quantity)} ${listing.unit} available`
+                }
+                onChange={(event) => setQuantityInput(event.target.value)}
               />
             </div>
 
             <div className="mt-4 flex flex-col gap-2">
               {price ? (
-                <Button variant="primary" fullWidth onClick={buyNow}>
+                <Button
+                  variant="primary"
+                  fullWidth
+                  onClick={buyNow}
+                  disabled={Boolean(quantityError)}
+                  title={quantityError ?? undefined}
+                >
                   Buy now
                 </Button>
               ) : null}
@@ -472,6 +505,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                 fullWidth
                 loading={pending === "quote"}
                 onClick={requestQuote}
+                disabled={Boolean(quantityError)}
+                title={quantityError ?? undefined}
               >
                 Request a quote
               </Button>
@@ -481,6 +516,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                   leadingIcon={<ShoppingCart className="h-4 w-4" />}
                   loading={pending === "cart"}
                   onClick={addToCart}
+                  disabled={Boolean(quantityError)}
+                  title={quantityError ?? undefined}
                 >
                   Cart
                 </Button>
