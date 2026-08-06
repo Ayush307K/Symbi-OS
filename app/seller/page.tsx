@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
+import { useToast } from "@/components/ui/Toast";
+import { CounterOfferDialog } from "@/components/marketplace/CounterOfferDialog";
 import Link from "next/link";
 import {
   BadgeCheck,
@@ -387,6 +389,7 @@ function OrderItemList({
   items: Array<any>;
   onChanged: () => void;
 }) {
+  const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   async function act(orderId: string, action: string) {
     setBusy(orderId);
@@ -400,7 +403,7 @@ function OrderItemList({
       if (!response.ok) throw new Error(payload.error ?? "Action failed.");
       onChanged();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Action failed.");
+      toast({ tone: "danger", title: "Action failed.", description: error instanceof Error ? error.message : undefined });
     } finally {
       setBusy(null);
     }
@@ -458,22 +461,16 @@ function BidList({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  async function act(item: any, action: string) {
-    const counter =
-      action === "COUNTER"
-        ? {
-            quantity: Number(
-              window.prompt("Counter quantity", String(item.quantity)),
-            ),
-            pricePerUnit: Number(
-              window.prompt("Counter price per unit", String(item.pricePerUnit)),
-            ),
-          }
-        : {};
-    if (
-      action === "COUNTER" &&
-      (!counter.quantity || !counter.pricePerUnit)
-    ) {
+  const [counterTarget, setCounterTarget] = useState<any>(null);
+
+  async function act(
+    item: any,
+    action: string,
+    counter: { quantity?: number; pricePerUnit?: number; terms?: string } = {},
+  ) {
+    if (action === "COUNTER" && !Object.keys(counter).length) {
+      // Collected in a dialog, then re-entered here with the values.
+      setCounterTarget(item);
       return;
     }
     setBusy(item.id);
@@ -496,6 +493,7 @@ function BidList({
   }
   if (!items.length) return <Empty label="No incoming bids yet." />;
   return (
+    <>
     <Panel title="Incoming bids">
       {message && (
         <p className="mb-3 rounded-md bg-surface-page p-2 text-sm">{message}</p>
@@ -551,6 +549,27 @@ function BidList({
         ))}
       </div>
     </Panel>
+      <CounterOfferDialog
+        open={Boolean(counterTarget)}
+        onClose={() => setCounterTarget(null)}
+        submitting={busy === counterTarget?.id}
+        current={
+          counterTarget
+            ? {
+                quantity: counterTarget.quantity,
+                pricePerUnit: counterTarget.pricePerUnit,
+                unit: counterTarget.unit,
+                title: counterTarget.materialName,
+              }
+            : null
+        }
+        onSubmit={(counter) => {
+          const target = counterTarget;
+          setCounterTarget(null);
+          if (target) void act(target, "COUNTER", counter);
+        }}
+      />
+    </>
   );
 }
 

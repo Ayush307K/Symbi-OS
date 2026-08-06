@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
+import { useToast } from "@/components/ui/Toast";
+import { CounterOfferDialog } from "@/components/marketplace/CounterOfferDialog";
+import { PromptDialog } from "@/components/ui/PromptDialog";
 import Link from "next/link";
 import {
   Bell,
@@ -240,6 +243,7 @@ function OrderList({
   orders: Array<any>;
   onChanged: () => void;
 }) {
+  const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   async function pay(order: any) {
     if (!order.sourceBidId) return;
@@ -257,13 +261,20 @@ function OrderList({
       if (!response.ok) throw new Error(payload.error ?? "Payment failed.");
       onChanged();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Payment failed.");
+      toast({ tone: "danger", title: "Payment failed.", description: error instanceof Error ? error.message : undefined });
     } finally {
       setBusy(null);
     }
   }
-  async function cancel(order: any) {
-    const note = window.prompt("Optional cancellation note") ?? "";
+  const [pendingNote, setPendingNote] = useState<
+    { order: any; kind: "CANCEL" | "OPEN_DISPUTE" } | null
+  >(null);
+
+  async function cancel(order: any, note?: string) {
+    if (note === undefined) {
+      setPendingNote({ order, kind: "CANCEL" });
+      return;
+    }
     setBusy(order.id);
     try {
       const response = await fetch(`/api/orders/${order.id}/actions`, {
@@ -279,16 +290,16 @@ function OrderList({
       if (!response.ok) throw new Error(payload.error ?? "Cancellation failed.");
       onChanged();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Cancellation failed.");
+      toast({ tone: "danger", title: "Cancellation failed.", description: error instanceof Error ? error.message : undefined });
     } finally {
       setBusy(null);
     }
   }
-  async function orderAction(order: any, action: string) {
-    const note =
-      action === "OPEN_DISPUTE"
-        ? window.prompt("Describe the dispute") ?? ""
-        : undefined;
+  async function orderAction(order: any, action: string, note?: string) {
+    if (action === "OPEN_DISPUTE" && note === undefined) {
+      setPendingNote({ order, kind: "OPEN_DISPUTE" });
+      return;
+    }
     setBusy(order.id);
     try {
       const response = await fetch(`/api/orders/${order.id}/actions`, {
@@ -304,13 +315,14 @@ function OrderList({
       if (!response.ok) throw new Error(payload.error ?? "Action failed.");
       onChanged();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Action failed.");
+      toast({ tone: "danger", title: "Action failed.", description: error instanceof Error ? error.message : undefined });
     } finally {
       setBusy(null);
     }
   }
   if (!orders.length) return <Empty label="No orders yet. Use Buy now from any product detail panel." />;
   return (
+    <>
     <Panel title="Purchase history">
       <div className="divide-y divide-ink-200">
         {orders.map((order) => (
@@ -384,6 +396,31 @@ function OrderList({
         ))}
       </div>
     </Panel>
+      <PromptDialog
+        open={Boolean(pendingNote)}
+        title={pendingNote?.kind === "CANCEL" ? "Cancel this order" : "Open a dispute"}
+        description={pendingNote?.order?.orderNumber}
+        label={pendingNote?.kind === "CANCEL" ? "Cancellation note" : "What went wrong"}
+        placeholder={
+          pendingNote?.kind === "CANCEL"
+            ? "Why you are cancelling. The seller sees this."
+            : "Describe the problem so an operator can act on it."
+        }
+        required={pendingNote?.kind === "OPEN_DISPUTE"}
+        confirmLabel={pendingNote?.kind === "CANCEL" ? "Cancel order" : "Open dispute"}
+        tone="danger"
+        submitting={busy === pendingNote?.order?.id}
+        onClose={() => setPendingNote(null)}
+        onSubmit={(note) => {
+          const target = pendingNote;
+          setPendingNote(null);
+          if (!target) return;
+          if (target.kind === "CANCEL") void cancel(target.order, note);
+          else void orderAction(target.order, "OPEN_DISPUTE", note);
+        }}
+      />
+
+    </>
   );
 }
 
@@ -451,23 +488,18 @@ function BidList({
   items: Array<any>;
   onChanged: () => void;
 }) {
+  const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  async function act(item: any, action: string) {
-    const counter =
-      action === "COUNTER"
-        ? {
-            quantity: Number(
-              window.prompt("Counter quantity", String(item.quantity)),
-            ),
-            pricePerUnit: Number(
-              window.prompt("Counter price per unit", String(item.pricePerUnit)),
-            ),
-          }
-        : {};
-    if (
-      action === "COUNTER" &&
-      (!counter.quantity || !counter.pricePerUnit)
-    ) {
+  const [counterTarget, setCounterTarget] = useState<any>(null);
+
+  async function act(
+    item: any,
+    action: string,
+    counter: { quantity?: number; pricePerUnit?: number; terms?: string } = {},
+  ) {
+    if (action === "COUNTER" && !Object.keys(counter).length) {
+      // Collected in a dialog, then re-entered here with the values.
+      setCounterTarget(item);
       return;
     }
     setBusy(item.id);
@@ -481,13 +513,14 @@ function BidList({
       if (!response.ok) throw new Error(payload.error ?? "Action failed.");
       onChanged();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Action failed.");
+      toast({ tone: "danger", title: "Action failed.", description: error instanceof Error ? error.message : undefined });
     } finally {
       setBusy(null);
     }
   }
   if (!items.length) return <Empty label="No bids placed yet." />;
   return (
+    <>
     <Panel title="Buyer bids">
       <div className="divide-y divide-ink-200">
         {items.map((item) => (
@@ -542,6 +575,27 @@ function BidList({
         ))}
       </div>
     </Panel>
+      <CounterOfferDialog
+        open={Boolean(counterTarget)}
+        onClose={() => setCounterTarget(null)}
+        submitting={busy === counterTarget?.id}
+        current={
+          counterTarget
+            ? {
+                quantity: counterTarget.quantity,
+                pricePerUnit: counterTarget.pricePerUnit,
+                unit: counterTarget.unit,
+                title: counterTarget.materialName,
+              }
+            : null
+        }
+        onSubmit={(counter) => {
+          const target = counterTarget;
+          setCounterTarget(null);
+          if (target) void act(target, "COUNTER", counter);
+        }}
+      />
+    </>
   );
 }
 

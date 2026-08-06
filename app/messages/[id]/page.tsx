@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
+import { PromptDialog } from "@/components/ui/PromptDialog";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Loader2, Send, ShieldAlert } from "lucide-react";
@@ -16,6 +17,7 @@ interface MessageItem {
 }
 
 export default function MessageThreadPage() {
+  const [reporting, setReporting] = useState(false);
   const params = useParams<{ id: string }>();
   const threadId = params.id;
   const [thread, setThread] = useState<any>(null);
@@ -85,11 +87,14 @@ export default function MessageThreadPage() {
 
   async function action(
     value: "CLOSE" | "REOPEN" | "BLOCK" | "REPORT",
+    details?: string,
   ) {
-    const details =
-      value === "REPORT"
-        ? window.prompt("Describe the issue for moderation") ?? ""
-        : undefined;
+    if (value === "REPORT" && details === undefined) {
+      // Reporting a thread goes to moderation, so it deserves a considered
+      // sentence rather than a browser prompt.
+      setReporting(true);
+      return;
+    }
     const response = await fetch(`/api/messages/${threadId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -108,6 +113,7 @@ export default function MessageThreadPage() {
   }
 
   return (
+    <>
     <main className="min-h-screen bg-surface-page p-4 sm:p-6">
       <MarketplaceNav />
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-4xl flex-col overflow-hidden rounded-xl border border-ink-200 bg-surface-card shadow-sm">
@@ -227,5 +233,21 @@ export default function MessageThreadPage() {
         </form>
       </div>
     </main>
+      <PromptDialog
+        open={reporting}
+        title="Report this conversation"
+        description="An operator reviews reported threads."
+        label="What is wrong"
+        placeholder="Describe what the other party sent, and why it needs review."
+        required
+        confirmLabel="Send report"
+        tone="danger"
+        onClose={() => setReporting(false)}
+        onSubmit={(details) => {
+          setReporting(false);
+          void action("REPORT", details);
+        }}
+      />
+    </>
   );
 }

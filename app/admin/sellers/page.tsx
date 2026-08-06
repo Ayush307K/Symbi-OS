@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { PromptDialog } from "@/components/ui/PromptDialog";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
@@ -25,12 +26,15 @@ export default function SellerVerificationAdminPage() {
     );
   }, [load]);
 
-  async function decide(item: any, decision: string) {
-    const note =
-      decision === "APPROVE"
-        ? window.prompt("Optional approval note") ?? ""
-        : window.prompt("Required explanation for the seller");
-    if (decision !== "APPROVE" && !note?.trim()) return;
+  // The note is collected in a dialog, then this re-enters with it.
+  const [pendingDecision, setPendingDecision] = useState<{ item: any; decision: string } | null>(null);
+
+  async function decide(item: any, decision: string, note?: string) {
+    if (note === undefined) {
+      setPendingDecision({ item, decision });
+      return;
+    }
+    if (decision !== "APPROVE" && !note.trim()) return;
     setBusy(item.id);
     try {
       const response = await fetch("/api/admin/sellers/verification", {
@@ -118,6 +122,31 @@ export default function SellerVerificationAdminPage() {
             </p>
           )}
         </div>
+      <PromptDialog
+        open={Boolean(pendingDecision)}
+        title={
+          pendingDecision?.decision === "APPROVE"
+            ? "Approve this seller"
+            : "Explain the decision"
+        }
+        description={pendingDecision?.item?.user?.companyName}
+        label={pendingDecision?.decision === "APPROVE" ? "Approval note" : "Explanation for the seller"}
+        placeholder={
+          pendingDecision?.decision === "APPROVE"
+            ? "Anything worth recording about this approval."
+            : "What the seller must change before resubmitting."
+        }
+        required={pendingDecision?.decision !== "APPROVE"}
+        confirmLabel={pendingDecision?.decision === "APPROVE" ? "Approve" : "Send decision"}
+        tone={pendingDecision?.decision === "APPROVE" ? "primary" : "danger"}
+        submitting={busy === pendingDecision?.item?.id}
+        onClose={() => setPendingDecision(null)}
+        onSubmit={(note) => {
+          const target = pendingDecision;
+          setPendingDecision(null);
+          if (target) void decide(target.item, target.decision, note);
+        }}
+      />
     </AdminShell>
   );
 }
