@@ -184,7 +184,7 @@ export function CatalogSection({ isAuthenticated, onCountChange }: CatalogSectio
             onInquire={handleInquire}
             onLoadMore={catalog.loadMore}
             onClearFilters={() => catalog.applyFilters(EMPTY_FILTERS)}
-            onRetry={() => catalog.applyFilters(catalog.filters)}
+            onRetry={catalog.refresh}
           />
         </div>
       </div>

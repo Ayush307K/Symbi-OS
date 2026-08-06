@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   type CatalogFilters,
   type MaterialListing,
@@ -21,6 +22,8 @@ import {
  */
 export function useCatalog(options: { syncUrl?: boolean } = {}) {
   const { syncUrl = true } = options;
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [listings, setListings] = useState<MaterialListing[]>([]);
   const [filters, setFilters] = useState<CatalogFilters>(EMPTY_FILTERS);
@@ -75,31 +78,21 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     [],
   );
 
-  // Hydrate from the URL on mount so a shared link opens the same result set.
+  // The URL is the single source of truth, watched through Next's own
+  // searchParams rather than window.location. A router.push does not fire
+  // popstate and does not remount a page you are already on, so listening for
+  // popstate alone meant a category link changed the address bar and nothing
+  // else until a manual refresh.
+  const search = searchParams.toString();
   useEffect(() => {
-    const initial = filtersFromSearchParams(window.location.search);
-    appliedRef.current = filtersToQueryString(initial);
-    setFilters(initial);
-    load(initial);
-  }, [load]);
-
-  // Back/forward should restore the result set, not just the address bar.
-  // Only refetch when the filters themselves differ. A history entry can carry
-  // params the catalogue does not own, and re-requesting an identical result set
-  // would flash the whole grid for no change.
-  useEffect(() => {
-    if (!syncUrl) return;
-    function onPopState() {
-      const restored = filtersFromSearchParams(window.location.search);
-      const signature = filtersToQueryString(restored);
-      if (signature === appliedRef.current) return;
-      appliedRef.current = signature;
-      setFilters(restored);
-      load(restored);
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [load, syncUrl]);
+    const next = filtersFromSearchParams(search);
+    const signature = filtersToQueryString(next);
+    // Params the catalogue does not own can change without affecting results.
+    if (signature === appliedRef.current) return;
+    appliedRef.current = signature;
+    setFilters(next);
+    load(next);
+  }, [search, load]);
 
   const applyFilters = useCallback(
     (next: CatalogFilters) => {
@@ -107,13 +100,15 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
       appliedRef.current = filtersToQueryString(next);
       if (syncUrl) {
         const query = filtersToQueryString(next);
-        // pushState, not replaceState: each applied filter set is a place the
-        // back button should return to.
-        window.history.pushState(null, "", query ? `/?${query}` : "/");
+        // Through the router, not history.pushState: raw history writes are
+        // invisible to Next's searchParams, which would leave the URL and the
+        // hook watching it permanently out of step. appliedRef is already set
+        // above, so the effect sees no change and does not load a second time.
+        router.push(query ? `/?${query}` : "/", { scroll: false });
       }
       load(next);
     },
-    [load, syncUrl],
+    [load, router, syncUrl],
   );
 
   const updateFilter = useCallback(
@@ -130,6 +125,9 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
 
   const reset = useCallback(() => applyFilters(EMPTY_FILTERS), [applyFilters]);
 
+  /** Re-requests the current filters unconditionally, for retry after an error. */
+  const refresh = useCallback(() => load(filters), [filters, load]);
+
   return {
     listings,
     filters,
@@ -141,6 +139,7 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     updateFilter,
     loadMore,
     reset,
+    refresh,
   };
 }
 
