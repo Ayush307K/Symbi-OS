@@ -9,7 +9,6 @@ import { CatalogGrid } from "./CatalogGrid";
 import {
   type CatalogFilters,
   type MaterialListing,
-  EMPTY_FILTERS,
   SORT_OPTIONS,
   countActiveFilters,
 } from "@/lib/marketplace-types";
@@ -183,7 +182,7 @@ export function CatalogSection({ isAuthenticated, onCountChange }: CatalogSectio
             onToggleSave={handleToggleSave}
             onInquire={handleInquire}
             onLoadMore={catalog.loadMore}
-            onClearFilters={() => catalog.applyFilters(EMPTY_FILTERS)}
+            onClearFilters={catalog.reset}
             onRetry={catalog.refresh}
           />
         </div>

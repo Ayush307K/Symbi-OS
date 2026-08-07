@@ -50,8 +50,17 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
   const load = useCallback(
     async (next: CatalogFilters, cursor?: string) => {
       const id = ++requestId.current;
-      if (cursor) setIsLoadingMore(true);
-      else setIsLoading(true);
+      if (cursor) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+        // A new result set has its own pagination. Holding the previous cursor
+        // while a fresh request is in flight leaves a live "load more" pointing
+        // into the old result set — today the grid hides it behind the loading
+        // state, so this is the guard rather than the symptom.
+        setNextCursor(null);
+        setHasMore(false);
+      }
       setError(null);
 
       try {
@@ -68,7 +77,14 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
         setHasMore(Boolean(payload.pageInfo?.hasMore));
       } catch (err) {
         if (id !== requestId.current) return;
-        if (!cursor) setListings([]);
+        if (!cursor) {
+          setListings([]);
+          // These filters were recorded as applied before the request was known
+          // to have worked. Left standing, a return to this same URL reads as
+          // already-loaded and is never retried — the error would survive a
+          // Back/Forward round trip with only the retry button to clear it.
+          appliedRef.current = null;
+        }
         setError(
           err instanceof Error
             ? err.message
@@ -117,12 +133,12 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     [load, router, syncUrl],
   );
 
-  const updateFilter = useCallback(
-    <K extends keyof CatalogFilters>(key: K, value: CatalogFilters[K]) => {
-      setFilters((current) => ({ ...current, [key]: value }));
-    },
-    [],
-  );
+  // There is deliberately no updateFilter here. One existed, unused: it wrote
+  // `filters` without touching appliedRef, so anything adopting it would have
+  // desynced the two — loadMore and refresh would silently request filters the
+  // user had typed but not applied, and the URL effect's comparison would run
+  // against a set that was never loaded. FilterSidebar already owns its own
+  // draft state and applies in one call, which is the right split.
 
   const loadMore = useCallback(() => {
     if (!nextCursor || isLoadingMore) return;
@@ -142,7 +158,6 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     error,
     hasMore,
     applyFilters,
-    updateFilter,
     loadMore,
     reset,
     refresh,
@@ -230,5 +245,5 @@ export function useWishlist() {
     [savedIds],
   );
 
-  return { savedIds, pendingIds, toggle, setSavedIds };
+  return { savedIds, pendingIds, toggle };
 }
