@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { ExtendedTransactionClient } from "@/lib/prisma";
 import { orderNumber } from "@/lib/marketplace";
 import { ApiError } from "@/server/http";
 import { calculateFees } from "@/server/fees";
@@ -8,7 +8,7 @@ export function invoiceNumber(orderNumberValue: string) {
 }
 
 export async function reserveAcceptedBid(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   bid: {
     id: string;
     listingId: string | null;

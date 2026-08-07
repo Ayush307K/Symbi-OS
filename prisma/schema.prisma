@@ -53,7 +53,7 @@ model Bid {
   materialId      String?
   listingId       String?
   quantity        Int
-  pricePerUnit    Float
+  pricePerUnit    Decimal @db.Decimal(14, 2)
   currency        String    @default("INR")
   unit            String    @default("ton")
   terms           String?
@@ -91,7 +91,7 @@ model OfferRevision {
   createdByUserId String
   kind            String
   quantity        Int
-  pricePerUnit    Float
+  pricePerUnit    Decimal @db.Decimal(14, 2)
   currency        String
   unit            String
   terms           String?
@@ -182,7 +182,7 @@ model MarketplaceListing {
   state                String
   country              String
   imageUrl             String    @default("")
-  pricePerUnit         Float
+  pricePerUnit         Decimal @db.Decimal(14, 2)
   priceMode            String    @default("FIXED")
   currency             String    @default("INR")
   unit                 String    @default("ton")
@@ -356,7 +356,7 @@ model CartItem {
   userId        String
   listingId     String
   quantity      Int
-  priceSnapshot Float
+  priceSnapshot Decimal @db.Decimal(14, 2)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -391,14 +391,14 @@ model PurchaseOrder {
   disputeStatus       String   @default("NONE")
   shippingAddressId   String?
   billingAddressId    String?
-  subtotal            Float
-  taxAmount           Float
-  shippingAmount      Float
-  discountAmount      Float    @default(0)
-  buyerFeeAmount      Float    @default(0)
-  sellerFeeAmount     Float    @default(0)
+  subtotal            Decimal @db.Decimal(14, 2)
+  taxAmount           Decimal @db.Decimal(14, 2)
+  shippingAmount      Decimal @db.Decimal(14, 2)
+  discountAmount      Decimal @db.Decimal(14, 2)    @default(0)
+  buyerFeeAmount      Decimal @db.Decimal(14, 2)    @default(0)
+  sellerFeeAmount     Decimal @db.Decimal(14, 2)    @default(0)
   feeVersion          String   @default("fees-v1")
-  totalAmount         Float
+  totalAmount         Decimal @db.Decimal(14, 2)
   currency            String   @default("INR")
   gstInvoice          Boolean  @default(true)
   purchaseOrderNumber String?
@@ -433,8 +433,8 @@ model PurchaseOrderItem {
   title           String
   quantity        Int
   unit            String
-  pricePerUnit    Float
-  lineTotal       Float
+  pricePerUnit    Decimal @db.Decimal(14, 2)
+  lineTotal       Decimal @db.Decimal(14, 2)
   status          String   @default("RESERVED")
   createdAt       DateTime @default(now())
 
@@ -758,7 +758,7 @@ model DemoPayment {
   id             String    @id @default(uuid())
   orderId        String
   providerRef    String    @unique
-  amount         Float
+  amount         Decimal @db.Decimal(14, 2)
   currency       String    @default("INR")
   status         String    @default("CREATED")
   idempotencyKey String    @unique
@@ -893,7 +893,7 @@ model Demand {
   subcategory   String?
   quantity      Int
   unit          String
-  maxPrice      Float?
+  maxPrice      Decimal? @db.Decimal(14, 2)
   state         String?
   city          String?
   pincode       String?

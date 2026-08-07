@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
+import prisma, {
+  type ExtendedPrismaClient,
+  type ExtendedTransactionClient,
+} from "@/lib/prisma";
 import type { JWTPayload } from "@/lib/auth";
 import {
   LISTING_UNITS,
@@ -158,7 +161,7 @@ function canonicalMaterialId(category: string, subcategory: string) {
 }
 
 export async function ensureCanonicalMaterial(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   input: {
     category: string;
     subcategory: string;
@@ -240,7 +243,7 @@ export function listingSnapshot(listing: Record<string, unknown>) {
 }
 
 export async function recordListingEvent(
-  tx: Prisma.TransactionClient,
+  tx: ExtendedTransactionClient,
   input: {
     listingId: string;
     actorUserId?: string | null;
@@ -356,7 +359,7 @@ export function assertListingSafe(listing: {
   });
 }
 
-export async function expireListings(client: PrismaClient = prisma) {
+export async function expireListings(client: ExtendedPrismaClient = prisma) {
   const now = new Date();
   const expired = await client.marketplaceListing.findMany({
     where: {
