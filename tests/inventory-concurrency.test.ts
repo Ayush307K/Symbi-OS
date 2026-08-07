@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "@/lib/prisma";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { reserveAcceptedBid } from "@/server/orders";
 
@@ -50,7 +50,7 @@ function withPool(url: string) {
   return parsed.toString();
 }
 
-const prisma = new PrismaClient({ datasourceUrl: withPool(TEST_DATABASE_URL) });
+const prisma = createPrismaClient({ datasourceUrl: withPool(TEST_DATABASE_URL) });
 
 // Skip rather than fail when the container is not running, so the suite stays
 // green for anyone who has not started it. `docker compose up -d` enables it.

@@ -1,11 +1,11 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "@/lib/prisma";
 
 // Connect directly rather than through the application's pooled URL. A one-off
 // bulk update should not compete for the pooler's client slots with the running
 // app, and DIRECT_URL is the connection intended for exactly this kind of
 // maintenance work.
-const prisma = new PrismaClient({
+const prisma = createPrismaClient({
   datasourceUrl: process.env.DIRECT_URL || process.env.DATABASE_URL,
 });
 

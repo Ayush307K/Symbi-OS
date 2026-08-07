@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "@/lib/prisma";
 
 /**
  * Walks one complete marketplace transaction against a running server, using
@@ -19,7 +19,7 @@ const BASE = process.argv[2] || "http://localhost:3000";
 
 // Only used to grant this run's moderator. Administration is deliberately not
 // reachable over HTTP — see scripts/grant-admin.ts for the same reasoning.
-const prisma = new PrismaClient({
+const prisma = createPrismaClient({
   datasourceUrl: process.env.TEST_DATABASE_URL || process.env.DIRECT_URL || process.env.DATABASE_URL,
 });
 
