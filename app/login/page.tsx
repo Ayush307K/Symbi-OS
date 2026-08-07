@@ -55,14 +55,22 @@ export default function LoginPage() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <Input
-          label="Password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+        <div>
+          <Input
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <Link
+            href="/forgot-password"
+            className="mt-1.5 inline-block rounded-sm text-[12.5px] font-medium text-ink-500 underline-offset-2 hover:text-copper-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+          >
+            Forgot your password?
+          </Link>
+        </div>
 
         <Button type="submit" variant="primary" size="lg" fullWidth loading={isLoading}>
           Sign in

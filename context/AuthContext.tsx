@@ -39,7 +39,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 //  Constants
 // ---------------------------------------------------------------------------
 
-const AUTH_PAGES = ["/login", "/register"];
+const AUTH_PAGES = ["/login", "/register", "/forgot-password", "/reset-password"];
 
 // Routes that are neither gated nor auth pages. The middleware lets these
 // through; this keeps the client from redirecting them away a moment later.
