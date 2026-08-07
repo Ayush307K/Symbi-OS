@@ -131,7 +131,7 @@ export function MarketplaceNav({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => router.push(isAuthenticated ? "/account" : "/register")}
+            onClick={() => router.push(isAuthenticated ? "/rfq" : "/register?next=/rfq")}
           >
             Post RFQ
           </Button>
