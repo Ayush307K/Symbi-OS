@@ -16,6 +16,7 @@ import {
   recordListingEvent,
 } from "@/server/listings/lifecycle";
 import { recordSafetyEvent } from "@/server/safety";
+import { matchListingToOpenDemands } from "@/server/matching";
 
 const decisionSchema = z.object({
   listingId: z.string().min(1),
@@ -171,34 +172,34 @@ export async function PATCH(request: NextRequest) {
     );
 
     if (body.decision === "APPROVE") {
-      const demands = await prisma.demand.findMany({
-        where: { materialId: listing.materialId },
-        select: { userId: true, companyId: true },
-        take: 100,
-      });
-      const companyIds = [
-        ...new Set(demands.map((demand) => demand.companyId)),
-      ];
-      const companyUsers = await prisma.user.findMany({
-        where: { companyId: { in: companyIds } },
-        select: { id: true },
-      });
-      const buyerIds = new Set([
-        ...demands.map((demand) => demand.userId).filter(Boolean),
-        ...companyUsers.map((user) => user.id),
-      ]);
-      buyerIds.delete(sellerUser?.id || "");
-      await Promise.all(
-        [...buyerIds].map((userId) =>
-          notify(
-            userId!,
+      // Scored against the buyer's own constraints, not an ID equality, and
+      // written to ListingMatch so /rfq/[id] agrees with the notification.
+      const matches = await matchListingToOpenDemands(updated.id);
+      const notified = new Set<string>();
+      for (const match of matches) {
+        const recipients = match.userId
+          ? [match.userId]
+          : (
+              await prisma.user.findMany({
+                where: { companyId: match.companyId },
+                select: { id: true },
+              })
+            ).map((user) => user.id);
+        for (const userId of recipients) {
+          if (!userId || userId === sellerUser?.id || notified.has(userId)) continue;
+          notified.add(userId);
+          await notify(
+            userId,
             "MATCHED_LISTING_ACTIVATED",
-            "A matching listing is now active",
-            `${updated.title} matches material demand recorded by your company.`,
-            `/products/${updated.slug}`,
-          ),
-        ),
-      );
+            `New match for "${match.query}"`,
+            // Skip the leading "Exact safe-category match": it is on every
+            // match and tells the buyer nothing. The grade, price and distance
+            // lines are what decide whether this is worth opening.
+            `${updated.title} scores ${match.score}/100. ${(match.explanations.slice(1, 3).join(". ") || match.explanations[0])}.`,
+            `/rfq/${match.demandId}`,
+          );
+        }
+      }
     }
 
     return NextResponse.json({ listing: updated });
