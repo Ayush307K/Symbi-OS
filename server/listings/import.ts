@@ -1,3 +1,4 @@
+import { normalizeListingUnit } from "@/lib/listing-constants";
 import prisma from "@/lib/prisma";
 import { isSafeMaterial } from "@/server/safety";
 import {
@@ -120,7 +121,9 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         // price indistinguishable from a real one of ₹0.
         priceMode: row.price > 0 ? "FIXED" : "ON_REQUEST",
         currency: row.currency || "INR",
-        unit: row.unit || "lot",
+        // Free text from the source is mapped onto the canonical enum here;
+        // storing "Tons" makes the listing invisible to every RFQ for "ton".
+        unit: normalizeListingUnit(row.unit) ?? "lot",
         minOrderQuantity: 1,
         quantityAvailable: row.quantity,
         leadTimeDays: 0,
@@ -159,7 +162,9 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         // price indistinguishable from a real one of ₹0.
         priceMode: row.price > 0 ? "FIXED" : "ON_REQUEST",
         currency: row.currency || "INR",
-        unit: row.unit || "lot",
+        // Free text from the source is mapped onto the canonical enum here;
+        // storing "Tons" makes the listing invisible to every RFQ for "ton".
+        unit: normalizeListingUnit(row.unit) ?? "lot",
         quantityAvailable: row.quantity,
         description: row.description,
         status: "ACTIVE",

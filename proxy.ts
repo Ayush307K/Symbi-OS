@@ -1,7 +1,7 @@
 import { jwtVerify } from "jose/jwt/verify";
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/register", "/login"];
+const PUBLIC_PATHS = ["/register", "/login", "/forgot-password", "/reset-password"];
 
 // Ungated, but not auth pages: reachable signed in or out, and never redirected
 // away from either way. The design-system reference is static and reads no

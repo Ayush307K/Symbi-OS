@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   type CatalogFilters,
   type MaterialListing,
+  catalogNeedsReload,
   EMPTY_FILTERS,
   filtersFromSearchParams,
   filtersToParams,
@@ -21,6 +23,8 @@ import {
  */
 export function useCatalog(options: { syncUrl?: boolean } = {}) {
   const { syncUrl = true } = options;
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [listings, setListings] = useState<MaterialListing[]>([]);
   const [filters, setFilters] = useState<CatalogFilters>(EMPTY_FILTERS);
@@ -36,13 +40,27 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
 
   // The filter set currently rendered, as a query string. Used to tell a real
   // filter change from a URL change the catalogue does not own.
-  const appliedRef = useRef<string>("");
+  //
+  // null, not "", because "" is the signature of an unfiltered catalogue — the
+  // home page. Starting at "" made the first effect run believe those filters
+  // were already applied, so the opening request was never sent and the page
+  // sat on its skeletons forever. Any URL carrying a filter masked it.
+  const appliedRef = useRef<string | null>(null);
 
   const load = useCallback(
     async (next: CatalogFilters, cursor?: string) => {
       const id = ++requestId.current;
-      if (cursor) setIsLoadingMore(true);
-      else setIsLoading(true);
+      if (cursor) {
+        setIsLoadingMore(true);
+      } else {
+        setIsLoading(true);
+        // A new result set has its own pagination. Holding the previous cursor
+        // while a fresh request is in flight leaves a live "load more" pointing
+        // into the old result set — today the grid hides it behind the loading
+        // state, so this is the guard rather than the symptom.
+        setNextCursor(null);
+        setHasMore(false);
+      }
       setError(null);
 
       try {
@@ -59,7 +77,14 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
         setHasMore(Boolean(payload.pageInfo?.hasMore));
       } catch (err) {
         if (id !== requestId.current) return;
-        if (!cursor) setListings([]);
+        if (!cursor) {
+          setListings([]);
+          // These filters were recorded as applied before the request was known
+          // to have worked. Left standing, a return to this same URL reads as
+          // already-loaded and is never retried — the error would survive a
+          // Back/Forward round trip with only the retry button to clear it.
+          appliedRef.current = null;
+        }
         setError(
           err instanceof Error
             ? err.message
@@ -75,31 +100,21 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     [],
   );
 
-  // Hydrate from the URL on mount so a shared link opens the same result set.
+  // The URL is the single source of truth, watched through Next's own
+  // searchParams rather than window.location. A router.push does not fire
+  // popstate and does not remount a page you are already on, so listening for
+  // popstate alone meant a category link changed the address bar and nothing
+  // else until a manual refresh.
+  const search = searchParams.toString();
   useEffect(() => {
-    const initial = filtersFromSearchParams(window.location.search);
-    appliedRef.current = filtersToQueryString(initial);
-    setFilters(initial);
-    load(initial);
-  }, [load]);
-
-  // Back/forward should restore the result set, not just the address bar.
-  // Only refetch when the filters themselves differ. A history entry can carry
-  // params the catalogue does not own, and re-requesting an identical result set
-  // would flash the whole grid for no change.
-  useEffect(() => {
-    if (!syncUrl) return;
-    function onPopState() {
-      const restored = filtersFromSearchParams(window.location.search);
-      const signature = filtersToQueryString(restored);
-      if (signature === appliedRef.current) return;
-      appliedRef.current = signature;
-      setFilters(restored);
-      load(restored);
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [load, syncUrl]);
+    const next = filtersFromSearchParams(search);
+    const signature = filtersToQueryString(next);
+    // Params the catalogue does not own can change without affecting results.
+    if (!catalogNeedsReload(signature, appliedRef.current)) return;
+    appliedRef.current = signature;
+    setFilters(next);
+    load(next);
+  }, [search, load]);
 
   const applyFilters = useCallback(
     (next: CatalogFilters) => {
@@ -107,21 +122,23 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
       appliedRef.current = filtersToQueryString(next);
       if (syncUrl) {
         const query = filtersToQueryString(next);
-        // pushState, not replaceState: each applied filter set is a place the
-        // back button should return to.
-        window.history.pushState(null, "", query ? `/?${query}` : "/");
+        // Through the router, not history.pushState: raw history writes are
+        // invisible to Next's searchParams, which would leave the URL and the
+        // hook watching it permanently out of step. appliedRef is already set
+        // above, so the effect sees no change and does not load a second time.
+        router.push(query ? `/?${query}` : "/", { scroll: false });
       }
       load(next);
     },
-    [load, syncUrl],
+    [load, router, syncUrl],
   );
 
-  const updateFilter = useCallback(
-    <K extends keyof CatalogFilters>(key: K, value: CatalogFilters[K]) => {
-      setFilters((current) => ({ ...current, [key]: value }));
-    },
-    [],
-  );
+  // There is deliberately no updateFilter here. One existed, unused: it wrote
+  // `filters` without touching appliedRef, so anything adopting it would have
+  // desynced the two — loadMore and refresh would silently request filters the
+  // user had typed but not applied, and the URL effect's comparison would run
+  // against a set that was never loaded. FilterSidebar already owns its own
+  // draft state and applies in one call, which is the right split.
 
   const loadMore = useCallback(() => {
     if (!nextCursor || isLoadingMore) return;
@@ -129,6 +146,9 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
   }, [filters, isLoadingMore, load, nextCursor]);
 
   const reset = useCallback(() => applyFilters(EMPTY_FILTERS), [applyFilters]);
+
+  /** Re-requests the current filters unconditionally, for retry after an error. */
+  const refresh = useCallback(() => load(filters), [filters, load]);
 
   return {
     listings,
@@ -138,9 +158,9 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     error,
     hasMore,
     applyFilters,
-    updateFilter,
     loadMore,
     reset,
+    refresh,
   };
 }
 
@@ -225,5 +245,5 @@ export function useWishlist() {
     [savedIds],
   );
 
-  return { savedIds, pendingIds, toggle, setSavedIds };
+  return { savedIds, pendingIds, toggle };
 }

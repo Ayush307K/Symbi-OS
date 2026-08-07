@@ -17,21 +17,23 @@ export interface MarketplaceNavProps {
   category?: string;
   locationLabel?: string;
   onSearch?: (query: string, category: string) => void;
-  onCategorySelect?: (category: string) => void;
 }
 
 /**
- * The shared marketplace chrome: identity, delivery location, scoped search,
- * and the category rail. Every buyer-facing screen sits under this, so the
- * search field is the one place a query is entered and nothing below needs to
- * repeat it.
+ * The shared marketplace chrome: identity, delivery location, and scoped
+ * search. Every buyer-facing screen sits under this, so the search field is
+ * the one place a query is entered and nothing below repeats it.
+ *
+ * There is no category rail. Category is a filter, and the catalogue's own
+ * sidebar owns it — two controls for one piece of state have to be kept in
+ * agreement forever, and the header copy was redundant on the only page where
+ * filtering happens.
  */
 export function MarketplaceNav({
   query = "",
   category = "",
   locationLabel = "All India",
   onSearch,
-  onCategorySelect,
 }: MarketplaceNavProps) {
   const router = useRouter();
   // Read auth here rather than take a prop: every screen mounts this nav, and a
@@ -129,7 +131,7 @@ export function MarketplaceNav({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => router.push(isAuthenticated ? "/account" : "/register")}
+            onClick={() => router.push(isAuthenticated ? "/rfq" : "/register?next=/rfq")}
           >
             Post RFQ
           </Button>
@@ -148,32 +150,6 @@ export function MarketplaceNav({
         </div>
       </div>
 
-      {/* Category rail. Scrolls horizontally rather than wrapping into a second
-          row, so the header height never changes as the viewport narrows. */}
-      <div className="border-t border-ink-200 bg-surface-page">
-        <div className="scrollbar-thin mx-auto flex max-w-[1440px] items-center gap-1 overflow-x-auto px-4 sm:px-6">
-          <span className="flex shrink-0 items-center gap-1.5 py-2 pr-3 text-[12px] font-bold text-brand">
-            <span aria-hidden="true">◆</span> Live inventory
-          </span>
-          {SAFE_CATEGORIES.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => onCategorySelect?.(item)}
-              aria-current={category === item || undefined}
-              className={cn(
-                "shrink-0 whitespace-nowrap rounded-control px-2.5 py-2 text-[12.5px] font-semibold transition-colors",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-copper-700",
-                category === item
-                  ? "text-copper-800"
-                  : "text-ink-600 hover:text-copper-800",
-              )}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
     </header>
   );
 }
