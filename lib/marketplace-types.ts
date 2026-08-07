@@ -124,6 +124,19 @@ export function filtersToQueryString(filters: CatalogFilters): string {
   return params.toString();
 }
 
+/**
+ * Whether a URL change should make the catalogue refetch.
+ *
+ * `applied` is null until the first load completes. That distinction is the
+ * whole point: an unfiltered catalogue has the signature "", so comparing
+ * against a "" starting value made the home page look like it had already
+ * loaded the filters it was being asked to load, and it never issued the
+ * opening request. Only a URL carrying a filter escaped it.
+ */
+export function catalogNeedsReload(signature: string, applied: string | null) {
+  return applied === null || signature !== applied;
+}
+
 export function filtersFromSearchParams(search: string): CatalogFilters {
   const params = new URLSearchParams(search);
   const sort = params.get("sort");

@@ -1,3 +1,4 @@
+import { catalogNeedsReload, filtersToQueryString, filtersFromSearchParams } from "@/lib/marketplace-types";
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -168,5 +169,35 @@ describe.skipIf(!databaseReachable)("unpriced listings in the catalogue", () => 
       select: { id: true },
     });
     expect(rows.map((row) => row.id).sort()).toEqual([CHEAP, DEAR].sort());
+  });
+});
+
+/**
+ * The home page once sat on its skeletons forever: the catalogue tracked which
+ * filters it had applied in a ref starting at "", and "" is exactly the
+ * signature of an unfiltered catalogue, so the opening request was skipped as
+ * already-applied. Only a URL carrying a filter escaped it, which is why it
+ * survived review — every deep link worked.
+ */
+describe("catalogNeedsReload", () => {
+  it("loads on first run even when the catalogue is unfiltered", () => {
+    const signature = filtersToQueryString(filtersFromSearchParams(""));
+    expect(signature).toBe("");
+    expect(catalogNeedsReload(signature, null)).toBe(true);
+  });
+
+  it("loads on first run for a filtered URL too", () => {
+    const signature = filtersToQueryString(filtersFromSearchParams("category=Rubber"));
+    expect(catalogNeedsReload(signature, null)).toBe(true);
+  });
+
+  it("does not reload when the filters are unchanged", () => {
+    expect(catalogNeedsReload("category=Rubber", "category=Rubber")).toBe(false);
+    expect(catalogNeedsReload("", "")).toBe(false);
+  });
+
+  it("reloads when the filters change, including back to unfiltered", () => {
+    expect(catalogNeedsReload("category=Glass", "category=Rubber")).toBe(true);
+    expect(catalogNeedsReload("", "category=Rubber")).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   type CatalogFilters,
   type MaterialListing,
+  catalogNeedsReload,
   EMPTY_FILTERS,
   filtersFromSearchParams,
   filtersToParams,
@@ -39,7 +40,12 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
 
   // The filter set currently rendered, as a query string. Used to tell a real
   // filter change from a URL change the catalogue does not own.
-  const appliedRef = useRef<string>("");
+  //
+  // null, not "", because "" is the signature of an unfiltered catalogue — the
+  // home page. Starting at "" made the first effect run believe those filters
+  // were already applied, so the opening request was never sent and the page
+  // sat on its skeletons forever. Any URL carrying a filter masked it.
+  const appliedRef = useRef<string | null>(null);
 
   const load = useCallback(
     async (next: CatalogFilters, cursor?: string) => {
@@ -88,7 +94,7 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
     const next = filtersFromSearchParams(search);
     const signature = filtersToQueryString(next);
     // Params the catalogue does not own can change without affecting results.
-    if (signature === appliedRef.current) return;
+    if (!catalogNeedsReload(signature, appliedRef.current)) return;
     appliedRef.current = signature;
     setFilters(next);
     load(next);
