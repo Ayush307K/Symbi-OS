@@ -22,9 +22,19 @@ import { Prisma, PrismaClient } from "@prisma/client";
  * Each field is spelled out rather than generated in a loop: Prisma infers the
  * result types from the literal keys, and a computed key erases them.
  */
-const toNumber = (value: Prisma.Decimal) => value.toNumber();
-const toNullableNumber = (value: Prisma.Decimal | null) =>
-  value === null ? null : value.toNumber();
+/**
+ * Accepts Decimal or a plain number, deliberately.
+ *
+ * Code and migration cannot reach production in the same instant. Between the
+ * two there is a window where the deployed client and the live column disagree:
+ * calling .toNumber() on a float column's plain number throws, and the reverse
+ * order breaks the client that still expects double precision. Tolerating both
+ * makes the deploy order a matter of preference rather than an outage.
+ */
+const toNumber = (value: Prisma.Decimal | number) =>
+  typeof value === "number" ? value : value.toNumber();
+const toNullableNumber = (value: Prisma.Decimal | number | null) =>
+  value === null ? null : toNumber(value);
 
 export function createPrismaClient(
   options?: ConstructorParameters<typeof PrismaClient>[0],
