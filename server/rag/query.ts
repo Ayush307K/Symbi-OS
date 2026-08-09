@@ -10,27 +10,57 @@ export interface RagCitation {
   excerpt: string;
 }
 
-function tokens(value: string) {
-  return [
-    ...new Set(
-      value
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter((token) => token.length > 2)
-    ),
-  ];
+/**
+ * Fold a token to a form that matches its own plural.
+ *
+ * Suppliers write "flakes" where a buyer types "flake", and "regrinds" for
+ * "regrind". Stripping a trailing s is enough for the material vocabulary here.
+ * Words ending in "ss" are left alone — glass and brass are categories, and
+ * "glas" would match neither. Short tokens are left alone too, so "ash" is
+ * never folded into something else.
+ */
+function stem(token: string) {
+  if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss")) {
+    return token.slice(0, -1);
+  }
+  return token;
 }
 
+function tokenSet(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 2)
+      .map(stem),
+  );
+}
+
+/**
+ * Overlap between the query's words and the document's, title weighted double.
+ *
+ * Matching is on whole tokens, not substrings. Substring matching scored "fly
+ * ash" against "Hot Washed HDPE" — "ash" sits inside "washed" — so a plastics
+ * listing outranked half the real fly-ash results. The same flaw put "pet"
+ * inside "carpet", "ton" inside "carton" and "lead" inside "leader", which in a
+ * marketplace where lead is a regulated material is a safety-adjacent wrong
+ * answer rather than a ranking nuisance.
+ *
+ * The scale is unchanged: at most 3 points per query term, normalised to 0..1.
+ */
 export function lexicalScore(query: string, content: string, title: string) {
-  const terms = tokens(query);
+  const terms = [...tokenSet(query)];
   if (!terms.length) return 0;
-  const haystack = content.toLowerCase();
-  const titleText = title.toLowerCase();
-  return terms.reduce(
-    (score, term) =>
-      score + (titleText.includes(term) ? 2 : 0) + (haystack.includes(term) ? 1 : 0),
-    0
-  ) / (terms.length * 3);
+  const contentTokens = tokenSet(content);
+  const titleTokens = tokenSet(title);
+  return (
+    terms.reduce(
+      (score, term) =>
+        score + (titleTokens.has(term) ? 2 : 0) + (contentTokens.has(term) ? 1 : 0),
+      0,
+    ) /
+    (terms.length * 3)
+  );
 }
 
 export function cosine(left: number[], right: number[]) {

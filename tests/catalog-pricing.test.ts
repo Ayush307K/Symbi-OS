@@ -201,3 +201,28 @@ describe("catalogNeedsReload", () => {
     expect(catalogNeedsReload("", "category=Rubber")).toBe(true);
   });
 });
+
+/**
+ * Personalization changes which endpoint a filter set is fetched from, so two
+ * requests with identical filters are not the same request. `personalized`
+ * resolves after the first render — auth is still loading — and the flip from
+ * false to true must therefore count as a reload.
+ */
+describe("catalog signature covers personalization", () => {
+  const sig = (personalized: boolean, query: string) =>
+    `${personalized ? "feed" : "catalog"}|${query}`;
+
+  it("reloads when personalization resolves after auth", () => {
+    const applied = sig(false, "");
+    expect(catalogNeedsReload(sig(true, ""), applied)).toBe(true);
+  });
+
+  it("still does not reload when nothing has changed", () => {
+    expect(catalogNeedsReload(sig(true, ""), sig(true, ""))).toBe(false);
+    expect(catalogNeedsReload(sig(false, "category=Rubber"), sig(false, "category=Rubber"))).toBe(false);
+  });
+
+  it("reloads on a filter change within the same mode", () => {
+    expect(catalogNeedsReload(sig(true, "category=Glass"), sig(true, ""))).toBe(true);
+  });
+});
