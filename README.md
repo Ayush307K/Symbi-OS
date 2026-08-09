@@ -166,6 +166,10 @@ The complete template is in `.env.example`.
   the same cited retrieval pipeline returns an extractive answer.
 - `OPENAI_RAG_MODEL`: defaults to `gpt-5.6-terra`.
 - `OPENAI_EMBEDDING_MODEL`: defaults to `text-embedding-3-small`.
+- `LISTING_EMBEDDING_PROVIDER`: ranked-feed embedding adapter; defaults to
+  `openai` and can be replaced through the provider registry.
+- `LISTING_EMBEDDING_MODEL`: model used by that adapter; the built-in OpenAI
+  adapter requests 768 output dimensions.
 
 ### JSON listing API contract
 
@@ -223,6 +227,70 @@ compliance/upcycler data into versioned knowledge documents and chunks. Query
 `POST /api/rag/query` or use the existing Copilot UI. Responses are grounded in
 retrieved chunks and return explicit source citations. Source text is treated
 as untrusted data to reduce prompt-injection risk.
+
+### Ranked buyer feed
+
+Authenticated buyers receive the ranked feed from `GET /api/feed`; signed-out
+catalogue traffic and every explicit search/filter continue to use
+`GET /api/materials`. The response keeps the catalogue's cursor-paginated
+`{ items, pageInfo }` contract. `relevanceScore` is a relevance score, not a
+calibrated probability of purchase.
+
+Retrieval is deliberately bounded for the hot path:
+
+1. Look up or refresh the buyer demand-profile embedding.
+2. Retrieve the top 60 listing seeds with pgvector cosine distance.
+3. Expand their material IDs through `material_edges` with ordinary SQL joins,
+   limited to one or two hops.
+4. Load at most 240 candidates, calculate the signals in batches, score, and
+   sort by relevance with a deterministic ID tie-break.
+
+The scorer blends these signals:
+
+- semantic fit between the cached buyer profile and listing embedding;
+- `co_purchased`, `substitutable`, and `category_affinity` graph edges;
+- freight/location distance, price fit, quantity match, listing freshness, and
+  seller reliability (reviews, response rate, fulfilled orders, approved
+  onboarding, and supporting documents).
+
+For scrap, the business signals intentionally contribute 70% of the normal
+score. A buyer with no behavioral history uses only semantic fit, location,
+and freshness. All weights, normalization thresholds, retrieval limits, and
+graph-decay settings live in the single documented object in
+`server/feed/config.ts`; tune that object rather than introducing constants in
+queries or routes.
+
+Material edges are refreshed with:
+
+```bash
+npm run feed:refresh-edges
+```
+
+Co-purchase edges use material pairs in confirmed/paid/fulfilled orders.
+Category-affinity edges use materials purchased by the same buyer across
+orders. Substitution edges use the existing material taxonomy and active
+listing supply. Behavioral evidence is weighted as
+`exp(-ln(2) * ageDays / halfLifeDays)`, accumulated by frequency, and bounded
+with `1 - exp(-signal / saturation)`; taxonomy edges also vary with supply
+frequency and freshness. The half-life and saturation are tunable in the same
+config object. Schedule this command after order ingestion or as a periodic
+job; the refresh is atomic and removes stale edges from the previous run.
+
+Listings created or edited through seller APIs, and listings updated by the
+real-provider importer, attempt a 768-dimensional embedding on write. Provider
+failure does not block the listing transaction; missing vectors are resumable
+with:
+
+```bash
+npm run feed:backfill-embeddings
+# Optional controls:
+npm run feed:backfill-embeddings -- --batch-size 100 --concurrency 6 --after <listing-id>
+```
+
+`LISTING_EMBEDDING_PROVIDER` selects an adapter registered through the
+`EmbeddingProvider` interface. The built-in `openai` adapter uses
+`LISTING_EMBEDDING_MODEL=text-embedding-3-small` and requests 768 dimensions;
+another provider can be registered without changing listing or feed code.
 
 ## Quality commands
 

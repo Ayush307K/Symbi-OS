@@ -18,6 +18,8 @@
     "ingest": "npm run ingest:real",
     "ingest:real": "tsx scripts/import-real-listings.ts",
     "rag:index": "tsx scripts/rebuild-rag-index.ts",
+    "feed:backfill-embeddings": "tsx scripts/backfill-listing-embeddings.ts",
+    "feed:refresh-edges": "tsx scripts/refresh-material-edges.ts",
     "onboarding:cleanup-documents": "tsx scripts/cleanup-expired-onboarding-documents.ts",
     "postinstall": "prisma generate",
     "check:env": "tsx scripts/check-env.ts",
@@ -28,6 +30,7 @@
   "license": "ISC",
   "description": "",
   "overrides": {
+    "nanoid": "3.3.18",
     "postcss": "$postcss",
     "sharp": "0.35.3"
   },
