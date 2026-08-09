@@ -37,10 +37,16 @@ export function catalogOrderBy(
  */
 export const fixedPriceOnly = { priceMode: "FIXED" } as const;
 
+export const PUBLIC_LISTING_SOURCE_TYPES = [
+  "real_api",
+  "real_public_provider",
+  "seller_submitted",
+] as const;
+
 export const publicListingWhere = {
   status: { in: ["ACTIVE", "active"] },
   sourceType: {
-    in: ["real_api", "real_public_provider", "seller_submitted"],
+    in: [...PUBLIC_LISTING_SOURCE_TYPES],
   },
   category: { in: [...SAFE_CATEGORIES] },
   material: { toxicityLevel: { in: ["none", "low"] } },

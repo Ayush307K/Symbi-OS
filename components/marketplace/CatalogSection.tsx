@@ -28,14 +28,19 @@ const SELLER_SAFE_CATEGORIES = [
 
 export interface CatalogSectionProps {
   isAuthenticated: boolean;
+  personalized?: boolean;
   /** Lets the parent mirror the live count, e.g. into the hero. */
   onCountChange?: (count: number) => void;
 }
 
-export function CatalogSection({ isAuthenticated, onCountChange }: CatalogSectionProps) {
+export function CatalogSection({
+  isAuthenticated,
+  personalized = false,
+  onCountChange,
+}: CatalogSectionProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const catalog = useCatalog();
+  const catalog = useCatalog({ personalized });
   const wishlist = useWishlist();
   const [inquiryPendingId, setInquiryPendingId] = useState<string | null>(null);
 

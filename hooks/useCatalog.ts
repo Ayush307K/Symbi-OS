@@ -13,7 +13,7 @@ import {
 } from "@/lib/marketplace-types";
 
 /**
- * Owns the catalog's data: GET /api/materials, its cursor pagination, and the
+ * Owns the catalog's data, its cursor pagination, and the
  * URL query string that makes a result set shareable.
  *
  * The request and response handling is carried over from app/page.tsx
@@ -21,8 +21,10 @@ import {
  * What is new is only that filters round-trip through the URL and that
  * "load more" appends using the cursor the API already returned.
  */
-export function useCatalog(options: { syncUrl?: boolean } = {}) {
-  const { syncUrl = true } = options;
+export function useCatalog(
+  options: { syncUrl?: boolean; personalized?: boolean } = {},
+) {
+  const { syncUrl = true, personalized = false } = options;
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -64,7 +66,14 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
       setError(null);
 
       try {
-        const res = await fetch(`/api/materials?${filtersToParams(next, cursor)}`);
+        // Personalization owns only the unfiltered buyer feed. Any explicit
+        // query/filter stays on /api/materials, so this does not silently turn
+        // into the search-ranking feature that is intentionally out of scope.
+        const endpoint =
+          personalized && filtersToQueryString(next) === ""
+            ? "/api/feed"
+            : "/api/materials";
+        const res = await fetch(`${endpoint}?${filtersToParams(next, cursor)}`);
         if (!res.ok) throw new Error("Failed to fetch marketplace listings");
         const payload = await res.json();
         if (id !== requestId.current) return;
@@ -97,7 +106,7 @@ export function useCatalog(options: { syncUrl?: boolean } = {}) {
         }
       }
     },
-    [],
+    [personalized],
   );
 
   // The URL is the single source of truth, watched through Next's own

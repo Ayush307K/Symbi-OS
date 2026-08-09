@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16
+    # PostgreSQL 16 plus pgvector; pinned so local and CI migrations match.
+    image: pgvector/pgvector:0.8.2-pg16
     container_name: symbi-postgres
     restart: unless-stopped
     environment:

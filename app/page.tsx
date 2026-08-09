@@ -43,7 +43,10 @@ export default function Home() {
           />
         ) : null}
 
-        <CatalogSection isAuthenticated={Boolean(user)} />
+        <CatalogSection
+          isAuthenticated={Boolean(user)}
+          personalized={user?.role === "BUYER" || user?.role === "BOTH"}
+        />
       </main>
 
       <MarketplaceFooter />

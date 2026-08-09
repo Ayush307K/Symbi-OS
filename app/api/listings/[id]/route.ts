@@ -21,6 +21,7 @@ import {
   classifyMaterialSafety,
   recordSafetyEvent,
 } from "@/server/safety";
+import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
 
 export async function GET(
   _request: NextRequest,
@@ -155,6 +156,7 @@ export async function PATCH(
       });
       return next;
     });
+    await tryRefreshListingEmbedding(updated.id);
     return NextResponse.json({
       listing: updated,
       message:

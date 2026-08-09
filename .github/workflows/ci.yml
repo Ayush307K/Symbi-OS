@@ -55,7 +55,8 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     services:
       postgres:
-        image: postgres:16
+        # Includes the vector extension used by the ranked marketplace feed.
+        image: pgvector/pgvector:0.8.2-pg16
         env:
           POSTGRES_USER: symbi
           POSTGRES_PASSWORD: symbi_local_dev
