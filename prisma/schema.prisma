@@ -40,6 +40,7 @@ model User {
   listingAssets        ListingAsset[]
   listingEvents        ListingEvent[]       @relation("ListingEventActor")
   demands              Demand[]
+  demandProfile        BuyerDemandProfile?
   onboardingDocuments  OnboardingDocument[]
   safetyEvents         SafetyEvent[]
   company              Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
@@ -53,7 +54,7 @@ model Bid {
   materialId      String?
   listingId       String?
   quantity        Int
-  pricePerUnit    Decimal @db.Decimal(14, 2)
+  pricePerUnit    Decimal   @db.Decimal(14, 2)
   currency        String    @default("INR")
   unit            String    @default("ton")
   terms           String?
@@ -91,7 +92,7 @@ model OfferRevision {
   createdByUserId String
   kind            String
   quantity        Int
-  pricePerUnit    Decimal @db.Decimal(14, 2)
+  pricePerUnit    Decimal  @db.Decimal(14, 2)
   currency        String
   unit            String
   terms           String?
@@ -161,16 +162,18 @@ model WasteMaterial {
   complementedBy MaterialComplement[] @relation("ComplementTarget")
   listings       MarketplaceListing[]
   demands        Demand[]
+  outgoingEdges  MaterialEdge[]       @relation("MaterialEdgeSource")
+  incomingEdges  MaterialEdge[]       @relation("MaterialEdgeTarget")
 }
 
 model MarketplaceListing {
-  id                   String    @id
+  id                   String                      @id
   title                String
-  slug                 String    @unique
-  sourceType           String    @default("synthetic")
+  slug                 String                      @unique
+  sourceType           String                      @default("synthetic")
   sourceName           String?
   sourceUrl            String?
-  externalId           String?   @unique
+  externalId           String?                     @unique
   rawQuantityText      String?
   rawLocationText      String?
   materialId           String
@@ -181,36 +184,36 @@ model MarketplaceListing {
   city                 String
   state                String
   country              String
-  imageUrl             String    @default("")
-  pricePerUnit         Decimal @db.Decimal(14, 2)
-  priceMode            String    @default("FIXED")
-  currency             String    @default("INR")
-  unit                 String    @default("ton")
+  imageUrl             String                      @default("")
+  pricePerUnit         Decimal                     @db.Decimal(14, 2)
+  priceMode            String                      @default("FIXED")
+  currency             String                      @default("INR")
+  unit                 String                      @default("ton")
   minOrderQuantity     Int
-  lotIncrement         Int       @default(1)
+  lotIncrement         Int                         @default(1)
   quantityAvailable    Int
   leadTimeDays         Int
   rating               Float
   responseRate         Int
-  verified             Boolean   @default(true)
-  tradeAssurance       Boolean   @default(true)
+  verified             Boolean                     @default(true)
+  tradeAssurance       Boolean                     @default(true)
   yearsActive          Int
   ordersCompleted      Int
   description          String
   packaging            String
-  handlingRequirements String    @default("")
+  handlingRequirements String                      @default("")
   paymentTerms         String
   pincode              String?
   latitude             Float?
   longitude            Float?
   availableFrom        DateTime?
   availableUntil       DateTime?
-  safetyDeclaration    Boolean   @default(false)
-  qualityDeclaration   Boolean   @default(false)
-  ownershipDeclaration Boolean   @default(false)
-  authorityDeclaration Boolean   @default(false)
-  status               String    @default("DRAFT")
-  version              Int       @default(1)
+  safetyDeclaration    Boolean                     @default(false)
+  qualityDeclaration   Boolean                     @default(false)
+  ownershipDeclaration Boolean                     @default(false)
+  authorityDeclaration Boolean                     @default(false)
+  status               String                      @default("DRAFT")
+  version              Int                         @default(1)
   submittedAt          DateTime?
   moderatedAt          DateTime?
   moderatedByUserId    String?
@@ -219,8 +222,9 @@ model MarketplaceListing {
   expiresAt            DateTime?
   archivedAt           DateTime?
   lastVerifiedAt       DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  embedding            Unsupported("vector(768)")?
 
   material           WasteMaterial          @relation(fields: [materialId], references: [id], onDelete: Cascade)
   seller             Company                @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
@@ -251,6 +255,39 @@ model MarketplaceListing {
   @@index([status, pricePerUnit])
   @@index([status, quantityAvailable])
   @@index([status, availableFrom, availableUntil])
+}
+
+/// Cached buyer intent used by the ranked feed. The vector remains an
+/// Unsupported field because Prisma does not natively serialize pgvector.
+model BuyerDemandProfile {
+  userId            String                      @id @map("user_id")
+  profileText       String                      @map("profile_text")
+  embedding         Unsupported("vector(768)")?
+  historyEventCount Int                         @default(0) @map("history_event_count")
+  sourceUpdatedAt   DateTime                    @map("source_updated_at")
+  updatedAt         DateTime                    @default(now()) @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("buyer_demand_profiles")
+}
+
+/// Directed, weighted material graph. Traversal is intentionally implemented
+/// with bounded SQL joins; no graph database or graph extension is involved.
+model MaterialEdge {
+  src       String   @map("src")
+  dst       String   @map("dst")
+  edgeType  String   @map("edge_type")
+  weight    Float
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  source WasteMaterial @relation("MaterialEdgeSource", fields: [src], references: [id], onDelete: Cascade)
+  target WasteMaterial @relation("MaterialEdgeTarget", fields: [dst], references: [id], onDelete: Cascade)
+
+  @@id([src, dst, edgeType])
+  @@index([src, edgeType, weight(sort: Desc)])
+  @@index([dst, edgeType, weight(sort: Desc)])
+  @@map("material_edges")
 }
 
 model SafetyEvent {
@@ -356,7 +393,7 @@ model CartItem {
   userId        String
   listingId     String
   quantity      Int
-  priceSnapshot Decimal @db.Decimal(14, 2)
+  priceSnapshot Decimal  @db.Decimal(14, 2)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -391,14 +428,14 @@ model PurchaseOrder {
   disputeStatus       String   @default("NONE")
   shippingAddressId   String?
   billingAddressId    String?
-  subtotal            Decimal @db.Decimal(14, 2)
-  taxAmount           Decimal @db.Decimal(14, 2)
-  shippingAmount      Decimal @db.Decimal(14, 2)
-  discountAmount      Decimal @db.Decimal(14, 2)    @default(0)
-  buyerFeeAmount      Decimal @db.Decimal(14, 2)    @default(0)
-  sellerFeeAmount     Decimal @db.Decimal(14, 2)    @default(0)
+  subtotal            Decimal  @db.Decimal(14, 2)
+  taxAmount           Decimal  @db.Decimal(14, 2)
+  shippingAmount      Decimal  @db.Decimal(14, 2)
+  discountAmount      Decimal  @default(0) @db.Decimal(14, 2)
+  buyerFeeAmount      Decimal  @default(0) @db.Decimal(14, 2)
+  sellerFeeAmount     Decimal  @default(0) @db.Decimal(14, 2)
   feeVersion          String   @default("fees-v1")
-  totalAmount         Decimal @db.Decimal(14, 2)
+  totalAmount         Decimal  @db.Decimal(14, 2)
   currency            String   @default("INR")
   gstInvoice          Boolean  @default(true)
   purchaseOrderNumber String?
@@ -433,8 +470,8 @@ model PurchaseOrderItem {
   title           String
   quantity        Int
   unit            String
-  pricePerUnit    Decimal @db.Decimal(14, 2)
-  lineTotal       Decimal @db.Decimal(14, 2)
+  pricePerUnit    Decimal  @db.Decimal(14, 2)
+  lineTotal       Decimal  @db.Decimal(14, 2)
   status          String   @default("RESERVED")
   createdAt       DateTime @default(now())
 
@@ -758,7 +795,7 @@ model DemoPayment {
   id             String    @id @default(uuid())
   orderId        String
   providerRef    String    @unique
-  amount         Decimal @db.Decimal(14, 2)
+  amount         Decimal   @db.Decimal(14, 2)
   currency       String    @default("INR")
   status         String    @default("CREATED")
   idempotencyKey String    @unique
@@ -893,7 +930,7 @@ model Demand {
   subcategory   String?
   quantity      Int
   unit          String
-  maxPrice      Decimal? @db.Decimal(14, 2)
+  maxPrice      Decimal?  @db.Decimal(14, 2)
   state         String?
   city          String?
   pincode       String?

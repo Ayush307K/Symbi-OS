@@ -18,6 +18,7 @@ import {
   classifyMaterialSafety,
   recordSafetyEvent,
 } from "@/server/safety";
+import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
 
 export async function GET() {
   try {
@@ -186,6 +187,7 @@ export async function POST(request: NextRequest) {
       });
       return created;
     });
+    await tryRefreshListingEmbedding(listing.id);
 
     return NextResponse.json(
       {

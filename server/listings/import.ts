@@ -7,6 +7,7 @@ import {
   type ListingProvider,
   type ProviderListing,
 } from "@/server/listings/providers";
+import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
 
 export function canonicalCategory(text: string) {
   const value = text.toLowerCase();
@@ -173,6 +174,7 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
       },
     });
   });
+  await tryRefreshListingEmbedding(listingId);
   return true;
 }
 
