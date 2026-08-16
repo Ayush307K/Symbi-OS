@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import prisma from "@/lib/prisma";
-import { embedDocuments } from "@/lib/embeddings";
+import { Prisma } from "@prisma/client";
+import { getEmbeddingProvider } from "@/server/semantic/embedding-provider";
+import { vectorLiteral } from "@/server/semantic/listing-embeddings";
 import { SAFE_CATEGORIES } from "@/server/safety";
 
 function hash(value: string) {
@@ -76,6 +78,8 @@ export async function rebuildKnowledgeIndex() {
 
   let documentCount = 0;
   let chunkCount = 0;
+  let embeddedChunkCount = 0;
+  const embeddingFailures: string[] = [];
   for (const document of documents) {
     const contentHash = hash(document.content);
     const record = await prisma.knowledgeDocument.upsert({
@@ -96,25 +100,44 @@ export async function rebuildKnowledgeIndex() {
       },
     });
     const contentChunks = chunks(document.content);
-    const embeddings = process.env.OPENAI_API_KEY
-      ? await embedDocuments(contentChunks)
-      : contentChunks.map(() => null);
-    await prisma.$transaction([
-      prisma.knowledgeChunk.deleteMany({ where: { documentId: record.id } }),
-      ...contentChunks.map((content, index) =>
-        prisma.knowledgeChunk.create({
+
+    // Indexed with the document task type, matching how a query is embedded at
+    // read time — retrieval is asymmetric. A provider failure leaves the chunks
+    // in place without vectors, so retrieval still answers lexically instead of
+    // the whole rebuild aborting.
+    let embeddings: (number[] | null)[] = contentChunks.map(() => null);
+    try {
+      embeddings = await getEmbeddingProvider().embed(contentChunks, "document");
+      embeddedChunkCount += embeddings.length;
+    } catch (error) {
+      embeddingFailures.push(
+        `${document.title}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.knowledgeChunk.deleteMany({ where: { documentId: record.id } });
+      for (const [index, content] of contentChunks.entries()) {
+        const created = await tx.knowledgeChunk.create({
           data: {
             documentId: record.id,
             chunkIndex: index,
             content,
-            embeddingJson: embeddings[index]
-              ? JSON.stringify(embeddings[index])
-              : null,
             tokenEstimate: tokenEstimate(content),
           },
-        })
-      ),
-    ]);
+        });
+        const vector = embeddings[index];
+        // Prisma cannot type a pgvector column, so the vector is written by a
+        // second statement inside the same transaction.
+        if (vector) {
+          await tx.$executeRaw(
+            Prisma.sql`UPDATE "KnowledgeChunk"
+                       SET "embedding" = CAST(${vectorLiteral(vector)} AS vector)
+                       WHERE "id" = ${created.id}`,
+          );
+        }
+      }
+    });
     documentCount += 1;
     chunkCount += contentChunks.length;
   }
@@ -124,9 +147,29 @@ export async function rebuildKnowledgeIndex() {
     where: { contentHash: { notIn: activeHashes }, sourceType: "LISTING" },
     data: { status: "STALE" },
   });
+
+  // Reclaim the chunks under stale documents.
+  //
+  // Documents are keyed by content hash, so any edit to a listing mints a new
+  // document and retires the old one — but retiring only flipped a status, and
+  // the old chunks stayed. One unrelated change to how listings render (units
+  // moving from "Tons" to "ton") doubled this table: 54 stale documents still
+  // holding 55 chunks and their 768-float vectors. Retrieval was unaffected,
+  // since it filters on ACTIVE, so nothing would have surfaced this until the
+  // index outgrew its usefulness.
+  //
+  // The document rows stay as tombstones; only their content and vectors go.
+  const purged = await prisma.knowledgeChunk.deleteMany({
+    where: { document: { status: "STALE" } },
+  });
   return {
     documents: documentCount,
     chunks: chunkCount,
-    embeddings: Boolean(process.env.OPENAI_API_KEY),
+    embeddedChunks: embeddedChunkCount,
+    provider: getEmbeddingProvider().name,
+    purgedStaleChunks: purged.count,
+    // Reported rather than thrown: a partially embedded index still answers,
+    // and the caller needs to know which half it got.
+    embeddingFailures,
   };
 }
