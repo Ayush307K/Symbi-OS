@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cosine, lexicalScore } from "@/server/rag/query";
 import { canonicalCategory } from "@/server/listings/import";
+import { MARKETPLACE_RANKING_CONFIG } from "@/server/feed/config";
 
 describe("listing normalization and retrieval", () => {
   it("maps real provider text to a safe canonical category", () => {
@@ -72,5 +73,48 @@ describe("lexical retrieval matches words, not substrings", () => {
     const title = lexicalScore("hdpe flakes", "industrial material", "HDPE flakes");
     const body = lexicalScore("hdpe flakes", "HDPE flakes in stock", "Material");
     expect(title).toBeGreaterThan(body);
+  });
+});
+
+/**
+ * Relevance floors, one per retrieval path.
+ *
+ * Embedding similarity has a high baseline — unrelated text still scores around
+ * 0.35 against this catalogue — so cosine never reaches zero and "no results"
+ * has to be an explicit decision. Measured before the floors were chosen:
+ *
+ *   hybrid   real 0.49–0.82   irrelevant 0.32–0.47
+ *   lexical  real 0.33–0.78   incidental 0.11–0.17
+ *
+ * A single shared floor would be wrong for one of the two paths, which is why
+ * there are two.
+ */
+describe("rag relevance floors", () => {
+  const floors = MARKETPLACE_RANKING_CONFIG.rag.minScore;
+
+  it("keeps the weakest real hybrid answer measured", () => {
+    expect(0.491).toBeGreaterThanOrEqual(floors.hybrid);
+    expect(0.572).toBeGreaterThanOrEqual(floors.hybrid);
+  });
+
+  it("drops questions this catalogue cannot answer", () => {
+    // "how do I bake sourdough bread" and "what is the capital of France".
+    expect(0.356).toBeLessThan(floors.hybrid);
+    expect(0.375).toBeLessThan(floors.hybrid);
+    // "is fly ash hazardous" — nothing in the catalogue is fly ash.
+    expect(0.404).toBeLessThan(floors.hybrid);
+  });
+
+  it("keeps real lexical matches while dropping incidental token overlap", () => {
+    expect(0.333).toBeGreaterThanOrEqual(floors.lexical);
+    expect(0.778).toBeGreaterThanOrEqual(floors.lexical);
+    expect(0.167).toBeLessThan(floors.lexical);
+    expect(0.111).toBeLessThan(floors.lexical);
+  });
+
+  it("uses a separate floor per path, because the scales differ", () => {
+    expect(floors.hybrid).toBeGreaterThan(floors.lexical);
+    // A shared floor at the hybrid value would delete real lexical results.
+    expect(0.333).toBeLessThan(floors.hybrid);
   });
 });
