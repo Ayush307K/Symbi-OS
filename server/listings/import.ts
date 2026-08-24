@@ -8,6 +8,10 @@ import {
   type ProviderListing,
 } from "@/server/listings/providers";
 import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
+import {
+  REAL_CORPUS_TARGETS,
+  type TargetCategory,
+} from "@/server/listings/corpus-targets";
 
 export function canonicalCategory(text: string) {
   const value = text.toLowerCase();
@@ -35,21 +39,8 @@ function slugify(value: string) {
 }
 
 async function upsertListing(provider: ListingProvider, row: ProviderListing) {
-  const category = canonicalCategory(`${row.categoryText} ${row.title} ${row.description}`);
-  if (
-    !category ||
-    !row.title ||
-    !row.sourceUrl ||
-    row.country.toLowerCase() !== "india" ||
-    !isSafeMaterial({
-      name: row.title,
-      category,
-      description: row.description,
-      toxicity: "none",
-    })
-  ) {
-    return false;
-  }
+  const category = importableCategory(row);
+  if (!category) return false;
 
   const companyId = stableId("provider_company", `${provider.name}:${row.companyName}`);
   const materialId = stableId("provider_material", row.externalId);
@@ -102,6 +93,7 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         title: row.title,
         slug: `${slugify(row.title)}-${listingId.slice(-8)}`,
         sourceType: provider.sourceType,
+        isEvalOnly: false,
         sourceName: row.sourceName,
         sourceUrl: row.sourceUrl,
         externalId: row.externalId,
@@ -138,6 +130,7 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         packaging: "As described by source provider",
         paymentTerms: "Contact source provider",
         status: "ACTIVE",
+        archivedAt: null,
         lastVerifiedAt: new Date(),
         safetyDeclaration: true,
         qualityDeclaration: true,
@@ -148,6 +141,7 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
       update: {
         title: row.title,
         sourceType: provider.sourceType,
+        isEvalOnly: false,
         sourceName: row.sourceName,
         sourceUrl: row.sourceUrl,
         rawQuantityText: row.rawQuantity,
@@ -169,6 +163,7 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
         quantityAvailable: row.quantity,
         description: row.description,
         status: "ACTIVE",
+        archivedAt: null,
         lastVerifiedAt: new Date(),
         activatedAt: new Date(),
       },
@@ -178,17 +173,121 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
   return true;
 }
 
-export async function importRealListings(provider = configuredProvider()) {
+export interface RealListingImportOptions {
+  dryRun?: boolean;
+  targets?: Partial<Record<TargetCategory, number>>;
+}
+
+function importableCategory(row: ProviderListing) {
+  const category = canonicalCategory(`${row.categoryText} ${row.title} ${row.description}`);
+  if (
+    !category ||
+    !row.title ||
+    !row.sourceUrl ||
+    row.country.toLowerCase() !== "india" ||
+    !isSafeMaterial({
+      name: row.title,
+      category,
+      description: row.description,
+      toxicity: "none",
+    })
+  ) {
+    return null;
+  }
+  return category;
+}
+
+async function selectToTargets(
+  rows: ProviderListing[],
+  targets: Partial<Record<TargetCategory, number>>,
+) {
+  const categories = Object.keys(targets) as TargetCategory[];
+  const counts = await prisma.marketplaceListing.groupBy({
+    by: ["category"],
+    where: {
+      isEvalOnly: false,
+      status: { in: ["ACTIVE", "active"] },
+      category: { in: categories },
+      sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
+    },
+    _count: { _all: true },
+  });
+  const current = new Map(counts.map((row) => [row.category, row._count._all]));
+  const existing = new Map(
+    (
+      await prisma.marketplaceListing.findMany({
+        where: {
+          externalId: { in: rows.map((row) => row.externalId) },
+          isEvalOnly: false,
+          status: { in: ["ACTIVE", "active"] },
+        },
+        select: { externalId: true, category: true },
+      })
+    ).flatMap((row) =>
+      row.externalId ? ([[row.externalId, row.category]] as const) : [],
+    ),
+  );
+  const selected: ProviderListing[] = [];
+  const selection = {} as Record<
+    TargetCategory,
+    { current: number; needed: number; added: number; refreshed: number }
+  >;
+  for (const category of categories) {
+    const count = current.get(category) ?? 0;
+    const needed = Math.max(0, (targets[category] ?? count) - count);
+    const categoryRows = rows.filter((row) => importableCategory(row) === category);
+    const refreshes = categoryRows.filter(
+      (row) => existing.get(row.externalId) === category,
+    );
+    const candidates = categoryRows
+      .filter((row) => !existing.has(row.externalId))
+      .sort((left, right) => left.externalId.localeCompare(right.externalId));
+    if (candidates.length < needed) {
+      throw new Error(
+        `${category} needs ${needed} new real listings but the provider supplied only ${candidates.length}. ` +
+          "No other category was used to hide the shortfall.",
+      );
+    }
+    selected.push(...refreshes, ...candidates.slice(0, needed));
+    selection[category] = {
+      current: count,
+      needed,
+      added: needed,
+      refreshed: refreshes.length,
+    };
+  }
+  return { selected, selection };
+}
+
+export async function importRealListings(
+  provider = configuredProvider(),
+  options: RealListingImportOptions = {},
+) {
+  const fetched = await provider.fetch();
+  if (fetched.length === 0) {
+    throw new Error(
+      `${provider.name} returned no listings. The import was rejected to avoid a false successful run.`,
+    );
+  }
+  const targetResult = options.targets
+    ? await selectToTargets(fetched, options.targets)
+    : { selected: fetched, selection: undefined };
+  if (options.dryRun) {
+    return {
+      provider: provider.name,
+      dryRun: true,
+      seen: fetched.length,
+      selected: targetResult.selected.length,
+      categories: targetResult.selection,
+      upserted: 0,
+      rejected: 0,
+    };
+  }
   const run = await prisma.listingImportRun.create({
     data: { provider: provider.name },
   });
   try {
-    const rows = await provider.fetch();
-    if (rows.length === 0) {
-      throw new Error(
-        `${provider.name} returned no listings. The import was rejected to avoid a false successful run.`,
-      );
-    }
+    const rows = targetResult.selected;
     let upserted = 0;
     let rejected = 0;
     for (const row of rows) {
@@ -205,7 +304,15 @@ export async function importRealListings(provider = configuredProvider()) {
         finishedAt: new Date(),
       },
     });
-    return { provider: provider.name, seen: rows.length, upserted, rejected };
+    return {
+      provider: provider.name,
+      dryRun: false,
+      seen: fetched.length,
+      selected: rows.length,
+      categories: targetResult.selection,
+      upserted,
+      rejected,
+    };
   } catch (error) {
     await prisma.listingImportRun.update({
       where: { id: run.id },

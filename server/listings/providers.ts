@@ -44,8 +44,83 @@ function stripContacts(value: unknown) {
 }
 
 function number(value: unknown, fallback = 0) {
-  const parsed = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  // Parse the first number, not every digit in the string. Removing all
+  // separators turned a legitimate "100-200 MT" range into 100200.
+  const match = String(value ?? "").match(/-?\d[\d,]*(?:\.\d+)?/);
+  const parsed = Number(match?.[0].replace(/,/g, "") ?? Number.NaN);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : fallback;
+}
+
+function textFields(
+  value: unknown,
+): Array<{ label_name?: unknown; value?: unknown }> {
+  return Array.isArray(value)
+    ? (value as Array<{ label_name?: unknown; value?: unknown }>)
+    : [];
+}
+
+function customFields(row: Record<string, unknown>) {
+  const source = row.custom_field_data_meta_info;
+  if (!source || typeof source !== "object") return [];
+  const sections = source as Record<string, unknown>;
+  return Object.entries(sections).flatMap(([section, entries]) =>
+    textFields(entries)
+      .map((entry) => ({
+        section,
+        label: decode(entry.label_name),
+        value: decode(entry.value),
+      }))
+      .filter((entry) => entry.label && entry.value),
+  );
+}
+
+function tradeIndiaProducts(payload: unknown) {
+  const products = new Map<string, Record<string, unknown>>();
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    if (!Array.isArray(value)) {
+      const row = value as Record<string, unknown>;
+      if (
+        row.product_id &&
+        row.prod_url &&
+        row.product_name &&
+        row.is_product_record === 1
+      ) {
+        products.set(decode(row.product_id), row);
+      }
+    }
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(payload);
+  return [...products.values()];
+}
+
+function tradeIndiaNextData(html: string, sourceUrl: string) {
+  const match = html.match(
+    /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
+  );
+  if (!match) {
+    throw new Error(`TradeIndia page changed shape and has no __NEXT_DATA__: ${sourceUrl}`);
+  }
+  try {
+    return JSON.parse(match[1]) as unknown;
+  } catch {
+    throw new Error(`TradeIndia returned invalid __NEXT_DATA__: ${sourceUrl}`);
+  }
+}
+
+export function isTradeIndiaScrapProduct(title: string) {
+  const value = title.toLowerCase();
+  if (
+    /\b(machine|machinery|shredder|system|plant|equipment|lift|crusher|grinder|service)\b/.test(
+      value,
+    )
+  ) {
+    return false;
+  }
+  return /\b(scrap|scraps|regrind|regrinds|flake|flakes|granule|granules|agglomerate|agglomerates|turning|turnings|shaving|shavings|offcut|offcuts|bale|bales|cullet)\b/.test(
+    value,
+  );
 }
 
 function arrayFromPayload(payload: unknown): Array<Record<string, unknown>> {
@@ -187,10 +262,131 @@ export class RecycleInMeProvider implements ListingProvider {
   }
 }
 
+const TRADEINDIA_CATEGORY_PAGES = [
+  ["aluminium-scrap.html", "Aluminium Scrap"],
+  ["copper-scrap.html", "Copper Scrap"],
+  ["ferrous-metal-scraps.html", "Ferrous Metal Scrap"],
+  ["steel-metal-scrap.html", "Steel Scrap"],
+  ["iron-scrap.html", "Iron Scrap"],
+  ["ms-scrap.html", "Mild Steel Scrap"],
+  ["stainless-steel-scrap.html", "Stainless Steel Scrap"],
+  ["brass-scrap.html", "Brass Scrap"],
+  ["aluminium-wire-scrap.html", "Aluminium Wire Scrap"],
+  ["copper-wire-scrap.html", "Copper Wire Scrap"],
+  ["metal-scrap.html", "Metal Scrap"],
+  ["hdpe-scrap.html", "HDPE Scrap"],
+  ["ldpe-plastic-scrap.html", "LDPE Scrap"],
+  ["pet-bottle-scrap.html", "PET Bottle Scrap"],
+  ["plastic-scrap.html", "Plastic Scrap"],
+  ["rubber-scrap.html", "Rubber Scrap"],
+  ["scrap-rubber.html", "Scrap Rubber"],
+  ["tyre-scrap.html", "Tyre Scrap"],
+] as const;
+
+export class TradeIndiaProvider implements ListingProvider {
+  name = "TradeIndia public marketplace listings";
+  sourceType = "real_public_provider" as const;
+  private readonly baseUrl = "https://www.tradeindia.com";
+
+  private async fetchCategory(slug: string, subcategory: string) {
+    const sourceUrl = `${this.baseUrl}/manufacturers/${slug}`;
+    const response = await fetch(sourceUrl, {
+      headers: {
+        Accept: "text/html",
+        "user-agent": "Symbi-OS/1.0 listing importer",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`TradeIndia category ${slug} returned HTTP ${response.status}.`);
+    }
+    const payload = tradeIndiaNextData(await response.text(), sourceUrl);
+    return tradeIndiaProducts(payload)
+      .filter((row) => decode(row.country_name).toLowerCase() === "india")
+      .filter((row) => decode(row.product_status || "a").toLowerCase() === "a")
+      .filter((row) =>
+        isTradeIndiaScrapProduct(decode(row.long_tail_prod_name || row.product_name)),
+      )
+      .map((row): ProviderListing => {
+        const id = decode(row.product_id);
+        const title = decode(row.long_tail_prod_name || row.product_name);
+        const fields = customFields(row);
+        const specifications = fields
+          .filter((field) => field.section === "Product_Specifications")
+          .map((field) => `${field.label}: ${field.value}`);
+        const trade = fields
+          .filter((field) => field.section === "Trade_Information")
+          .map((field) => `${field.label}: ${field.value}`);
+        const priceAndQuantity = fields
+          .filter((field) => field.section === "Price_And_Quantity");
+        const valueFor = (label: RegExp) =>
+          priceAndQuantity.find((field) => label.test(field.label))?.value ?? "";
+        const rawPrice =
+          valueFor(/^Price(?: Range)?$/i) ||
+          decode(row.price_range) ||
+          decode(row.price);
+        const unit =
+          valueFor(/Unit of (?:Measure|Price)/i) || decode(row.unit) || "lot";
+        const rawQuantity = valueFor(/Minimum Order Quantity/i) || "1 lot";
+        const currency = /USD|\$/.test(rawPrice)
+          ? "USD"
+          : /EUR|€/.test(rawPrice)
+            ? "EUR"
+            : "INR";
+        const descriptionParts = [
+          stripContacts(row.product_description || row.product_name),
+          specifications.length
+            ? `Product specifications:\n${specifications.map((line) => `- ${line}`).join("\n")}`
+            : "",
+          trade.length
+            ? `Trade information:\n${trade.map((line) => `- ${line}`).join("\n")}`
+            : "",
+          rawPrice ? `Published price: ${rawPrice} per ${unit}.` : "Price on request.",
+        ].filter(Boolean);
+        return {
+          externalId: `tradeindia:${id}`,
+          title,
+          description: descriptionParts.join("\n\n"),
+          categoryText: decode(
+            `${subcategory} ${row.category_name || ""} ${row.product_name || ""} ${specifications.join(" ")}`,
+          ),
+          subcategory,
+          companyName: decode(row.co_name || row.initial_co_name || `TradeIndia supplier ${id}`),
+          city: decode(row.city || "India"),
+          state: decode(row.state || "India"),
+          country: "India",
+          quantity: Math.max(1, Math.round(number(rawQuantity, 1))),
+          rawQuantity,
+          price: number(rawPrice),
+          currency,
+          unit,
+          sourceName: this.name,
+          sourceUrl: new URL(decode(row.prod_url), this.baseUrl).toString(),
+          imageUrl: decode(row.product_image),
+        };
+      });
+  }
+
+  async fetch() {
+    const pages = await Promise.all(
+      TRADEINDIA_CATEGORY_PAGES.map(([slug, subcategory]) =>
+        this.fetchCategory(slug, subcategory),
+      ),
+    );
+    const unique = new Map(
+      pages.flat().map((row) => [row.externalId, row] as const),
+    );
+    if (!unique.size) {
+      throw new Error("TradeIndia returned no active Indian listings.");
+    }
+    return [...unique.values()];
+  }
+}
+
 export function configuredProvider(): ListingProvider {
-  return process.env.LISTINGS_PROVIDER === "json"
-    ? new JsonApiListingProvider()
-    : new RecycleInMeProvider();
+  if (process.env.LISTINGS_PROVIDER === "json") return new JsonApiListingProvider();
+  if (process.env.LISTINGS_PROVIDER === "tradeindia") return new TradeIndiaProvider();
+  return new RecycleInMeProvider();
 }
 
 export function stableId(prefix: string, value: string) {
