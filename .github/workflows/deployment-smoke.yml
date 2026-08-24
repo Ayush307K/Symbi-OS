@@ -1,0 +1,35 @@
+name: Production deployment smoke
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify production database readiness
+        env:
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$DEPLOYMENT_URL" =~ ^https:// ]]; then
+            echo "Deployment did not provide a valid HTTPS environment URL."
+            exit 1
+          fi
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 6 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --max-time 20 \
+            "$DEPLOYMENT_URL/api/health/ready"

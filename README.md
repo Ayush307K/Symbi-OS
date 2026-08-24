@@ -125,6 +125,9 @@ Rules that follow from that split:
   makes existing records permanently unreadable.
 - **Migrations must be applied to every database.** `npm run db:deploy` targets
   whatever `.env` points at; CI runs it against its own service container.
+  Vercel production builds run the same command before compiling the app and
+  fail closed if the direct database connection is missing or a migration
+  fails. Preview builds never run migrations.
 
 Run `npm run check:env` after any environment change. It is the first step of
 `npm run verify`, so a misconfiguration fails in a second rather than after a
@@ -142,6 +145,22 @@ production values explicitly rather than editing `.env`:
 ```bash
 env $(grep -v "^#" .env.production.local | xargs) npx tsx scripts/backfill-price-mode.ts
 ```
+
+### Production deployment
+
+Vercel uses `npm run vercel:build`. When `VERCEL_ENV=production`, that command
+first runs `npm run db:deploy` through `DIRECT_URL`, then starts `next build`.
+This ordering prevents a generated Prisma client from reaching production
+before its required columns exist. Vercel must define both connection strings:
+
+- `DATABASE_URL`: pooled runtime connection.
+- `DIRECT_URL`: direct, non-pooler migration connection.
+
+After deployment, `GET /api/health/ready` checks database connectivity, the
+pgvector extension, and the auth/evaluation-isolation schema required by the
+current release. It returns `503 DATABASE_SCHEMA_NOT_READY` rather than a false
+healthy response when production is behind. GitHub's production deployment
+smoke workflow calls this endpoint after Vercel reports success.
 
 
 ## Environment

@@ -20,7 +20,24 @@ export async function POST(request: NextRequest) {
       blockMs: 30 * 60 * 1000,
     });
 
-    const user = await prisma.user.findUnique({ where: { email: body.email } });
+    // Authentication should not select every User column. An unrelated
+    // additive profile field must not become a login dependency during the
+    // short interval between a migration and a rolling deployment.
+    const user = await prisma.user.findUnique({
+      where: { email: body.email },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        role: true,
+        isAdmin: true,
+        accountStatus: true,
+        tokenVersion: true,
+        companyName: true,
+        companyId: true,
+        emailVerifiedAt: true,
+      },
+    });
     const valid =
       user?.accountStatus === "ACTIVE" &&
       (await verifyPassword(

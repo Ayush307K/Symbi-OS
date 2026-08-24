@@ -177,7 +177,17 @@ export async function getAuthFromCookie(): Promise<JWTPayload | null> {
   if (!sessionId || !secret) return null;
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
-    include: { user: true },
+    select: {
+      tokenHash: true,
+      revokedAt: true,
+      expiresAt: true,
+      user: {
+        select: {
+          accountStatus: true,
+          tokenVersion: true,
+        },
+      },
+    },
   });
   if (
     !session ||

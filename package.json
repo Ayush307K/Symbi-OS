@@ -14,6 +14,7 @@
     "security:scan:history": "node scripts/check-sensitive-files.mjs --history",
     "verify": "npm run check:env && npm run security:scan && npm run typecheck && npm test && npm run build && npm audit --omit=dev",
     "db:deploy": "node scripts/ensure-local-db.mjs && prisma migrate deploy",
+    "vercel:build": "node scripts/vercel-build.mjs",
     "start": "next start",
     "ingest": "npm run ingest:real",
     "ingest:real": "tsx scripts/import-real-listings.ts",
