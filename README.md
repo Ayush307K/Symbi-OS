@@ -156,6 +156,11 @@ before its required columns exist. Vercel must define both connection strings:
 - `DATABASE_URL`: pooled runtime connection.
 - `DIRECT_URL`: direct, non-pooler migration connection.
 
+For older installations where `DATABASE_URL` itself is a direct connection,
+the production build can safely reuse it. It refuses known pooler hosts, port
+`6543`, and URLs carrying `pgbouncer=true`; those deployments must configure
+`DIRECT_URL` (or an integration-provided `POSTGRES_URL_NON_POOLING`) explicitly.
+
 After deployment, `GET /api/health/ready` checks database connectivity, the
 pgvector extension, and the auth/evaluation-isolation schema required by the
 current release. It returns `503 DATABASE_SCHEMA_NOT_READY` rather than a false
