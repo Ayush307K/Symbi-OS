@@ -25,6 +25,10 @@ async function main() {
     MARKETPLACE_RANKING_CONFIG.embedding.backfillConcurrency,
   );
   const force = process.argv.includes("--force");
+  const includeEval = process.argv.includes("--include-eval");
+  if (includeEval && process.env.RAG_EVAL_ENABLED !== "true") {
+    throw new Error("--include-eval requires RAG_EVAL_ENABLED=true.");
+  }
   const afterIndex = process.argv.indexOf("--after");
   let after = afterIndex === -1 ? "" : process.argv[afterIndex + 1] || "";
   let completed = 0;
@@ -36,6 +40,8 @@ async function main() {
       Prisma.sql`SELECT "id"
                  FROM "MarketplaceListing"
                  WHERE "id" > ${after}
+                   AND "status" IN ('ACTIVE', 'active')
+                   ${includeEval ? Prisma.empty : Prisma.sql`AND "isEvalOnly" = false`}
                    ${force ? Prisma.empty : Prisma.sql`AND "embedding" IS NULL`}
                  ORDER BY "id" ASC
                  LIMIT ${batchSize}`,

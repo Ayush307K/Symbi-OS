@@ -44,6 +44,7 @@ export const PUBLIC_LISTING_SOURCE_TYPES = [
 ] as const;
 
 export const publicListingWhere = {
+  isEvalOnly: false,
   status: { in: ["ACTIVE", "active"] },
   sourceType: {
     in: [...PUBLIC_LISTING_SOURCE_TYPES],

@@ -14,6 +14,7 @@ model User {
   passwordHash     String
   role             String    @default("BOTH") // BUYER | SELLER | BOTH — what they do in the market
   isAdmin          Boolean   @default(false) // platform operator; orthogonal to role
+  isEvalOnly       Boolean   @default(false)
   accountStatus    String    @default("ACTIVE") // ACTIVE | LOCKED | DISABLED
   tokenVersion     Int       @default(0)
   companyName      String
@@ -46,6 +47,7 @@ model User {
   company              Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
+  @@index([isEvalOnly])
 }
 
 model Bid {
@@ -171,6 +173,9 @@ model MarketplaceListing {
   title                String
   slug                 String                      @unique
   sourceType           String                      @default("synthetic")
+  isEvalOnly           Boolean                     @default(false)
+  evalScenarioTags     String[]                    @default([])
+  evalClusterId        String?
   sourceName           String?
   sourceUrl            String?
   externalId           String?                     @unique
@@ -247,6 +252,8 @@ model MarketplaceListing {
   @@index([state, city, pincode])
   @@index([country])
   @@index([sourceType])
+  @@index([isEvalOnly, status])
+  @@index([evalClusterId])
   @@index([sourceName])
   @@index([materialId])
   @@index([sellerCompanyId])
@@ -421,6 +428,7 @@ model PurchaseOrder {
   id                  String   @id @default(uuid())
   orderNumber         String   @unique
   buyerUserId         String
+  isEvalOnly          Boolean  @default(false)
   sourceBidId         String?  @unique
   status              String   @default("CREATED")
   paymentStatus       String   @default("PENDING")
@@ -458,6 +466,7 @@ model PurchaseOrder {
   messageThreads  MessageThread[]
 
   @@index([buyerUserId])
+  @@index([isEvalOnly, createdAt])
   @@index([status])
 }
 
@@ -761,6 +770,7 @@ model ListingImportRun {
 model KnowledgeDocument {
   id          String   @id @default(uuid())
   sourceType  String
+  isEvalOnly  Boolean  @default(false)
   sourceId    String?
   sourceUrl   String?
   title       String
@@ -772,22 +782,23 @@ model KnowledgeDocument {
   chunks KnowledgeChunk[]
 
   @@index([sourceType])
+  @@index([isEvalOnly, status])
   @@index([sourceId])
 }
 
 model KnowledgeChunk {
-  id         String @id @default(uuid())
-  documentId String
-  chunkIndex Int
-  content    String
+  id            String                      @id @default(uuid())
+  documentId    String
+  chunkIndex    Int
+  content       String
   // Same width and model as MarketplaceListing.embedding, so both pipelines
   // share one vector store and one HNSW/cosine configuration. Held as a real
   // pgvector column rather than JSON text: the previous store forced every
   // query to read all chunks and JSON.parse each 768-float array in the app.
   embedding     Unsupported("vector(768)")?
   tokenEstimate Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
 
   document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 

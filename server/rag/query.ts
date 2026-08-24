@@ -10,7 +10,23 @@ export interface RagCitation {
   title: string;
   url: string | null;
   sourceType: string;
+  sourceId: string | null;
+  isEvalOnly: boolean;
   excerpt: string;
+}
+
+export type RagCorpus = "real" | "eval" | "real_and_eval";
+
+function corpusSql(corpus: RagCorpus) {
+  if (corpus === "eval") return Prisma.sql`AND document."isEvalOnly" = true`;
+  if (corpus === "real_and_eval") return Prisma.empty;
+  return Prisma.sql`AND document."isEvalOnly" = false`;
+}
+
+function corpusWhere(corpus: RagCorpus) {
+  if (corpus === "eval") return { isEvalOnly: true } as const;
+  if (corpus === "real_and_eval") return {};
+  return { isEvalOnly: false } as const;
 }
 
 /**
@@ -104,8 +120,10 @@ export type ScoredChunk = ChunkWithDocument & { score: number };
 export async function retrieveKnowledge(
   query: string,
   topK = 6,
+  options: { corpus?: RagCorpus } = {},
 ): Promise<RetrievalOutcome> {
   const limit = Math.min(10, Math.max(1, topK));
+  const corpus = options.corpus ?? "real";
 
   // One registry for both pipelines: the feed and RAG must embed with the same
   // model, or their vectors are not comparable and neither is their tuning.
@@ -136,6 +154,7 @@ export async function retrieveKnowledge(
         FROM "KnowledgeChunk" chunk
         JOIN "KnowledgeDocument" document ON document."id" = chunk."documentId"
        WHERE document."status" = 'ACTIVE'
+         ${corpusSql(corpus)}
          AND chunk."embedding" IS NOT NULL
        ORDER BY chunk."embedding" <=> CAST(${vectorLiteral(vector)} AS vector)
        LIMIT ${settings.candidatePoolSize}
@@ -167,7 +186,7 @@ export async function retrieveKnowledge(
   }
 
   const chunks = await prisma.knowledgeChunk.findMany({
-    where: { document: { status: "ACTIVE" } },
+    where: { document: { status: "ACTIVE", ...corpusWhere(corpus) } },
     include: { document: true },
     take: MARKETPLACE_RANKING_CONFIG.rag.lexicalScanLimit,
   });
@@ -217,14 +236,24 @@ async function generatedAnswer(query: string, chunks: ScoredChunk[]) {
   return answer || extractiveAnswer(query, chunks);
 }
 
-export async function answerWithRag(query: string, topK = 6) {
-  const { chunks, usedSemantic, degradedReason } = await retrieveKnowledge(query, topK);
+export async function answerWithRag(
+  query: string,
+  topK = 6,
+  options: { corpus?: RagCorpus } = {},
+) {
+  const { chunks, usedSemantic, degradedReason } = await retrieveKnowledge(
+    query,
+    topK,
+    options,
+  );
   const answer = await generatedAnswer(query, chunks);
   const citations: RagCitation[] = chunks.map((chunk, index) => ({
     id: `S${index + 1}`,
     title: chunk.document.title,
     url: chunk.document.sourceUrl,
     sourceType: chunk.document.sourceType,
+    sourceId: chunk.document.sourceId,
+    isEvalOnly: chunk.document.isEvalOnly,
     excerpt: chunk.content.slice(0, 360),
   }));
   return {

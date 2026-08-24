@@ -28,11 +28,20 @@ function chunks(value: string, maxChars = 2800) {
   return result;
 }
 
-export async function rebuildKnowledgeIndex() {
+export async function rebuildKnowledgeIndex(
+  options: { includeEval?: boolean } = {},
+) {
+  const includeEval = options.includeEval ?? false;
   const listings = await prisma.marketplaceListing.findMany({
     where: {
+      OR: [
+        {
+          isEvalOnly: false,
+          sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
+        },
+        ...(includeEval ? [{ isEvalOnly: true }] : []),
+      ],
       status: { in: ["ACTIVE", "active"] },
-      sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
       category: { in: [...SAFE_CATEGORIES] },
       material: { toxicityLevel: { in: ["none", "low"] } },
     },
@@ -72,6 +81,7 @@ export async function rebuildKnowledgeIndex() {
       sourceId: listing.id,
       sourceUrl: listing.sourceUrl,
       title: listing.title,
+      isEvalOnly: listing.isEvalOnly,
       content,
     };
   });
@@ -81,11 +91,14 @@ export async function rebuildKnowledgeIndex() {
   let embeddedChunkCount = 0;
   const embeddingFailures: string[] = [];
   for (const document of documents) {
-    const contentHash = hash(document.content);
+    const contentHash = hash(
+      `${document.sourceType}:${document.sourceId}:${document.isEvalOnly}:${document.content}`,
+    );
     const record = await prisma.knowledgeDocument.upsert({
       where: { contentHash },
       create: {
         sourceType: document.sourceType,
+        isEvalOnly: document.isEvalOnly,
         sourceId: document.sourceId,
         sourceUrl: document.sourceUrl,
         title: document.title,
@@ -93,6 +106,7 @@ export async function rebuildKnowledgeIndex() {
       },
       update: {
         sourceType: document.sourceType,
+        isEvalOnly: document.isEvalOnly,
         sourceId: document.sourceId,
         sourceUrl: document.sourceUrl,
         title: document.title,
@@ -142,9 +156,15 @@ export async function rebuildKnowledgeIndex() {
     chunkCount += contentChunks.length;
   }
 
-  const activeHashes = documents.map((document) => hash(document.content));
+  const activeHashes = documents.map((document) =>
+    hash(`${document.sourceType}:${document.sourceId}:${document.isEvalOnly}:${document.content}`),
+  );
   await prisma.knowledgeDocument.updateMany({
-    where: { contentHash: { notIn: activeHashes }, sourceType: "LISTING" },
+    where: {
+      contentHash: { notIn: activeHashes },
+      sourceType: "LISTING",
+      ...(includeEval ? {} : { isEvalOnly: false }),
+    },
     data: { status: "STALE" },
   });
 

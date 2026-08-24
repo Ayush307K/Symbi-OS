@@ -85,6 +85,7 @@ async function semanticSeeds(profileEmbedding: number[] | null) {
                  FROM "MarketplaceListing" listing
                  JOIN "WasteMaterial" material ON material."id" = listing."materialId"
                  WHERE listing."embedding" IS NOT NULL
+                   AND listing."isEvalOnly" = false
                    AND listing."status" IN ('ACTIVE', 'active')
                    AND listing."sourceType" IN (${Prisma.join([...PUBLIC_LISTING_SOURCE_TYPES])})
                    AND listing."category" IN (${Prisma.join([...SAFE_CATEGORIES])})

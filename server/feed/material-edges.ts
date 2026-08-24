@@ -41,10 +41,17 @@ export function decayedFrequencyWeight(
 export async function refreshMaterialEdges(
   client: typeof prisma = prisma,
   now = new Date(),
+  options: { includeEval?: boolean } = {},
 ) {
   const config = MARKETPLACE_RANKING_CONFIG.graph;
   const halfLife = config.recencyHalfLifeDays;
   const frequencySaturation = config.frequencySaturation;
+  const productionOrderFilter = options.includeEval
+    ? Prisma.empty
+    : Prisma.sql`AND po."isEvalOnly" = false AND buyer."isEvalOnly" = false`;
+  const productionListingFilter = options.includeEval
+    ? Prisma.empty
+    : Prisma.sql`AND ml."isEvalOnly" = false`;
 
   await client.$transaction(async (tx) => {
     // Same-order material pairs are the strongest behavioral relationship.
@@ -56,11 +63,16 @@ export async function refreshMaterialEdges(
             ml."materialId" AS material_id,
             po."createdAt" AS occurred_at
           FROM "PurchaseOrder" po
+          JOIN "User" buyer ON buyer."id" = po."buyerUserId"
           JOIN "PurchaseOrderItem" poi ON poi."orderId" = po."id"
           JOIN "MarketplaceListing" ml ON ml."id" = poi."listingId"
-          WHERE po."status" IN ('CONFIRMED', 'CLOSED')
-             OR po."paymentStatus" = 'PAID'
-             OR po."fulfillmentStatus" IN ('FULFILLED', 'DELIVERED')
+          WHERE (
+            po."status" IN ('CONFIRMED', 'CLOSED')
+            OR po."paymentStatus" = 'PAID'
+            OR po."fulfillmentStatus" IN ('FULFILLED', 'DELIVERED')
+          )
+          ${productionOrderFilter}
+          ${productionListingFilter}
         ), pair_signal AS (
           SELECT
             source.material_id AS src,
@@ -103,11 +115,16 @@ export async function refreshMaterialEdges(
             ml."materialId" AS material_id,
             po."createdAt" AS occurred_at
           FROM "PurchaseOrder" po
+          JOIN "User" buyer ON buyer."id" = po."buyerUserId"
           JOIN "PurchaseOrderItem" poi ON poi."orderId" = po."id"
           JOIN "MarketplaceListing" ml ON ml."id" = poi."listingId"
-          WHERE po."status" IN ('CONFIRMED', 'CLOSED')
-             OR po."paymentStatus" = 'PAID'
-             OR po."fulfillmentStatus" IN ('FULFILLED', 'DELIVERED')
+          WHERE (
+            po."status" IN ('CONFIRMED', 'CLOSED')
+            OR po."paymentStatus" = 'PAID'
+            OR po."fulfillmentStatus" IN ('FULFILLED', 'DELIVERED')
+          )
+          ${productionOrderFilter}
+          ${productionListingFilter}
         ), pair_signal AS (
           SELECT
             source.material_id AS src,
@@ -163,6 +180,7 @@ export async function refreshMaterialEdges(
             ) AS freshest_listing
           FROM "WasteMaterial" wm
           LEFT JOIN "MarketplaceListing" ml ON ml."materialId" = wm."id"
+            ${options.includeEval ? Prisma.empty : Prisma.sql`AND ml."isEvalOnly" = false`}
           GROUP BY wm."id", wm."category", wm."baseElement"
         ), substitutes AS (
           SELECT

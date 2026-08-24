@@ -62,6 +62,7 @@ export async function buildBuyerDemandProfile(
     where: { id: buyerId },
     select: {
       id: true,
+      isEvalOnly: true,
       companyName: true,
       createdAt: true,
       companyId: true,
@@ -105,6 +106,7 @@ export async function buildBuyerDemandProfile(
     prisma.purchaseOrder.findMany({
       where: {
         buyerUserId: buyerId,
+        isEvalOnly: user.isEvalOnly,
         NOT: { status: "CANCELLED" },
       },
       select: {
