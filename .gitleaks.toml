@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deterministic evaluation fixtures that cannot authenticate anywhere"
+regexTarget = "match"
+regexes = [
+  '''0123456789abcdef0123456789abcdef''',
+  '''fedcba9876543210fedcba9876543210''',
+  '''cu-barley-no1''',
+]

@@ -107,7 +107,7 @@ const fixtures: EvalListingFixture[] = [
     clusterId: "copper-wire",
   },
   {
-    key: "cu-barley-no1",
+    key: "cu-barley-no1", // gitleaks:allow -- fixture identifier, not a credential
     title: "BARLEY No. 1 Copper Wire — Uncoated Mixed Gauge",
     category: "Metal Scrap",
     subcategory: "Copper Wire",

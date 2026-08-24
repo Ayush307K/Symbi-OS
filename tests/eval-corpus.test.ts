@@ -52,7 +52,7 @@ describe("TradeIndia quality gate", () => {
 });
 
 describe("RAG evaluation access", () => {
-  const key = "0123456789abcdef0123456789abcdef";
+  const key = "0123456789abcdef0123456789abcdef"; // gitleaks:allow -- deterministic test value
 
   it("is unavailable unless explicitly enabled", () => {
     vi.stubEnv("RAG_EVAL_ENABLED", "false");
@@ -72,7 +72,7 @@ describe("RAG evaluation access", () => {
     expect(() =>
       assertRagEvaluationAccess(
         new Request("http://localhost/api/rag/query", {
-          headers: { "x-rag-eval-key": "fedcba9876543210fedcba9876543210" },
+          headers: { "x-rag-eval-key": "fedcba9876543210fedcba9876543210" }, // gitleaks:allow -- deterministic test value
         }),
       ),
     ).toThrow("denied");
