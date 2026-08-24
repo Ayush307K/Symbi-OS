@@ -159,8 +159,9 @@ The complete template is in `.env.example`.
 - `DEMO_VERIFICATION_ENABLED`: exposes deterministic onboarding verification
   only when explicitly set to `true`.
 - `DEMO_PAYMENTS_ENABLED`: enables the sandbox payment transaction.
-- `LISTINGS_PROVIDER`: `recycleinme` for the public provider feed or `json` for
-  an authenticated listing API.
+- `LISTINGS_PROVIDER`: `tradeindia` for the quota-controlled TradeIndia public
+  catalogue adapter, `recycleinme` for the legacy public feed, or `json` for an
+  authenticated listing API.
 - `REAL_LISTINGS_API_URL` and `REAL_LISTINGS_API_KEY`: configured JSON API.
 - `GEMINI_API_KEY`: enables embeddings and generated RAG answers. Without it,
   the same cited retrieval pipeline returns an extractive answer from lexical
@@ -174,6 +175,10 @@ The complete template is in `.env.example`.
 - `LISTING_EMBEDDING_MODEL`: overrides the adapter's model.
 - `RAG_GENERATION_PROVIDER`: answer-generation adapter; defaults to `gemini`.
 - `GEMINI_RAG_MODEL`: overrides the generation model.
+- `RAG_EVAL_ENABLED`: opt-in gate for evaluation-only retrieval. Leave `false`
+  in buyer-facing deployments.
+- `RAG_EVAL_KEY`: independent secret of at least 32 characters required by the
+  HTTP golden-set runner. It does not replace normal buyer authentication.
 
 ### Embedding model and dimension
 
@@ -194,6 +199,48 @@ indexes; they cannot be changed independently.
 
 Documents are embedded with `RETRIEVAL_DOCUMENT` and queries with
 `RETRIEVAL_QUERY`, because retrieval is asymmetric.
+
+## RAG corpus evaluation
+
+Synthetic evaluation listings use the same listing, document, chunk, and RAG
+code path as real records. Isolation is explicit and default-deny:
+
+- `MarketplaceListing.isEvalOnly` prevents marketplace, cart, bid, checkout,
+  messaging, matching, statistics, and ranked-feed visibility.
+- `KnowledgeDocument.isEvalOnly` makes normal RAG queries real-only even when
+  evaluation chunks are indexed.
+- `User.isEvalOnly` and `PurchaseOrder.isEvalOnly` prevent evaluation buyer
+  history from entering production edge refreshes.
+- Evaluation retrieval additionally requires `RAG_EVAL_ENABLED=true` and a
+  timing-safe comparison against `RAG_EVAL_KEY`.
+
+The deterministic suite contains 28 synthetic listings: 16 near-duplicates,
+8 decoys, and 4 descriptions containing prompt-injection canaries. Glass is
+deliberately absent. The golden set contains 90 queries—18 each for exact
+match, semantic paraphrase, ambiguous match, genuine no-match, and adversarial
+retrieval. Synthetic material names follow the public [ISRI specifications](https://www.isrispecs.org/)
+where applicable; explanatory text is paraphrased rather than copied.
+
+Use a dedicated local/test database:
+
+```bash
+npm run db:deploy
+npm run ingest:tradeindia -- --dry-run
+npm run ingest:tradeindia
+RAG_EVAL_ENABLED=true npm run rag:eval:seed
+RAG_EVAL_ENABLED=true npm run feed:backfill-embeddings -- --include-eval
+RAG_EVAL_ENABLED=true npm run rag:index -- --include-eval
+RAG_EVAL_KEY="$(openssl rand -hex 32)" RAG_EVAL_ENABLED=true npm run dev
+# Supply the same key in a second shell:
+RAG_EVAL_KEY="..." npm run rag:eval:run
+```
+
+The runner writes `.data/rag-eval/latest.json` and `latest.md`, broken down by
+real/synthetic source and scenario. It reports hit@1, hit@K, MRR, false
+refusals, no-match false positives, decoy false positives, adversarial
+instruction following, degraded retrieval, and p50/p95 latency. A run with
+`degradedRetrievalRate > 0` is a fallback diagnostic, not the Gemini semantic
+baseline.
 
 Note: `gemini-2.5-flash` returns 404 "no longer available to new users" on
 recently issued keys. `gemini-flash-latest` is the supported alias.

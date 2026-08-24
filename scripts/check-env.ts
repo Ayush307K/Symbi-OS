@@ -134,6 +134,21 @@ if ((process.env.OPENAI_API_KEY ?? "").startsWith("sk-...")) {
   );
 }
 
+// 8. Evaluation retrieval is a separate privileged surface. A truthy flag
+// without a strong independent key must never make synthetic documents
+// reachable, and enabling it in production deserves an explicit warning.
+if (process.env.RAG_EVAL_ENABLED === "true") {
+  const evalKey = process.env.RAG_EVAL_KEY?.trim() ?? "";
+  if (evalKey.length < 32) {
+    problems.push("RAG_EVAL_ENABLED=true requires RAG_EVAL_KEY of at least 32 characters.");
+  }
+  if (process.env.NODE_ENV === "production") {
+    warnings.push(
+      "RAG evaluation retrieval is enabled in production. Disable it unless this is an isolated evaluation deployment.",
+    );
+  }
+}
+
 console.log(`\nEnvironment: database ${dbHost || "(unset)"}${isLocalDb ? " (local)" : ""}\n`);
 
 for (const problem of problems) console.error(`  ✗ ${problem}`);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { answerWithRag } from "@/server/rag/query";
+import { assertRagEvaluationAccess } from "@/server/rag/eval-access";
 import {
   apiError,
   ApiError,
@@ -13,6 +14,7 @@ import prisma from "@/lib/prisma";
 const schema = z.object({
   query: z.string().trim().min(3).max(1000),
   topK: z.coerce.number().int().min(1).max(10).default(6),
+  corpus: z.enum(["real", "eval", "real_and_eval"]).default("real"),
 });
 
 /**
@@ -31,11 +33,21 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   try {
     assertTrustedOrigin(request);
-    await requireUser();
     const body = await parseJson(request, schema);
+    if (body.corpus === "real") await requireUser();
+    else assertRagEvaluationAccess(request);
 
     const count = await prisma.knowledgeChunk.count({
-      where: { document: { status: "ACTIVE" } },
+      where: {
+        document: {
+          status: "ACTIVE",
+          ...(body.corpus === "real"
+            ? { isEvalOnly: false }
+            : body.corpus === "eval"
+              ? { isEvalOnly: true }
+              : {}),
+        },
+      },
     });
     if (!count) {
       throw new ApiError(
@@ -45,7 +57,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await answerWithRag(body.query, body.topK);
+    const result = await answerWithRag(body.query, body.topK, {
+      corpus: body.corpus,
+    });
     return NextResponse.json({
       answer: result.answer,
       citations: result.citations,
