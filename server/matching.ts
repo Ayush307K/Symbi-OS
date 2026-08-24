@@ -409,3 +409,133 @@ export async function createDemandMatches(
     })),
   };
 }
+
+/**
+ * The standing half of an RFQ: match a newly approved listing back to demands
+ * that were posted before it existed.
+ *
+ * A buyer whose request found nothing is told the request stays open and that
+ * they will hear when something fits. Approval previously honoured that with
+ * `where: { materialId: listing.materialId }` — an ID equality that consulted
+ * none of the buyer's constraints, so a 5-tonne lot in Assam satisfied a
+ * request for 500 tonnes within 200 km of Pune. It also fired for nobody in
+ * practice: demand material IDs are minted from the buyer's own wording by
+ * ensureCanonicalMaterial, while listing material IDs come from the importer,
+ * and the two namespaces never met.
+ *
+ * Scoring runs through scoreCandidate, the same function the buyer's original
+ * search used, so a standing match means exactly what an immediate one means.
+ * Rows are written as well as notified: a notification whose linked page still
+ * says "no listing clears your constraints" is worse than silence.
+ */
+export async function matchListingToOpenDemands(
+  listingId: string,
+): Promise<
+  Array<{
+    demandId: string;
+    userId: string | null;
+    companyId: string;
+    score: number;
+    explanations: string[];
+    query: string;
+  }>
+> {
+  const listing = await prisma.marketplaceListing.findFirst({
+    where: { AND: [{ id: listingId }, publicListingWhere] },
+    include: {
+      material: { select: { name: true, baseElement: true } },
+      seller: { select: { id: true, name: true } },
+      assets: {
+        where: { kind: { in: ["CERTIFICATE", "TEST_REPORT"] } },
+        select: { kind: true },
+      },
+    },
+  });
+  // Not public — rejected, hazardous, or from an untrusted source. Nothing to
+  // tell anyone about.
+  if (!listing) return [];
+
+  const now = new Date();
+  if (listing.availableUntil && listing.availableUntil < now) return [];
+
+  // The mirror image of loadCandidates: the filters it applies to listings for
+  // a given demand, applied to demands for a given listing. Everything else —
+  // lot increment, price ceiling, distance — is scoreCandidate's to decide.
+  const demands = await prisma.demand.findMany({
+    where: {
+      status: "OPEN",
+      category: listing.category,
+      unit: listing.unit,
+      quantity: { lte: listing.quantityAvailable, gte: listing.minOrderQuantity },
+      ...(listing.availableFrom
+        ? {
+            OR: [
+              { availableBy: null },
+              { availableBy: { gte: listing.availableFrom } },
+            ],
+          }
+        : {}),
+    },
+    take: 500,
+  });
+
+  const matched: Array<{
+    demandId: string;
+    userId: string | null;
+    companyId: string;
+    score: number;
+    explanations: string[];
+    query: string;
+  }> = [];
+
+  for (const demand of demands) {
+    const input = {
+      query: demand.query,
+      category: demand.category,
+      subcategory: demand.subcategory ?? undefined,
+      quantity: demand.quantity,
+      unit: demand.unit as DemandInput["unit"],
+      maxPrice: demand.maxPrice ?? undefined,
+      state: demand.state ?? undefined,
+      city: demand.city ?? undefined,
+      pincode: demand.pincode ?? undefined,
+      latitude: demand.latitude ?? undefined,
+      longitude: demand.longitude ?? undefined,
+      maxDistanceKm: demand.maxDistanceKm ?? undefined,
+      availableBy: demand.availableBy?.toISOString(),
+    } as DemandInput & { category: string };
+
+    const result = scoreCandidate(input, listing as Candidate);
+    if (!result) continue;
+
+    // Upsert, not create: a listing can be edited and re-approved, and the
+    // buyer should see the current score rather than a duplicate-key failure.
+    await prisma.listingMatch.upsert({
+      where: { demandId_listingId: { demandId: demand.id, listingId: listing.id } },
+      create: {
+        demandId: demand.id,
+        listingId: listing.id,
+        score: result.score,
+        version: MATCH_RULE_VERSION,
+        explanationJson: JSON.stringify(result.explanations),
+        inputSnapshotJson: JSON.stringify(input),
+      },
+      update: {
+        score: result.score,
+        version: MATCH_RULE_VERSION,
+        explanationJson: JSON.stringify(result.explanations),
+      },
+    });
+
+    matched.push({
+      demandId: demand.id,
+      userId: demand.userId,
+      companyId: demand.companyId,
+      score: result.score,
+      explanations: result.explanations,
+      query: demand.query,
+    });
+  }
+
+  return matched.sort((left, right) => right.score - left.score);
+}

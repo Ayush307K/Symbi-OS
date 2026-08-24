@@ -162,14 +162,41 @@ The complete template is in `.env.example`.
 - `LISTINGS_PROVIDER`: `recycleinme` for the public provider feed or `json` for
   an authenticated listing API.
 - `REAL_LISTINGS_API_URL` and `REAL_LISTINGS_API_KEY`: configured JSON API.
-- `OPENAI_API_KEY`: enables embeddings and generated RAG answers. Without it,
-  the same cited retrieval pipeline returns an extractive answer.
-- `OPENAI_RAG_MODEL`: defaults to `gpt-5.6-terra`.
-- `OPENAI_EMBEDDING_MODEL`: defaults to `text-embedding-3-small`.
-- `LISTING_EMBEDDING_PROVIDER`: ranked-feed embedding adapter; defaults to
-  `openai` and can be replaced through the provider registry.
-- `LISTING_EMBEDDING_MODEL`: model used by that adapter; the built-in OpenAI
-  adapter requests 768 output dimensions.
+- `GEMINI_API_KEY`: enables embeddings and generated RAG answers. Without it,
+  the same cited retrieval pipeline returns an extractive answer from lexical
+  retrieval. Server-side only — never prefix it with `NEXT_PUBLIC_`.
+  Keep it in `.env`, not `.env.production.local`: the latter is read only when
+  `NODE_ENV=production`, so `next dev` and the `tsx` scripts never see it.
+  Vercel needs it set in the dashboard, since `.env.*` is gitignored.
+- `LISTING_EMBEDDING_PROVIDER`: embedding adapter for both the ranked feed and
+  RAG; defaults to `gemini` and can be replaced through the provider registry
+  (`registerEmbeddingProvider`). An `openai` adapter is also registered.
+- `LISTING_EMBEDDING_MODEL`: overrides the adapter's model.
+- `RAG_GENERATION_PROVIDER`: answer-generation adapter; defaults to `gemini`.
+- `GEMINI_RAG_MODEL`: overrides the generation model.
+
+### Embedding model and dimension
+
+Both pipelines share one vector store, so they must share one model and width.
+
+| | |
+| --- | --- |
+| Embedding model | `gemini-embedding-001` |
+| Dimension | 768 (`MarketplaceListing.embedding`, `KnowledgeChunk.embedding`, `BuyerDemandProfile.embedding`) |
+| Index | HNSW, `vector_cosine_ops`, `m=16`, `ef_construction=64` |
+| Generation model | `gemini-flash-latest` |
+
+`gemini-embedding-001` is natively 3072-wide and Matryoshka-truncatable, so 768
+is requested to match the columns. **Truncated vectors are not unit length** —
+measured 0.587 — and the indexes are cosine, so vectors are L2-normalised before
+they are stored. Changing the dimension means rebuilding both columns and both
+indexes; they cannot be changed independently.
+
+Documents are embedded with `RETRIEVAL_DOCUMENT` and queries with
+`RETRIEVAL_QUERY`, because retrieval is asymmetric.
+
+Note: `gemini-2.5-flash` returns 404 "no longer available to new users" on
+recently issued keys. `gemini-flash-latest` is the supported alias.
 
 ### JSON listing API contract
 
@@ -224,9 +251,23 @@ containing prohibited material terms are rejected and counted in
 
 `npm run rag:index` turns approved real/seller listings and their connected
 compliance/upcycler data into versioned knowledge documents and chunks. Query
-`POST /api/rag/query` or use the existing Copilot UI. Responses are grounded in
-retrieved chunks and return explicit source citations. Source text is treated
-as untrusted data to reduce prompt-injection risk.
+`POST /api/rag/query`. Responses are grounded in retrieved chunks and return
+explicit source citations. Source text is treated as untrusted data to reduce
+prompt-injection risk.
+
+The query route only queries. It does not build the index: rebuilding is a
+minutes-long job and running it inside a serverless request timed out and left
+a partial index behind. An unbuilt index returns `503 KNOWLEDGE_INDEX_EMPTY`.
+
+Retrieval ranks in Postgres against the HNSW index and blends the cosine score
+with a lexical one (0.7 / 0.3). Results below a relevance floor are dropped —
+0.45 for the hybrid path, 0.2 for the lexical fallback. The floors differ
+because the paths score on different scales, and embedding similarity has a
+high baseline: unrelated text still scores about 0.35, so "no results" has to be
+a decision rather than an absence.
+
+When the embedding provider is unreachable, retrieval falls back to lexical and
+reports `degraded: true` rather than silently looking healthy.
 
 ### Ranked buyer feed
 

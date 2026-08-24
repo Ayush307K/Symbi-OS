@@ -49,6 +49,16 @@ export function useCatalog(
   // sat on its skeletons forever. Any URL carrying a filter masked it.
   const appliedRef = useRef<string | null>(null);
 
+  // Personalization decides which endpoint a given filter set is fetched from,
+  // so it belongs in the applied signature. It resolves after the first render
+  // — auth is still loading then — and without it here the flip from false to
+  // true reads as "same filters, already applied" and the personalized feed is
+  // never requested at all.
+  const signatureFor = useCallback(
+    (query: string) => `${personalized ? "feed" : "catalog"}|${query}`,
+    [personalized],
+  );
+
   const load = useCallback(
     async (next: CatalogFilters, cursor?: string) => {
       const id = ++requestId.current;
@@ -117,18 +127,18 @@ export function useCatalog(
   const search = searchParams.toString();
   useEffect(() => {
     const next = filtersFromSearchParams(search);
-    const signature = filtersToQueryString(next);
+    const signature = signatureFor(filtersToQueryString(next));
     // Params the catalogue does not own can change without affecting results.
     if (!catalogNeedsReload(signature, appliedRef.current)) return;
     appliedRef.current = signature;
     setFilters(next);
     load(next);
-  }, [search, load]);
+  }, [search, load, signatureFor]);
 
   const applyFilters = useCallback(
     (next: CatalogFilters) => {
       setFilters(next);
-      appliedRef.current = filtersToQueryString(next);
+      appliedRef.current = signatureFor(filtersToQueryString(next));
       if (syncUrl) {
         const query = filtersToQueryString(next);
         // Through the router, not history.pushState: raw history writes are
@@ -139,7 +149,7 @@ export function useCatalog(
       }
       load(next);
     },
-    [load, router, syncUrl],
+    [load, router, signatureFor, syncUrl],
   );
 
   // There is deliberately no updateFilter here. One existed, unused: it wrote
