@@ -16,14 +16,10 @@ jobs:
     steps:
       - name: Verify production database readiness
         env:
-          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url }}
+          PRODUCTION_URL: https://symbi-os-ten.vercel.app
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "$DEPLOYMENT_URL" =~ ^https:// ]]; then
-            echo "Deployment did not provide a valid HTTPS environment URL."
-            exit 1
-          fi
           curl \
             --fail-with-body \
             --silent \
@@ -32,11 +28,14 @@ jobs:
             --retry-all-errors \
             --retry-delay 5 \
             --max-time 20 \
-            "$DEPLOYMENT_URL/api/health/ready"
+            "$PRODUCTION_URL/api/health/ready"
 
       - name: Verify complete production catalogue
         env:
-          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url }}
+          # Vercel's unique deployment URL is protected and redirects anonymous
+          # CI requests to login. The production-success event is emitted only
+          # after the canonical alias is assigned, so test that public alias.
+          PRODUCTION_URL: https://symbi-os-ten.vercel.app
         shell: bash
         run: |
           set -euo pipefail
@@ -48,7 +47,7 @@ jobs:
             --retry-all-errors \
             --retry-delay 5 \
             --max-time 20 \
-            "$DEPLOYMENT_URL/api/stats")"
+            "$PRODUCTION_URL/api/stats")"
           LISTING_STATS="$payload" node -e '
             const stats = JSON.parse(process.env.LISTING_STATS);
             if (!Number.isInteger(stats.matches) || stats.matches < 148) {
