@@ -11,6 +11,7 @@ const UNGATED_PATHS = ["/", "/style-guide"];
 // Product detail shows exactly what the public catalogue already shows, so a
 // shared listing link must open rather than bounce to sign-in.
 const UNGATED_PREFIXES = ["/products/"];
+const PUBLIC_FILE = /\/[^/]+\.[a-z0-9]+$/i;
 
 function secure(response: NextResponse) {
   response.headers.set("X-Content-Type-Options", "nosniff");
@@ -66,7 +67,11 @@ export async function proxy(request: NextRequest) {
       )
     );
   }
-  if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) {
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    PUBLIC_FILE.test(pathname)
+  ) {
     return secure(NextResponse.next());
   }
   if (
