@@ -234,6 +234,7 @@ model MarketplaceListing {
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
   embedding            Unsupported("vector(768)")?
+  embeddingUpdatedAt   DateTime?
 
   material           WasteMaterial          @relation(fields: [materialId], references: [id], onDelete: Cascade)
   seller             Company                @relation(fields: [sellerCompanyId], references: [id], onDelete: Cascade)
@@ -262,6 +263,7 @@ model MarketplaceListing {
   @@index([materialId])
   @@index([sellerCompanyId])
   @@index([status, updatedAt])
+  @@index([status, isEvalOnly, embeddingUpdatedAt])
   @@index([status, category, updatedAt, id])
   @@index([status, pricePerUnit])
   @@index([status, quantityAvailable])

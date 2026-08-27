@@ -37,7 +37,9 @@ export async function rebuildKnowledgeIndex(
       OR: [
         {
           isEvalOnly: false,
-          sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
+          sourceType: {
+            in: ["real_api", "real_public_provider", "seller_submitted"],
+          },
         },
         ...(includeEval ? [{ isEvalOnly: true }] : []),
       ],
@@ -70,13 +72,15 @@ export async function rebuildKnowledgeIndex(
       `Minimum order: ${listing.minOrderQuantity} ${listing.unit}`,
       `Source: ${listing.sourceName ?? listing.sourceType}`,
       ...listing.material.regulations.map(
-        ({ regulation }) => `Regulation ${regulation.code}: ${regulation.description}`
+        ({ regulation }) =>
+          `Regulation ${regulation.code}: ${regulation.description}`,
       ),
       ...listing.material.upcyclers.map(
-        ({ company }) => `Potential upcycler: ${company.name}, ${company.location}`
+        ({ company }) =>
+          `Potential upcycler: ${company.name}, ${company.location}`,
       ),
     ].join("\n");
-    return {
+    const document = {
       sourceType: "LISTING",
       sourceId: listing.id,
       sourceUrl: listing.sourceUrl,
@@ -84,25 +88,90 @@ export async function rebuildKnowledgeIndex(
       isEvalOnly: listing.isEvalOnly,
       content,
     };
+    return {
+      ...document,
+      contentHash: hash(
+        `${document.sourceType}:${document.sourceId}:${document.isEvalOnly}:${document.content}`,
+      ),
+    };
   });
+
+  const existingDocuments = documents.length
+    ? await prisma.knowledgeDocument.findMany({
+        where: {
+          contentHash: {
+            in: documents.map((document) => document.contentHash),
+          },
+        },
+        select: { id: true, contentHash: true },
+      })
+    : [];
+  const existingIds = existingDocuments.map((document) => document.id);
+  const chunkStats = existingIds.length
+    ? await prisma.$queryRaw<
+        Array<{ document_id: string; total: number; embedded: number }>
+      >(
+        Prisma.sql`SELECT "documentId" AS document_id,
+                          COUNT(*)::int AS total,
+                          COUNT("embedding")::int AS embedded
+                   FROM "KnowledgeChunk"
+                   WHERE "documentId" IN (${Prisma.join(existingIds)})
+                   GROUP BY "documentId"`,
+      )
+    : [];
+  const existingByHash = new Map(
+    existingDocuments.map((document) => [document.contentHash, document]),
+  );
+  const chunkStatsByDocument = new Map(
+    chunkStats.map((row) => [row.document_id, row]),
+  );
 
   let documentCount = 0;
   let chunkCount = 0;
   let embeddedChunkCount = 0;
+  let reusedEmbeddedChunkCount = 0;
   const embeddingFailures: string[] = [];
   for (const document of documents) {
-    const contentHash = hash(
-      `${document.sourceType}:${document.sourceId}:${document.isEvalOnly}:${document.content}`,
-    );
+    const contentChunks = chunks(document.content);
+    const existing = existingByHash.get(document.contentHash);
+    const existingStats = existing
+      ? chunkStatsByDocument.get(existing.id)
+      : undefined;
+
+    // Content hashes make the daily rebuild incremental. Reusing a fully
+    // embedded document also reactivates it if the listing changed away and
+    // later returned to the same content.
+    if (
+      existing &&
+      existingStats?.total === contentChunks.length &&
+      existingStats.embedded === existingStats.total
+    ) {
+      await prisma.knowledgeDocument.update({
+        where: { id: existing.id },
+        data: {
+          sourceType: document.sourceType,
+          isEvalOnly: document.isEvalOnly,
+          sourceId: document.sourceId,
+          sourceUrl: document.sourceUrl,
+          title: document.title,
+          status: "ACTIVE",
+        },
+      });
+      documentCount += 1;
+      chunkCount += existingStats.total;
+      reusedEmbeddedChunkCount += existingStats.embedded;
+      continue;
+    }
+
     const record = await prisma.knowledgeDocument.upsert({
-      where: { contentHash },
+      where: { contentHash: document.contentHash },
       create: {
         sourceType: document.sourceType,
         isEvalOnly: document.isEvalOnly,
         sourceId: document.sourceId,
         sourceUrl: document.sourceUrl,
         title: document.title,
-        contentHash,
+        contentHash: document.contentHash,
       },
       update: {
         sourceType: document.sourceType,
@@ -113,15 +182,16 @@ export async function rebuildKnowledgeIndex(
         status: "ACTIVE",
       },
     });
-    const contentChunks = chunks(document.content);
-
     // Indexed with the document task type, matching how a query is embedded at
     // read time — retrieval is asymmetric. A provider failure leaves the chunks
     // in place without vectors, so retrieval still answers lexically instead of
     // the whole rebuild aborting.
     let embeddings: (number[] | null)[] = contentChunks.map(() => null);
     try {
-      embeddings = await getEmbeddingProvider().embed(contentChunks, "document");
+      embeddings = await getEmbeddingProvider().embed(
+        contentChunks,
+        "document",
+      );
       embeddedChunkCount += embeddings.length;
     } catch (error) {
       embeddingFailures.push(
@@ -156,9 +226,7 @@ export async function rebuildKnowledgeIndex(
     chunkCount += contentChunks.length;
   }
 
-  const activeHashes = documents.map((document) =>
-    hash(`${document.sourceType}:${document.sourceId}:${document.isEvalOnly}:${document.content}`),
-  );
+  const activeHashes = documents.map((document) => document.contentHash);
   await prisma.knowledgeDocument.updateMany({
     where: {
       contentHash: { notIn: activeHashes },
@@ -186,6 +254,7 @@ export async function rebuildKnowledgeIndex(
     documents: documentCount,
     chunks: chunkCount,
     embeddedChunks: embeddedChunkCount,
+    reusedEmbeddedChunks: reusedEmbeddedChunkCount,
     provider: getEmbeddingProvider().name,
     purgedStaleChunks: purged.count,
     // Reported rather than thrown: a partially embedded index still answers,

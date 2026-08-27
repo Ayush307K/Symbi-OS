@@ -8,12 +8,10 @@ process.env.DIRECT_URL = TEST_DATABASE_URL;
 process.env.LISTING_EMBEDDING_PROVIDER = "ranked-feed-fixture";
 
 const { default: prisma } = await import("@/lib/prisma");
-const { registerEmbeddingProvider } = await import(
-  "@/server/semantic/embedding-provider"
-);
-const { refreshListingEmbedding } = await import(
-  "@/server/semantic/listing-embeddings"
-);
+const { registerEmbeddingProvider } =
+  await import("@/server/semantic/embedding-provider");
+const { refreshListingEmbedding } =
+  await import("@/server/semantic/listing-embeddings");
 const { rankBuyerFeed } = await import("@/server/feed/ranked-feed");
 
 registerEmbeddingProvider("ranked-feed-fixture", () => ({
@@ -30,8 +28,7 @@ registerEmbeddingProvider("ranked-feed-fixture", () => ({
     }),
 }));
 
-const databaseReachable = await prisma
-  .$queryRaw`SELECT 1`
+const databaseReachable = await prisma.$queryRaw`SELECT 1`
   .then(() => true)
   .catch(() => false);
 
@@ -163,14 +160,30 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
     await prisma.$disconnect();
   });
 
+  it("records when a listing embedding was refreshed", async () => {
+    const listing = await prisma.marketplaceListing.findUniqueOrThrow({
+      where: { id: listingId },
+      select: { embeddingUpdatedAt: true, updatedAt: true },
+    });
+    expect(listing.embeddingUpdatedAt).toBeInstanceOf(Date);
+    expect(listing.embeddingUpdatedAt!.getTime()).toBeGreaterThanOrEqual(
+      listing.updatedAt.getTime(),
+    );
+  });
+
   it("retrieves and scores a cold-start listing through the pgvector seed path", async () => {
     const result = await rankBuyerFeed(buyerId, { limit: 10 });
     const fixture = result.items.find((item) => item.id === listingId);
     expect(fixture).toBeDefined();
     expect(fixture?.relevanceKind).toBe("relevance");
     expect(fixture?.relevanceScore).toBeGreaterThan(0);
-    expect(result.ranking).toMatchObject({ coldStart: true, historyEventCount: 0 });
-    expect(result.ranking).toMatchObject({ preferredCategories: ["Metal Scrap"] });
+    expect(result.ranking).toMatchObject({
+      coldStart: true,
+      historyEventCount: 0,
+    });
+    expect(result.ranking).toMatchObject({
+      preferredCategories: ["Metal Scrap"],
+    });
   });
 
   it("uses a stable scoring snapshot across cursor pages", async () => {
@@ -182,9 +195,9 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
       cursor: first.pageInfo.nextCursor!,
     });
     expect(second.items[0]?.id).not.toBe(first.items[0]?.id);
-    expect(second.pageInfo.nextCursor?.asOf ?? first.pageInfo.nextCursor?.asOf).toBe(
-      first.pageInfo.nextCursor?.asOf,
-    );
+    expect(
+      second.pageInfo.nextCursor?.asOf ?? first.pageInfo.nextCursor?.asOf,
+    ).toBe(first.pageInfo.nextCursor?.asOf);
   });
 
   it("falls back to recent listings when the profile is embedded before the catalogue", async () => {
@@ -198,7 +211,9 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
     try {
       const result = await rankBuyerFeed(buyerId, { limit: 10 });
       expect(result.items.length).toBeGreaterThan(0);
-      expect(result.items.every((item) => item.category === "Metal Scrap")).toBe(true);
+      expect(
+        result.items.every((item) => item.category === "Metal Scrap"),
+      ).toBe(true);
       expect(result.ranking).toMatchObject({ coldStart: true });
     } finally {
       await refreshListingEmbedding(listingId);

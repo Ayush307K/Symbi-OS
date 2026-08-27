@@ -32,7 +32,8 @@ export async function embedListing(
   provider: EmbeddingProvider = getEmbeddingProvider(),
 ) {
   const [vector] = await provider.embed([listingEmbeddingText(input)]);
-  if (!vector) throw new Error("Embedding provider returned no listing vector.");
+  if (!vector)
+    throw new Error("Embedding provider returned no listing vector.");
   return validateEmbedding(vector, provider.dimensions);
 }
 
@@ -49,7 +50,8 @@ export async function writeListingEmbedding(
   const literal = vectorLiteral(vector);
   await client.$executeRaw(
     Prisma.sql`UPDATE "MarketplaceListing"
-               SET "embedding" = CAST(${literal} AS vector)
+               SET "embedding" = CAST(${literal} AS vector),
+                   "embeddingUpdatedAt" = CURRENT_TIMESTAMP
                WHERE "id" = ${listingId}`,
   );
 }
