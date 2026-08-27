@@ -63,6 +63,12 @@ if (process.env.VERCEL_ENV === "production") {
   console.log("[VercelBuild] Applying production database migrations.");
   configureDirectMigrationUrl();
   runNpmScript("db:deploy");
+  if (process.env.SKIP_CATALOG_SYNC === "true") {
+    console.log("[VercelBuild] Catalogue synchronization explicitly skipped.");
+  } else {
+    console.log("[VercelBuild] Synchronizing the complete production catalogue.");
+    runNpmScript("catalog:sync:production");
+  }
 } else {
   console.log(
     `[VercelBuild] Skipping database migrations for ${process.env.VERCEL_ENV || "local"} build.`,

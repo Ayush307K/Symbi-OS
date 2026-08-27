@@ -33,3 +33,26 @@ jobs:
             --retry-delay 5 \
             --max-time 20 \
             "$DEPLOYMENT_URL/api/health/ready"
+
+      - name: Verify complete production catalogue
+        env:
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 6 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --max-time 20 \
+            "$DEPLOYMENT_URL/api/stats")"
+          LISTING_STATS="$payload" node -e '
+            const stats = JSON.parse(process.env.LISTING_STATS);
+            if (!Number.isInteger(stats.matches) || stats.matches < 148) {
+              throw new Error(`Expected at least 148 active listings, received ${stats.matches}.`);
+            }
+            console.log(`Verified ${stats.matches} active marketplace listings.`);
+          '

@@ -19,6 +19,7 @@
     "ingest": "npm run ingest:real",
     "ingest:real": "tsx scripts/import-real-listings.ts",
     "ingest:tradeindia": "tsx scripts/import-tradeindia-listings.ts",
+    "catalog:sync:production": "tsx scripts/sync-production-catalog.ts",
     "rag:index": "tsx scripts/rebuild-rag-index.ts",
     "rag:eval:seed": "tsx scripts/seed-rag-eval-data.ts",
     "rag:eval:run": "tsx scripts/run-rag-golden-eval.ts",

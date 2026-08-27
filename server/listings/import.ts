@@ -38,7 +38,11 @@ function slugify(value: string) {
     .slice(0, 80);
 }
 
-async function upsertListing(provider: ListingProvider, row: ProviderListing) {
+async function upsertListing(
+  provider: ListingProvider,
+  row: ProviderListing,
+  refreshEmbedding: boolean,
+) {
   const category = importableCategory(row);
   if (!category) return false;
 
@@ -169,13 +173,15 @@ async function upsertListing(provider: ListingProvider, row: ProviderListing) {
       },
     });
   });
-  await tryRefreshListingEmbedding(listingId);
+  if (refreshEmbedding) await tryRefreshListingEmbedding(listingId);
   return true;
 }
 
 export interface RealListingImportOptions {
   dryRun?: boolean;
   targets?: Partial<Record<TargetCategory, number>>;
+  /** Disable only on deployment hot paths; run the embedding backfill later. */
+  refreshEmbeddings?: boolean;
 }
 
 function importableCategory(row: ProviderListing) {
@@ -291,7 +297,9 @@ export async function importRealListings(
     let upserted = 0;
     let rejected = 0;
     for (const row of rows) {
-      if (await upsertListing(provider, row)) upserted += 1;
+      if (await upsertListing(provider, row, options.refreshEmbeddings !== false)) {
+        upserted += 1;
+      }
       else rejected += 1;
     }
     await prisma.listingImportRun.update({
