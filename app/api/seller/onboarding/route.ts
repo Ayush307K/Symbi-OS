@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { apiError, assertTrustedOrigin, parseJson, requireUser } from "@/server/http";
+import {
+  apiError,
+  assertTrustedOrigin,
+  parseJson,
+  requireUser,
+} from "@/server/http";
 import {
   assertCompleteOnboarding,
+  assertOnboardingStepAccessible,
   maskOnboarding,
   onboardingCompletion,
+  onboardingJourney,
   onboardingJsonField,
   onboardingRequestSchema,
   serializeOnboardingPayload,
@@ -43,6 +50,10 @@ export async function GET() {
         onboarding,
         documents.map((document) => document.kind),
       ),
+      journey: onboardingJourney(
+        onboarding,
+        documents.map((document) => document.kind),
+      ),
       verificationMode:
         process.env.DEMO_VERIFICATION_ENABLED === "true" ? "SANDBOX" : "MANUAL",
     });
@@ -66,16 +77,24 @@ export async function POST(request: NextRequest) {
     });
     if (!["DRAFT", "REJECTED", "CHANGES_REQUIRED"].includes(existing.status)) {
       return NextResponse.json(
-        { error: "Submitted onboarding cannot be edited.", code: "INVALID_STATE" },
-        { status: 409 }
+        {
+          error: "Submitted onboarding cannot be edited.",
+          code: "INVALID_STATE",
+        },
+        { status: 409 },
       );
     }
 
+    const readyDocuments = await prisma.onboardingDocument.findMany({
+      where: { onboardingId: existing.id, status: "READY" },
+      select: { kind: true },
+    });
+    const documentKinds = readyDocuments.map((document) => document.kind);
+    assertOnboardingStepAccessible(existing, documentKinds, body.step);
+
     const gstinHash =
       body.step === "TAX"
-        ? sensitiveValueHash(
-            String((payload as { gst: string }).gst),
-          )
+        ? sensitiveValueHash(String((payload as { gst: string }).gst))
         : undefined;
     if (gstinHash) {
       const duplicate = await prisma.sellerOnboarding.findFirst({
@@ -92,30 +111,34 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+    const serializedPayload = serializeOnboardingPayload(body.step, payload);
+    const journey = onboardingJourney(
+      { ...existing, [field]: serializedPayload },
+      documentKinds,
+    );
     const saved = await prisma.sellerOnboarding.update({
       where: { userId: auth.userId },
       data: {
-        [field]: serializeOnboardingPayload(body.step, payload),
-        currentStep: body.step,
-        status: "DRAFT",
-        reviewerNote: null,
+        [field]: serializedPayload,
+        currentStep: journey.currentStep,
+        // A correction request remains visible until the seller resubmits;
+        // saving the first amended field must not erase the reviewer's note.
+        status: existing.status,
+        reviewerNote: existing.reviewerNote,
         ...(gstinHash ? { gstinHash } : {}),
       },
     });
 
     if (!body.submit) {
-      return NextResponse.json({ success: true, onboarding: maskOnboarding(saved) });
+      return NextResponse.json({
+        success: true,
+        onboarding: maskOnboarding(saved),
+        journey,
+      });
     }
 
     assertCompleteOnboarding(saved);
-    const documents = await prisma.onboardingDocument.findMany({
-      where: { onboardingId: saved.id, status: "READY" },
-      select: { kind: true },
-    });
-    const completion = onboardingCompletion(
-      saved,
-      documents.map((document) => document.kind),
-    );
+    const completion = onboardingCompletion(saved, documentKinds);
     if (completion.missingDocuments.length) {
       return NextResponse.json(
         {
@@ -136,7 +159,7 @@ export async function POST(request: NextRequest) {
           error: "Verify your email before submitting seller onboarding.",
           code: "EMAIL_NOT_VERIFIED",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
     const submitted = await prisma.$transaction(async (tx) => {

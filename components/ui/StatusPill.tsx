@@ -30,6 +30,8 @@ const STATUS_TONES: Record<string, Tone> = {
   WAITING_ON_USER: "warning",
   PENDING: "warning",
   PENDING_REVIEW: "warning",
+  UNDER_REVIEW: "warning",
+  CHANGES_REQUIRED: "warning",
   SUBMITTED: "warning",
   AWAITING_BUYER_CONFIRMATION: "warning",
   COUNTERED: "warning",

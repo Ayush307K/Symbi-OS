@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   assertCompleteOnboarding,
+  assertOnboardingStepAccessible,
   maskOnboarding,
+  onboardingJourney,
   serializeOnboardingPayload,
   validateOnboardingStep,
 } from "@/server/onboarding";
@@ -28,8 +30,86 @@ describe("seller onboarding", () => {
         kycJson: null,
         warehouseJson: null,
         policyJson: null,
-      })
+      }),
     ).toThrow(/Complete these onboarding steps/i);
+  });
+
+  it("builds a sequential journey from details and required documents", () => {
+    const record = {
+      businessJson: JSON.stringify({
+        legalName: "Example Circular",
+        entityType: "PRIVATE_LIMITED",
+        registrationNumber: "REG-12345",
+        phone: "9876543210",
+      }),
+      taxJson: null,
+      bankJson: null,
+      kycJson: null,
+      warehouseJson: null,
+      policyJson: null,
+    };
+
+    expect(onboardingJourney(record, []).currentStep).toBe("BUSINESS");
+    expect(onboardingJourney(record, ["REGISTRATION"])).toMatchObject({
+      currentStep: "TAX",
+      completedSteps: ["BUSINESS"],
+      percentage: 17,
+    });
+  });
+
+  it("blocks later steps until all earlier details and documents exist", () => {
+    const record = {
+      businessJson: JSON.stringify({
+        legalName: "Example Circular",
+        entityType: "PRIVATE_LIMITED",
+        registrationNumber: "REG-12345",
+        phone: "9876543210",
+      }),
+      taxJson: null,
+      bankJson: null,
+      kycJson: null,
+      warehouseJson: null,
+      policyJson: null,
+    };
+
+    expect(() => assertOnboardingStepAccessible(record, [], "TAX")).toThrow(
+      /complete business/i,
+    );
+    expect(() =>
+      assertOnboardingStepAccessible(record, ["REGISTRATION"], "TAX"),
+    ).not.toThrow();
+    expect(() =>
+      assertOnboardingStepAccessible(record, ["REGISTRATION"], "BANK"),
+    ).toThrow(/complete tax/i);
+  });
+
+  it("does not unlock later steps for malformed stored data", () => {
+    const record = {
+      businessJson: JSON.stringify({ legalName: "Incomplete legacy record" }),
+      taxJson: null,
+      bankJson: null,
+      kycJson: null,
+      warehouseJson: null,
+      policyJson: null,
+    };
+
+    expect(onboardingJourney(record, ["REGISTRATION"]).currentStep).toBe(
+      "BUSINESS",
+    );
+    expect(() =>
+      assertOnboardingStepAccessible(record, ["REGISTRATION"], "TAX"),
+    ).toThrow(/complete business/i);
+  });
+
+  it("returns field-level validation errors instead of an internal error", () => {
+    expect(() =>
+      validateOnboardingStep("BUSINESS", {
+        legalName: "A",
+        entityType: "PROPRIETORSHIP",
+        registrationNumber: "12",
+        phone: "123",
+      }),
+    ).toThrow(/valid Indian mobile|too small/i);
   });
 
   it("masks bank account numbers in API output", () => {
@@ -55,7 +135,7 @@ describe("seller onboarding", () => {
     expect(encrypted).toMatch(/^enc:v1:/);
     expect(encrypted).not.toContain("123456789012");
     expect(decryptJson<Record<string, unknown>>(encrypted).accountNumber).toBe(
-      "123456789012"
+      "123456789012",
     );
   });
 
@@ -72,6 +152,20 @@ describe("seller onboarding", () => {
 
     expect(unreadable.undecryptableFields).toEqual(["bank"]);
     expect(unreadable.bankJson).toBeNull();
+  });
+
+  it("never returns unreadable encrypted tax or KYC payloads", () => {
+    const ciphertext =
+      "enc:v1:AAAAAAAAAAAAAAAA:BBBBBBBBBBBBBBBBBBBBBBBB:CCCCCCCC";
+    const unreadable = maskOnboarding({
+      bankJson: null,
+      taxJson: ciphertext,
+      kycJson: ciphertext,
+    });
+
+    expect(unreadable.undecryptableFields).toEqual(["tax", "kyc"]);
+    expect(unreadable.taxJson).toBeNull();
+    expect(unreadable.kycJson).toBeNull();
   });
 
   it("reports nothing undecryptable when the key matches", () => {

@@ -23,9 +23,32 @@ export const requiredOnboardingDocuments = [
   "BANK_PROOF",
 ] as const;
 
+export type OnboardingStep = (typeof onboardingSteps)[number];
+export type OnboardingDocumentKind =
+  (typeof requiredOnboardingDocuments)[number] | "WAREHOUSE_PROOF";
+
+export const onboardingDocumentForStep: Partial<
+  Record<OnboardingStep, OnboardingDocumentKind>
+> = {
+  BUSINESS: "REGISTRATION",
+  TAX: "GST_CERTIFICATE",
+  BANK: "BANK_PROOF",
+  KYC: "KYC_ID",
+};
+
+const onboardingStepForDocument = new Map<
+  OnboardingDocumentKind,
+  OnboardingStep
+>([
+  ["REGISTRATION", "BUSINESS"],
+  ["GST_CERTIFICATE", "TAX"],
+  ["BANK_PROOF", "BANK"],
+  ["KYC_ID", "KYC"],
+  ["WAREHOUSE_PROOF", "WAREHOUSE"],
+]);
+
 export function sensitiveValueHash(value: string) {
-  const pepper =
-    process.env.FIELD_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  const pepper = process.env.FIELD_ENCRYPTION_KEY || process.env.JWT_SECRET;
   if (!pepper) throw new Error("A server encryption key is required.");
   return createHash("sha256")
     .update(`${pepper}:${value.trim().toUpperCase()}`)
@@ -43,7 +66,9 @@ const schemas = {
       "PUBLIC_LIMITED",
     ]),
     registrationNumber: z.string().trim().min(5).max(40),
-    phone: z.string().regex(/^[6-9][0-9]{9}$/, "Enter a valid Indian mobile number."),
+    phone: z
+      .string()
+      .regex(/^[6-9][0-9]{9}$/, "Enter a valid Indian mobile number."),
   }),
   TAX: z
     .object({
@@ -69,7 +94,9 @@ const schemas = {
     }),
   BANK: z.object({
     accountHolder: z.string().trim().min(2).max(160),
-    accountNumber: z.string().regex(/^[0-9]{9,18}$/, "Invalid bank account number."),
+    accountNumber: z
+      .string()
+      .regex(/^[0-9]{9,18}$/, "Invalid bank account number."),
     ifsc: z.string().trim().toUpperCase().regex(ifsc, "Invalid IFSC format."),
     consent: z.literal(true, {
       message: "Consent is required for sandbox bank verification.",
@@ -92,7 +119,8 @@ const schemas = {
       message: "Marketplace terms must be accepted.",
     }),
     confirmsNonHazardousOnly: z.literal(true, {
-      message: "You must confirm that only non-hazardous materials will be listed.",
+      message:
+        "You must confirm that only non-hazardous materials will be listed.",
     }),
     acceptsSandboxVerification: z.literal(true, {
       message: "Sandbox verification disclosure must be accepted.",
@@ -106,14 +134,26 @@ export const onboardingRequestSchema = z.object({
   submit: z.boolean().optional().default(false),
 });
 
-export function validateOnboardingStep(
-  step: (typeof onboardingSteps)[number],
-  payload: unknown
-) {
-  return schemas[step].parse(payload);
+export function validateOnboardingStep(step: OnboardingStep, payload: unknown) {
+  const result = schemas[step].safeParse(payload);
+  if (!result.success) {
+    const fields = Object.fromEntries(
+      result.error.issues.map((issue) => [
+        issue.path.join(".") || "_form",
+        issue.message,
+      ]),
+    );
+    throw new ApiError(
+      422,
+      result.error.issues.map((issue) => issue.message).join("; "),
+      "VALIDATION_ERROR",
+      { fields },
+    );
+  }
+  return result.data;
 }
 
-export function onboardingJsonField(step: (typeof onboardingSteps)[number]) {
+export function onboardingJsonField(step: OnboardingStep) {
   return {
     BUSINESS: "businessJson",
     TAX: "taxJson",
@@ -128,6 +168,84 @@ export function onboardingJsonField(step: (typeof onboardingSteps)[number]) {
     | "kycJson"
     | "warehouseJson"
     | "policyJson";
+}
+
+type OnboardingRecord = Parameters<typeof assertCompleteOnboarding>[0];
+
+export function onboardingJourney(
+  record: OnboardingRecord,
+  documentKinds: readonly string[],
+) {
+  const documents = new Set(documentKinds);
+  const steps = onboardingSteps.map((step) => {
+    const documentKind = onboardingDocumentForStep[step];
+    const stored = record[onboardingJsonField(step)];
+    let detailsComplete = false;
+    if (stored) {
+      try {
+        validateOnboardingStep(step, decryptJson(stored));
+        detailsComplete = true;
+      } catch {
+        // An unreadable or legacy-invalid section is not complete and cannot
+        // unlock later stages. The seller can safely re-enter that one step.
+        detailsComplete = false;
+      }
+    }
+    const documentComplete = documentKind ? documents.has(documentKind) : true;
+    return {
+      step,
+      detailsComplete,
+      documentKind: documentKind ?? null,
+      documentComplete,
+      complete: detailsComplete && documentComplete,
+    };
+  });
+  const firstIncompleteIndex = steps.findIndex((step) => !step.complete);
+  const currentStep =
+    firstIncompleteIndex === -1
+      ? ("REVIEW" as const)
+      : steps[firstIncompleteIndex].step;
+  const completedSteps = steps
+    .filter((step) => step.complete)
+    .map((step) => step.step);
+
+  return {
+    currentStep,
+    completedSteps,
+    percentage: Math.round(
+      (completedSteps.length / onboardingSteps.length) * 100,
+    ),
+    steps,
+  };
+}
+
+/**
+ * Server-side journey gate. Client-side locked steps are only presentation;
+ * this prevents callers from posting later stages directly to the API.
+ */
+export function assertOnboardingStepAccessible(
+  record: OnboardingRecord,
+  documentKinds: readonly string[],
+  requestedStep: OnboardingStep,
+) {
+  const requestedIndex = onboardingSteps.indexOf(requestedStep);
+  const journey = onboardingJourney(record, documentKinds);
+  const blockedBy = journey.steps
+    .slice(0, requestedIndex)
+    .find((step) => !step.complete);
+  if (blockedBy) {
+    throw new ApiError(
+      409,
+      `Complete ${blockedBy.step.toLowerCase()} before continuing.`,
+      "ONBOARDING_STEP_LOCKED",
+      { currentStep: journey.currentStep, blockedBy: blockedBy.step },
+    );
+  }
+  return journey;
+}
+
+export function onboardingStepForDocumentKind(kind: string) {
+  return onboardingStepForDocument.get(kind as OnboardingDocumentKind) ?? null;
 }
 
 export function assertCompleteOnboarding(record: {
@@ -146,13 +264,13 @@ export function assertCompleteOnboarding(record: {
     throw new ApiError(
       422,
       `Complete these onboarding steps before submission: ${missing.join(", ")}.`,
-      "ONBOARDING_INCOMPLETE"
+      "ONBOARDING_INCOMPLETE",
     );
   }
   for (const step of onboardingSteps) {
     validateOnboardingStep(
       step,
-      decryptJson(record[onboardingJsonField(step)]!)
+      decryptJson(record[onboardingJsonField(step)]!),
     );
   }
 }
@@ -173,8 +291,7 @@ export function onboardingCompletion(
     requiredOnboardingDocuments.length -
     missingSteps.length -
     missingDocuments.length;
-  const total =
-    onboardingSteps.length + requiredOnboardingDocuments.length;
+  const total = onboardingSteps.length + requiredOnboardingDocuments.length;
   return {
     percentage: Math.round((complete / total) * 100),
     missingSteps,
@@ -183,8 +300,8 @@ export function onboardingCompletion(
 }
 
 export function serializeOnboardingPayload(
-  step: (typeof onboardingSteps)[number],
-  payload: unknown
+  step: OnboardingStep,
+  payload: unknown,
 ) {
   return ["TAX", "BANK", "KYC"].includes(step)
     ? encryptJson(payload)
@@ -202,11 +319,14 @@ export function serializeOnboardingPayload(
  * key the records were written with.
  */
 function decryptField(value: string | null | undefined, field: string) {
-  if (!value) return { data: null as Record<string, unknown> | null, failed: false };
+  if (!value)
+    return { data: null as Record<string, unknown> | null, failed: false };
   try {
     return { data: decryptJson<Record<string, unknown>>(value), failed: false };
   } catch {
-    console.error(`[onboarding] could not decrypt ${field}; check FIELD_ENCRYPTION_KEY`);
+    console.error(
+      `[onboarding] could not decrypt ${field}; check FIELD_ENCRYPTION_KEY`,
+    );
     return { data: null as Record<string, unknown> | null, failed: true };
   }
 }
@@ -243,23 +363,19 @@ export function maskOnboarding<
           consent: Boolean(bank.consent),
         })
       : null,
-    ...(tax
-      ? {
-          taxJson: JSON.stringify({
-            gst: `••••${String(tax.gst ?? "").slice(-4)}`,
-            pan: `••••${String(tax.pan ?? "").slice(-4)}`,
-          }),
-        }
-      : {}),
-    ...(kyc
-      ? {
-          kycJson: JSON.stringify({
-            authorizedSignatory: kyc.authorizedSignatory,
-            designation: kyc.designation,
-            documentType: kyc.documentType,
-            documentReference: `••••${String(kyc.documentReference ?? "").slice(-4)}`,
-          }),
-        }
-      : {}),
+    taxJson: tax
+      ? JSON.stringify({
+          gst: `••••${String(tax.gst ?? "").slice(-4)}`,
+          pan: `••••${String(tax.pan ?? "").slice(-4)}`,
+        })
+      : null,
+    kycJson: kyc
+      ? JSON.stringify({
+          authorizedSignatory: kyc.authorizedSignatory,
+          designation: kyc.designation,
+          documentType: kyc.documentType,
+          documentReference: `••••${String(kyc.documentReference ?? "").slice(-4)}`,
+        })
+      : null,
   };
 }

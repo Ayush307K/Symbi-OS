@@ -7,6 +7,7 @@ import {
   requireUser,
 } from "@/server/http";
 import { deleteObject, getObject } from "@/server/listings/storage";
+import { onboardingJourney } from "@/server/onboarding";
 
 export async function GET(
   _request: NextRequest,
@@ -68,8 +69,24 @@ export async function DELETE(
         "INVALID_STATE",
       );
     }
+    const remainingDocuments = await prisma.onboardingDocument.findMany({
+      where: {
+        onboardingId: document.onboardingId,
+        status: "READY",
+        id: { not: document.id },
+      },
+      select: { kind: true },
+    });
+    const journeyAfterRemoval = onboardingJourney(
+      document.onboarding,
+      remainingDocuments.map((item) => item.kind),
+    );
     await prisma.$transaction(async (tx) => {
       await tx.onboardingDocument.delete({ where: { id } });
+      await tx.sellerOnboarding.update({
+        where: { id: document.onboardingId },
+        data: { currentStep: journeyAfterRemoval.currentStep },
+      });
       await tx.verificationEvent.create({
         data: {
           onboardingId: document.onboardingId,

@@ -8,6 +8,11 @@ import {
 } from "@/server/http";
 import { preparePrivatePdf } from "@/server/listings/assets";
 import { deleteObject } from "@/server/listings/storage";
+import {
+  assertOnboardingStepAccessible,
+  onboardingJourney,
+  onboardingStepForDocumentKind,
+} from "@/server/onboarding";
 
 const documentKinds = new Set([
   "REGISTRATION",
@@ -27,7 +32,9 @@ export async function POST(request: NextRequest) {
       update: {},
       create: { userId: auth.userId },
     });
-    if (!["DRAFT", "REJECTED", "CHANGES_REQUIRED"].includes(onboarding.status)) {
+    if (
+      !["DRAFT", "REJECTED", "CHANGES_REQUIRED"].includes(onboarding.status)
+    ) {
       throw new ApiError(
         409,
         "Documents cannot be changed while verification is in progress or approved.",
@@ -47,6 +54,30 @@ export async function POST(request: NextRequest) {
         "DOCUMENT_KIND_INVALID",
       );
     }
+    const documentStep = onboardingStepForDocumentKind(kind);
+    if (!documentStep) {
+      throw new ApiError(
+        422,
+        "Unsupported onboarding document type.",
+        "DOCUMENT_KIND_INVALID",
+      );
+    }
+    const readyDocuments = await prisma.onboardingDocument.findMany({
+      where: { onboardingId: onboarding.id, status: "READY" },
+      select: { kind: true },
+    });
+    assertOnboardingStepAccessible(
+      onboarding,
+      readyDocuments.map((document) => document.kind),
+      documentStep,
+    );
+    const documentKindsAfterUpload = new Set(
+      readyDocuments.map((document) => document.kind),
+    );
+    documentKindsAfterUpload.add(kind);
+    const journeyAfterUpload = onboardingJourney(onboarding, [
+      ...documentKindsAfterUpload,
+    ]);
     prepared = await preparePrivatePdf(
       `onboarding/${onboarding.id}/${kind.toLowerCase()}`,
       file,
@@ -83,6 +114,10 @@ export async function POST(request: NextRequest) {
             Date.now() + retentionDays * 24 * 60 * 60 * 1000,
           ),
         },
+      });
+      await tx.sellerOnboarding.update({
+        where: { id: onboarding.id },
+        data: { currentStep: journeyAfterUpload.currentStep },
       });
       await tx.verificationEvent.create({
         data: {
