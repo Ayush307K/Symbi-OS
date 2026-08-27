@@ -349,13 +349,21 @@ export async function GET(request: NextRequest) {
     const companyIds = [...new Set(pageRows.map((row) => row.seller.id))];
     const sellerUsers = companyIds.length
       ? await prisma.user.findMany({
-          where: { companyId: { in: companyIds } },
+          where: {
+            companyId: { in: companyIds },
+            accountStatus: "ACTIVE",
+            role: { in: ["SELLER", "BOTH"] },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: { id: true, companyId: true },
         })
       : [];
-    const sellerUserByCompany = new Map(
-      sellerUsers.map((user) => [user.companyId, user.id]),
-    );
+    const sellerUserByCompany = new Map<string, string>();
+    for (const user of sellerUsers) {
+      if (user.companyId && !sellerUserByCompany.has(user.companyId)) {
+        sellerUserByCompany.set(user.companyId, user.id);
+      }
+    }
     const listingIds = pageRows.map((row) => row.id);
     const [reviewStats, completedOrderStats, threads, approvedOnboardings] =
       await Promise.all([

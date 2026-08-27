@@ -6,6 +6,8 @@ function mapListing(listing: any) {
   return {
     id: listing.id,
     materialId: listing.material.id,
+    isEvalOnly: listing.isEvalOnly,
+    evalScenarioTags: listing.evalScenarioTags,
     title: listing.title,
     name: listing.material.name,
     toxicity: listing.material.toxicityLevel,
@@ -85,7 +87,12 @@ export async function GET(
     const [sellerUser, sellerListingCount, categoryListingCount, fulfilledOrders, related, sameSeller, sellerOnboarding, messageThreads] =
       await Promise.all([
         prisma.user.findFirst({
-          where: { companyId: listing.sellerCompanyId },
+          where: {
+            companyId: listing.sellerCompanyId,
+            accountStatus: "ACTIVE",
+            role: { in: ["SELLER", "BOTH"] },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: { id: true },
         }),
         prisma.marketplaceListing.count({

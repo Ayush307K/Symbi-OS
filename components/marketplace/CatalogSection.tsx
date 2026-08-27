@@ -79,6 +79,18 @@ export function CatalogSection({
   // unchanged, so existing threads stay consistent.
   const handleInquire = useCallback(
     async (listing: MaterialListing) => {
+      // The card normally renders an attributed source link for this case.
+      // Keep the handler defensive for stale clients and direct invocations.
+      if (!listing.sellerUserId) {
+        toast({
+          tone: "info",
+          title: "This supplier is external",
+          description: listing.sourceName
+            ? `Use the original ${listing.sourceName} listing to contact them.`
+            : "This supplier does not have a SymbiOS inbox.",
+        });
+        return;
+      }
       if (!isAuthenticated) {
         toast({
           tone: "info",

@@ -25,7 +25,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toast";
 import ListingImage from "@/components/ListingImage";
+import { ExternalSourceLink } from "@/components/marketplace/ExternalSourceLink";
 import { cn } from "@/lib/cn";
+import { externalHttpUrl } from "@/lib/external-url";
 import { listingFallbackImage } from "@/lib/listing-images";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
@@ -248,6 +250,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
   const messageSeller = () =>
     listing &&
+    listing.sellerUserId &&
     run("message", async () => {
       const res = await fetch("/api/messages", {
         method: "POST",
@@ -327,6 +330,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   }
 
   const price = money(listing.price);
+  const sourceUrl = externalHttpUrl(listing.sourceUrl);
   const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
   const stats = data?.sellerStats;
 
@@ -567,14 +571,24 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                     >
                       Cart
                     </Button>
-                    <Button
-                      variant="ghost"
-                      leadingIcon={<MessageSquare className="h-4 w-4" />}
-                      loading={pending === "message"}
-                      onClick={messageSeller}
-                    >
-                      Message
-                    </Button>
+                    {listing.sellerUserId ? (
+                      <Button
+                        variant="ghost"
+                        leadingIcon={<MessageSquare className="h-4 w-4" />}
+                        loading={pending === "message"}
+                        onClick={messageSeller}
+                      >
+                        Message
+                      </Button>
+                    ) : (
+                      <ExternalSourceLink
+                        href={sourceUrl}
+                        sourceName={listing.sourceName}
+                        variant="ghost"
+                        label="View source"
+                        fullWidth
+                      />
+                    )}
                   </div>
                 </>
               )}
@@ -709,11 +723,11 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             </div>
           ))}
         </dl>
-        {listing.sourceUrl ? (
+        {sourceUrl ? (
           <p className="mt-4 text-[13px] text-ink-500">
             Provenance:{" "}
             <a
-              href={listing.sourceUrl}
+              href={sourceUrl}
               target="_blank"
               rel="noreferrer noopener"
               className="font-medium text-copper-700 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"

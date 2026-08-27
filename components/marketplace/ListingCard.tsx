@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import ListingImage from "@/components/ListingImage";
+import { ExternalSourceLink } from "@/components/marketplace/ExternalSourceLink";
 import { cn } from "@/lib/cn";
 import { listingFallbackImage } from "@/lib/listing-images";
 import type { MaterialListing } from "@/lib/marketplace-types";
@@ -218,7 +219,7 @@ export function ListingCard({
                 Place a bid instead →
               </Link>
             </>
-          ) : (
+          ) : listing.sellerUserId ? (
             <Button
               variant="primary"
               size="sm"
@@ -229,6 +230,14 @@ export function ListingCard({
             >
               Ask quote
             </Button>
+          ) : (
+            <ExternalSourceLink
+              href={listing.sourceUrl}
+              sourceName={listing.sourceName}
+              variant="primary"
+              size="sm"
+              fullWidth
+            />
           )}
         </div>
       </div>

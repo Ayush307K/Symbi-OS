@@ -9,11 +9,12 @@ import {
   parseJson,
   requireUser,
 } from "@/server/http";
-import { publicListingWhere } from "@/server/listings/policy";
 import { enforceRateLimit } from "@/server/rate-limit";
 import {
+  appendMessageToThread,
   cleanMessage,
-  requireThreadParticipant,
+  createListingMessageThread,
+  findActiveSellerUserId,
   threadRecipient,
 } from "@/server/messages";
 
@@ -92,27 +93,10 @@ export async function POST(request: NextRequest) {
     const body = await parseJson(request, createSchema);
     const text = cleanMessage(body.body);
     if (body.threadId) {
-      const thread = await requireThreadParticipant(body.threadId, auth);
-      if (thread.status !== "OPEN") {
-        throw new ApiError(
-          409,
-          "Reopen the thread before replying.",
-          "THREAD_NOT_OPEN",
-        );
-      }
-      const message = await prisma.$transaction(async (tx) => {
-        const created = await tx.message.create({
-          data: {
-            threadId: thread.id,
-            senderUserId: auth.userId,
-            body: text,
-          },
-        });
-        await tx.messageThread.update({
-          where: { id: thread.id },
-          data: { updatedAt: new Date() },
-        });
-        return created;
+      const { thread, message } = await appendMessageToThread({
+        threadId: body.threadId,
+        actor: auth,
+        body: text,
       });
       const recipient = threadRecipient(thread, auth.userId);
       await notify(
@@ -128,7 +112,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let listingId = body.listingId ?? null;
+    // Listing-only enquiries use the guarded domain service. Imported source
+    // listings have attribution Company rows but no platform seller; those
+    // return SELLER_NOT_ON_PLATFORM rather than creating an unreadable thread.
+    if (body.listingId && !body.bidId && !body.orderId) {
+      const { thread, message } = await createListingMessageThread({
+        listingId: body.listingId,
+        buyer: auth,
+        subject: body.subject,
+        body: text,
+      });
+      await notify(
+        thread.sellerUserId,
+        "MESSAGE",
+        "New marketplace message",
+        text.slice(0, 140),
+        `/messages/${thread.id}`,
+      );
+      return NextResponse.json(
+        { success: true, threadId: thread.id, message },
+        { status: 201 },
+      );
+    }
+
+    let listingId: string | null = null;
     let bidId = body.bidId ?? null;
     let orderId = body.orderId ?? null;
     let buyerUserId = auth.userId;
@@ -168,39 +175,21 @@ export async function POST(request: NextRequest) {
       buyerUserId = order.buyerUserId;
       sellerCompanyId = order.items[0]?.sellerCompanyId ?? null;
       sellerUserId = sellerCompanyId
-        ? (
-            await prisma.user.findFirst({
-              where: { companyId: sellerCompanyId },
-            })
-          )?.id ?? null
+        ? await findActiveSellerUserId(sellerCompanyId)
         : null;
       listingId = order.items[0]?.listingId ?? null;
-    } else if (listingId) {
-      const listing = await prisma.marketplaceListing.findFirst({
-        where: { id: listingId, ...publicListingWhere },
-      });
-      if (!listing) {
-        throw new ApiError(404, "Listing not found.", "LISTING_NOT_FOUND");
-      }
-      if (listing.sellerCompanyId === auth.companyId) {
-        throw new ApiError(
-          409,
-          "Use an existing buyer thread for your own listing.",
-          "SELF_THREAD",
-        );
-      }
-      sellerCompanyId = listing.sellerCompanyId;
-      sellerUserId =
-        (
-          await prisma.user.findFirst({
-            where: { companyId: listing.sellerCompanyId },
-          })
-        )?.id ?? null;
     } else {
       throw new ApiError(
         422,
         "A listing, bid, or order is required for a new thread.",
         "THREAD_CONTEXT_REQUIRED",
+      );
+    }
+    if (!sellerUserId) {
+      throw new ApiError(
+        409,
+        "This seller is not connected to SymbiOS messaging.",
+        "SELLER_NOT_ON_PLATFORM",
       );
     }
     if (auth.userId !== buyerUserId && auth.userId !== sellerUserId) {

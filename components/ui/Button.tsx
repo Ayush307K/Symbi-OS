@@ -26,6 +26,32 @@ const sizes = {
   lg: "h-12 px-6 text-[15px] gap-2",
 } as const;
 
+export interface ButtonStyleOptions {
+  variant?: keyof typeof variants;
+  size?: keyof typeof sizes;
+  fullWidth?: boolean;
+  className?: string;
+}
+
+/** Shared by real buttons and link-shaped actions so their states stay aligned. */
+export function buttonClassName({
+  variant = "secondary",
+  size = "md",
+  fullWidth = false,
+  className,
+}: ButtonStyleOptions = {}) {
+  return cn(
+    "inline-flex select-none items-center justify-center rounded-control font-medium",
+    "transition-colors duration-[120ms] ease-out",
+    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700",
+    "disabled:cursor-not-allowed disabled:opacity-60",
+    variants[variant],
+    sizes[size],
+    fullWidth && "w-full",
+    className,
+  );
+}
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: keyof typeof variants;
   size?: keyof typeof sizes;
@@ -61,16 +87,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         type={type}
         disabled={isDisabled}
         aria-busy={loading || undefined}
-        className={cn(
-          "inline-flex select-none items-center justify-center rounded-control font-medium",
-          "transition-colors duration-[120ms] ease-out",
-          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-          variants[variant],
-          sizes[size],
-          fullWidth && "w-full",
-          className,
-        )}
+        className={buttonClassName({ variant, size, fullWidth, className })}
         {...props}
       >
         {loading ? (

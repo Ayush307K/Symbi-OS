@@ -393,7 +393,12 @@ export async function rankBuyerFeed(
         select: { user: { select: { companyId: true } } },
       }),
       prisma.user.findMany({
-        where: { companyId: { in: companyIds } },
+        where: {
+          companyId: { in: companyIds },
+          accountStatus: "ACTIVE",
+          role: { in: ["SELLER", "BOTH"] },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true, companyId: true },
       }),
     ]);
@@ -407,9 +412,12 @@ export async function rankBuyerFeed(
       .map((item) => item.user.companyId)
       .filter((id): id is string => Boolean(id)),
   );
-  const sellerUserByCompany = new Map(
-    sellerUsers.map((user) => [user.companyId, user.id]),
-  );
+  const sellerUserByCompany = new Map<string, string>();
+  for (const user of sellerUsers) {
+    if (user.companyId && !sellerUserByCompany.has(user.companyId)) {
+      sellerUserByCompany.set(user.companyId, user.id);
+    }
+  }
   const responseByListing = new Map<string, { total: number; replied: number }>();
   for (const thread of threads) {
     if (!thread.listingId) continue;
