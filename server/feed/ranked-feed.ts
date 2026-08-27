@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { SAFE_CATEGORIES } from "@/lib/listing-constants";
 import { buildBuyerDemandProfile } from "@/server/feed/buyer-profile";
+import { completeCandidateIds } from "@/server/feed/candidates";
 import { MARKETPLACE_RANKING_CONFIG } from "@/server/feed/config";
 import {
   applyCategoryAffinity,
@@ -278,8 +279,30 @@ export async function rankBuyerFeed(
         take: graphCandidateBudget,
       })
     : [];
-  const candidateIds = [...new Set([...semanticSeedIds, ...graphListingRows.map((row) => row.id)])]
-    .slice(0, config.maxCandidates);
+  const rankedCandidateIds = completeCandidateIds(
+    semanticSeedIds,
+    graphListingRows.map((row) => row.id),
+    config.maxCandidates,
+  );
+  const catalogueTailBudget = Math.max(0, config.maxCandidates - rankedCandidateIds.length);
+  const catalogueTail = catalogueTailBudget
+    ? await prisma.marketplaceListing.findMany({
+        where: {
+          AND: [
+            publicListingWhere,
+            rankedCandidateIds.length ? { id: { notIn: rankedCandidateIds } } : {},
+          ],
+        },
+        select: { id: true },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: catalogueTailBudget,
+      })
+    : [];
+  const candidateIds = completeCandidateIds(
+    rankedCandidateIds,
+    catalogueTail.map((row) => row.id),
+    config.maxCandidates,
+  );
 
   if (candidateIds.length === 0) {
     return { items: [], pageInfo: { hasMore: false, nextCursor: null, limit } };
@@ -543,6 +566,7 @@ export async function rankBuyerFeed(
           ? { score: last.relevance, id: last.item.id, asOf: scoringNow.getTime() }
           : null,
       limit,
+      total: scored.length,
     },
     ranking: {
       kind: "relevance" as const,

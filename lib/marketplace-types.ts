@@ -48,6 +48,7 @@ export interface CatalogPageInfo {
   hasMore: boolean;
   nextCursor: string | null;
   limit: number;
+  total?: number;
 }
 
 /**

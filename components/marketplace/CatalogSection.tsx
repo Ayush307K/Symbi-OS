@@ -142,9 +142,12 @@ export function CatalogSection({
               ) : (
                 <>
                   <span className="font-semibold text-ink-900">
-                    {catalog.listings.length}
+                    {catalog.totalCount ?? catalog.listings.length}
                   </span>{" "}
-                  listing{catalog.listings.length === 1 ? "" : "s"}
+                  listing{(catalog.totalCount ?? catalog.listings.length) === 1 ? "" : "s"}
+                  {catalog.totalCount !== null && catalog.totalCount > catalog.listings.length
+                    ? ` · showing ${catalog.listings.length}`
+                    : ""}
                   {catalog.filters.category ? ` · ${catalog.filters.category}` : ""}
                   {catalog.filters.location ? ` · ${catalog.filters.location}` : ""}
                   {catalog.filters.q ? ` · “${catalog.filters.q}”` : ""}
@@ -180,6 +183,7 @@ export function CatalogSection({
             isLoadingMore={catalog.isLoadingMore}
             error={catalog.error}
             hasMore={catalog.hasMore}
+            totalCount={catalog.totalCount}
             hasActiveFilters={hasActiveFilters}
             savedIds={wishlist.savedIds}
             pendingSaveIds={wishlist.pendingIds}

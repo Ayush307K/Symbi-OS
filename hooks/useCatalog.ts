@@ -35,6 +35,7 @@ export function useCatalog(
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   // Guards against an older in-flight request overwriting a newer one when the
   // user changes filters quickly.
@@ -78,6 +79,7 @@ export function useCatalog(
         // state, so this is the guard rather than the symptom.
         setNextCursor(null);
         setHasMore(false);
+        setTotalCount(null);
       }
       setError(null);
 
@@ -118,6 +120,11 @@ export function useCatalog(
         setListings((current) => (cursor ? [...current, ...data] : data));
         setNextCursor(payload.pageInfo?.nextCursor ?? null);
         setHasMore(Boolean(payload.pageInfo?.hasMore));
+        setTotalCount(
+          typeof payload.pageInfo?.total === "number"
+            ? payload.pageInfo.total
+            : null,
+        );
         if (!cursor) paginationEndpointRef.current = effectiveEndpoint;
       } catch (err) {
         if (id !== requestId.current) return;
@@ -201,6 +208,7 @@ export function useCatalog(
     isLoadingMore,
     error,
     hasMore,
+    totalCount,
     applyFilters,
     loadMore,
     reset,

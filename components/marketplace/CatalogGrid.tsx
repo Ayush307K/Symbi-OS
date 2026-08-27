@@ -14,6 +14,7 @@ export interface CatalogGridProps {
   isLoadingMore: boolean;
   error: string | null;
   hasMore: boolean;
+  totalCount?: number | null;
   hasActiveFilters: boolean;
   savedIds: Set<string>;
   pendingSaveIds: Set<string>;
@@ -38,6 +39,7 @@ export function CatalogGrid({
   isLoadingMore,
   error,
   hasMore,
+  totalCount = null,
   hasActiveFilters,
   savedIds,
   pendingSaveIds,
@@ -146,7 +148,9 @@ export function CatalogGrid({
         )}
         {/* Announced for screen readers as the list grows. */}
         <p aria-live="polite" className="text-[12px] text-ink-400">
-          Showing {listings.length} listing{listings.length === 1 ? "" : "s"}
+          Showing {listings.length}
+          {totalCount !== null && totalCount > listings.length ? ` of ${totalCount}` : ""}{" "}
+          listing{(totalCount ?? listings.length) === 1 ? "" : "s"}
         </p>
       </div>
     </div>
