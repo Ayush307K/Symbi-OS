@@ -183,6 +183,8 @@ The complete template is in `.env.example`.
 - `IP_HASH_PEPPER`: independent secret used to pseudonymize IP addresses.
 - `FIELD_ENCRYPTION_KEY`: independent secret used to encrypt seller tax, bank,
   and KYC payloads with AES-256-GCM.
+- `CRON_SECRET`: independent random secret of at least 32 characters. Vercel
+  sends it as a bearer token to the two scheduled maintenance routes.
 - `DEMO_VERIFICATION_ENABLED`: exposes deterministic onboarding verification
   only when explicitly set to `true`.
 - `DEMO_PAYMENTS_ENABLED`: enables the sandbox payment transaction.
@@ -474,6 +476,38 @@ npm run feed:backfill-embeddings -- --batch-size 100 --concurrency 6 --after <li
 `EmbeddingProvider` interface. The built-in `openai` adapter uses
 `LISTING_EMBEDDING_MODEL=text-embedding-3-small` and requests 768 dimensions;
 another provider can be registered without changing listing or feed code.
+
+### Daily catalogue and embedding maintenance
+
+`vercel.json` registers two authenticated daily jobs, in UTC:
+
+| Time  | Route                          | Responsibility                                                                                                                                                             |
+| ----- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 00:00 | `/api/cron/sync-listings`      | Fetch configured real providers, idempotently update existing offers, add unseen offers/sellers, and archive imported offers not verified for the configured grace period. |
+| 03:00 | `/api/cron/refresh-embeddings` | Refresh missing or stale listing vectors, then incrementally update the real-corpus RAG index.                                                                             |
+
+The three-hour gap lets ingestion finish before semantic maintenance starts.
+Both routes fail closed without `Authorization: Bearer $CRON_SECRET`, use
+bounded batch/concurrency limits, and return machine-readable counts for Vercel
+runtime logs. Local verification is explicit:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  http://localhost:3000/api/cron/refresh-embeddings
+```
+
+Listing vectors store `embeddingUpdatedAt`; a row is refreshed only when its
+vector is missing or older than the listing. The RAG index is content-hashed,
+so unchanged fully embedded documents are reused rather than billed again.
+Failed vectors stay stale and are retried by the next run.
+
+`DAILY_LISTING_PROVIDERS` accepts `tradeindia`, `recycleinme`, and `json`.
+Stable external IDs prevent duplicates while allowing newly observed seller
+offers to grow the corpus. Prefer the authenticated JSON adapter for licensed
+partner feeds; public-page adapters are operational fallbacks and must only be
+used while their terms and robots policy permit automated access. Seller-created
+SymbiOS listings remain the authoritative path and are never archived by this
+job.
 
 ## Quality commands
 

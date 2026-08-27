@@ -1,5 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run vercel:build",
-  "regions": ["bom1"]
+  "regions": ["bom1"],
+  "crons": [
+    {
+      "path": "/api/cron/sync-listings",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-embeddings",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

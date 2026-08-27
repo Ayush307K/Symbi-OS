@@ -51,7 +51,9 @@ for (const key of REQUIRED) {
 for (const key of ["JWT_SECRET", "IP_HASH_PEPPER", "FIELD_ENCRYPTION_KEY"]) {
   const value = process.env[key] ?? "";
   if (value && value.length < 32) {
-    problems.push(`${key} is ${value.length} characters; 32 or more is required.`);
+    problems.push(
+      `${key} is ${value.length} characters; 32 or more is required.`,
+    );
   }
   // Prefix matching alone missed the value that actually reached production:
   // "symbi-os-jwt-secret-change-in-production-2024" — long enough to pass a
@@ -95,17 +97,26 @@ if (!isLocalDb && process.env.NODE_ENV !== "production") {
 
 // 4. Migrations must not go through a pooler.
 const directHost = hostOf(process.env.DIRECT_URL);
-if (process.env.DIRECT_URL?.includes(":6543") || directHost.includes("-pooler")) {
-  problems.push("DIRECT_URL points at a pooled endpoint; migrations need the direct one.");
+if (
+  process.env.DIRECT_URL?.includes(":6543") ||
+  directHost.includes("-pooler")
+) {
+  problems.push(
+    "DIRECT_URL points at a pooled endpoint; migrations need the direct one.",
+  );
 }
 
 // 5. Test harnesses must not share the application's database.
 const testUrl = process.env.TEST_DATABASE_URL;
 if (testUrl && !LOCAL_HOSTS.includes(hostOf(testUrl))) {
-  problems.push(`TEST_DATABASE_URL points at ${hostOf(testUrl)}; it must be local.`);
+  problems.push(
+    `TEST_DATABASE_URL points at ${hostOf(testUrl)}; it must be local.`,
+  );
 }
 if (!testUrl) {
-  notes.push("TEST_DATABASE_URL is unset; integration tests fall back to the docker default.");
+  notes.push(
+    "TEST_DATABASE_URL is unset; integration tests fall back to the docker default.",
+  );
 }
 
 // 6. Keys the template declares but this environment lacks.
@@ -119,7 +130,9 @@ try {
     (key) => process.env[key] === undefined && !REQUIRED.includes(key),
   );
   if (missing.length) {
-    notes.push(`Declared in .env.example but unset here: ${missing.join(", ")}.`);
+    notes.push(
+      `Declared in .env.example but unset here: ${missing.join(", ")}.`,
+    );
   }
 } catch {
   notes.push(".env.example could not be read.");
@@ -140,7 +153,9 @@ if ((process.env.OPENAI_API_KEY ?? "").startsWith("sk-...")) {
 if (process.env.RAG_EVAL_ENABLED === "true") {
   const evalKey = process.env.RAG_EVAL_KEY?.trim() ?? "";
   if (evalKey.length < 32) {
-    problems.push("RAG_EVAL_ENABLED=true requires RAG_EVAL_KEY of at least 32 characters.");
+    problems.push(
+      "RAG_EVAL_ENABLED=true requires RAG_EVAL_KEY of at least 32 characters.",
+    );
   }
   if (process.env.NODE_ENV === "production") {
     warnings.push(
@@ -149,7 +164,17 @@ if (process.env.RAG_EVAL_ENABLED === "true") {
   }
 }
 
-console.log(`\nEnvironment: database ${dbHost || "(unset)"}${isLocalDb ? " (local)" : ""}\n`);
+// 9. Scheduled maintenance is a privileged mutation surface in production.
+if (process.env.NODE_ENV === "production") {
+  const cronSecret = process.env.CRON_SECRET?.trim() ?? "";
+  if (cronSecret.length < 32) {
+    problems.push("Production requires CRON_SECRET of at least 32 characters.");
+  }
+}
+
+console.log(
+  `\nEnvironment: database ${dbHost || "(unset)"}${isLocalDb ? " (local)" : ""}\n`,
+);
 
 for (const problem of problems) console.error(`  ✗ ${problem}`);
 for (const warning of warnings) console.warn(`  ! ${warning}`);
