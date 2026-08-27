@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { cn } from "@/lib/cn";
 
 const ROLES = [
@@ -56,7 +57,10 @@ export default function RegisterPage() {
             role="alert"
             className="flex items-start gap-2 rounded-control border border-danger-border bg-danger-subtle px-3 py-2.5 text-[13px] text-danger-strong"
           >
-            <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <AlertCircle
+              aria-hidden="true"
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
             {error}
           </p>
         ) : null}
@@ -123,9 +127,8 @@ export default function RegisterPage() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <Input
+        <PasswordInput
           label="Password"
-          type="password"
           autoComplete="new-password"
           required
           hint="At least 12 characters."
@@ -133,7 +136,13 @@ export default function RegisterPage() {
           onChange={(event) => setPassword(event.target.value)}
         />
 
-        <Button type="submit" variant="primary" size="lg" fullWidth loading={isLoading}>
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={isLoading}
+        >
           Create account
         </Button>
       </form>

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function LoginPage() {
   const { login, error, isLoading } = useAuth();
@@ -42,7 +43,10 @@ export default function LoginPage() {
             role="alert"
             className="flex items-start gap-2 rounded-control border border-danger-border bg-danger-subtle px-3 py-2.5 text-[13px] text-danger-strong"
           >
-            <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <AlertCircle
+              aria-hidden="true"
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
             {error}
           </p>
         ) : null}
@@ -56,9 +60,8 @@ export default function LoginPage() {
           onChange={(event) => setEmail(event.target.value)}
         />
         <div>
-          <Input
+          <PasswordInput
             label="Password"
-            type="password"
             autoComplete="current-password"
             required
             value={password}
@@ -72,7 +75,13 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <Button type="submit" variant="primary" size="lg" fullWidth loading={isLoading}>
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={isLoading}
+        >
           Sign in
         </Button>
       </form>

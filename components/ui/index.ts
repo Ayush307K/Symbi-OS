@@ -16,6 +16,9 @@ export type { FieldProps } from "./Field";
 export { Input } from "./Input";
 export type { InputProps } from "./Input";
 
+export { PasswordInput } from "./PasswordInput";
+export type { PasswordInputProps } from "./PasswordInput";
+
 export { Modal } from "./Modal";
 export type { ModalProps } from "./Modal";
 

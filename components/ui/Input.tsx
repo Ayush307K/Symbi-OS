@@ -5,8 +5,10 @@ import type { InputHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Field, controlBorder, controlClasses } from "./Field";
 
-export interface InputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+export interface InputProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "size"
+> {
   label?: string;
   hint?: string;
   error?: string;
@@ -14,6 +16,8 @@ export interface InputProps
   leadingIcon?: ReactNode;
   /** Trailing unit or suffix, e.g. "ton" or "₹". */
   suffix?: string;
+  /** Interactive control rendered at the trailing edge of the input. */
+  trailingAction?: ReactNode;
   containerClassName?: string;
 }
 
@@ -24,6 +28,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     error,
     leadingIcon,
     suffix,
+    trailingAction,
     required,
     className,
     containerClassName,
@@ -60,12 +65,16 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
               controlBorder(invalid),
               "h-10",
               leadingIcon && "pl-9",
-              suffix && "pr-12",
+              (suffix || trailingAction) && "pr-12",
               className,
             )}
             {...props}
           />
-          {suffix ? (
+          {trailingAction ? (
+            <span className="absolute right-1 flex items-center">
+              {trailingAction}
+            </span>
+          ) : suffix ? (
             <span
               aria-hidden="true"
               className="pointer-events-none absolute right-3 text-[13px] font-medium text-ink-500"

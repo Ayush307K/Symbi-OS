@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -22,7 +22,9 @@ function ResetPasswordForm() {
   // Checked here so the mismatch is caught before a round trip; the API
   // enforces length, character classes, and breached-password rejection.
   const mismatch =
-    confirm.length > 0 && password !== confirm ? "The passwords do not match." : null;
+    confirm.length > 0 && password !== confirm
+      ? "The passwords do not match."
+      : null;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -36,10 +38,13 @@ function ResetPasswordForm() {
         body: JSON.stringify({ token, password }),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Could not reset the password.");
+      if (!res.ok)
+        throw new Error(payload.error || "Could not reset the password.");
       setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reset the password.");
+      setError(
+        err instanceof Error ? err.message : "Could not reset the password.",
+      );
     } finally {
       setSaving(false);
     }
@@ -90,11 +95,19 @@ function ResetPasswordForm() {
               invalidates every issued token — stated because being signed out
               everywhere is surprising if it is not explained. */}
           <p className="flex items-start gap-2 rounded-control border border-success-border bg-success-subtle px-3 py-2.5 text-[13px] text-success-strong">
-            <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-            Your password is updated. Anyone signed in with the old password,
-            on any device, has been signed out.
+            <CheckCircle2
+              aria-hidden="true"
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            Your password is updated. Anyone signed in with the old password, on
+            any device, has been signed out.
           </p>
-          <Button variant="primary" size="lg" fullWidth onClick={() => router.push("/login")}>
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            onClick={() => router.push("/login")}
+          >
             Sign in
           </Button>
         </div>
@@ -105,14 +118,16 @@ function ResetPasswordForm() {
               role="alert"
               className="flex items-start gap-2 rounded-control border border-danger-border bg-danger-subtle px-3 py-2.5 text-[13px] text-danger-strong"
             >
-              <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+              <AlertCircle
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0"
+              />
               {error}
             </p>
           ) : null}
 
-          <Input
+          <PasswordInput
             label="New password"
-            type="password"
             autoComplete="new-password"
             required
             hint="At least 12 characters, with upper and lower case and a number."
@@ -120,9 +135,8 @@ function ResetPasswordForm() {
             onChange={(event) => setPassword(event.target.value)}
           />
 
-          <Input
+          <PasswordInput
             label="Confirm new password"
-            type="password"
             autoComplete="new-password"
             required
             error={mismatch ?? undefined}
