@@ -15,12 +15,15 @@ import {
 
 export function canonicalCategory(text: string) {
   const value = text.toLowerCase();
-  if (/aluminium|aluminum|copper|brass|metal|steel|iron|ingot|hms|ubc/.test(value))
+  if (
+    /aluminium|aluminum|copper|brass|metal|steel|iron|ingot|hms|ubc/.test(value)
+  )
     return "Metal Scrap";
   if (/ldpe|hdpe|pet|plastic|polymer|granule|polypropylene|film/.test(value))
     return "Plastic Scrap";
   if (/paper|cardboard|kraft|carton/.test(value)) return "Paper & Cardboard";
-  if (/textile|cloth|clothing|fabric|fiber|fibre/.test(value)) return "Textile Waste";
+  if (/textile|cloth|clothing|fabric|fiber|fibre/.test(value))
+    return "Textile Waste";
   if (/rubber|crumb|tyre|tire/.test(value)) return "Rubber";
   if (/glass|cullet/.test(value)) return "Glass";
   if (/fly ash|slag|mineral|cement|construction|gypsum/.test(value))
@@ -46,7 +49,10 @@ async function upsertListing(
   const category = importableCategory(row);
   if (!category) return false;
 
-  const companyId = stableId("provider_company", `${provider.name}:${row.companyName}`);
+  const companyId = stableId(
+    "provider_company",
+    `${provider.name}:${row.companyName}`,
+  );
   const materialId = stableId("provider_material", row.externalId);
   const listingId = stableId("provider_listing", row.externalId);
   await prisma.$transaction(async (tx) => {
@@ -180,12 +186,16 @@ async function upsertListing(
 export interface RealListingImportOptions {
   dryRun?: boolean;
   targets?: Partial<Record<TargetCategory, number>>;
+  /** Hard bound for scheduled imports; providers should return newest rows first. */
+  maxRows?: number;
   /** Disable only on deployment hot paths; run the embedding backfill later. */
   refreshEmbeddings?: boolean;
 }
 
 function importableCategory(row: ProviderListing) {
-  const category = canonicalCategory(`${row.categoryText} ${row.title} ${row.description}`);
+  const category = canonicalCategory(
+    `${row.categoryText} ${row.title} ${row.description}`,
+  );
   if (
     !category ||
     !row.title ||
@@ -214,7 +224,9 @@ async function selectToTargets(
       isEvalOnly: false,
       status: { in: ["ACTIVE", "active"] },
       category: { in: categories },
-      sourceType: { in: ["real_api", "real_public_provider", "seller_submitted"] },
+      sourceType: {
+        in: ["real_api", "real_public_provider", "seller_submitted"],
+      },
     },
     _count: { _all: true },
   });
@@ -241,7 +253,9 @@ async function selectToTargets(
   for (const category of categories) {
     const count = current.get(category) ?? 0;
     const needed = Math.max(0, (targets[category] ?? count) - count);
-    const categoryRows = rows.filter((row) => importableCategory(row) === category);
+    const categoryRows = rows.filter(
+      (row) => importableCategory(row) === category,
+    );
     const refreshes = categoryRows.filter(
       (row) => existing.get(row.externalId) === category,
     );
@@ -278,12 +292,24 @@ export async function importRealListings(
   const targetResult = options.targets
     ? await selectToTargets(fetched, options.targets)
     : { selected: fetched, selection: undefined };
+  const maxRows = options.maxRows;
+  if (
+    maxRows !== undefined &&
+    (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 2_000)
+  ) {
+    throw new Error("maxRows must be an integer from 1 to 2000.");
+  }
+  const selected =
+    maxRows === undefined
+      ? targetResult.selected
+      : targetResult.selected.slice(0, maxRows);
   if (options.dryRun) {
     return {
       provider: provider.name,
       dryRun: true,
       seen: fetched.length,
-      selected: targetResult.selected.length,
+      selected: selected.length,
+      truncated: selected.length < targetResult.selected.length,
       categories: targetResult.selection,
       upserted: 0,
       rejected: 0,
@@ -293,14 +319,15 @@ export async function importRealListings(
     data: { provider: provider.name },
   });
   try {
-    const rows = targetResult.selected;
+    const rows = selected;
     let upserted = 0;
     let rejected = 0;
     for (const row of rows) {
-      if (await upsertListing(provider, row, options.refreshEmbeddings !== false)) {
+      if (
+        await upsertListing(provider, row, options.refreshEmbeddings !== false)
+      ) {
         upserted += 1;
-      }
-      else rejected += 1;
+      } else rejected += 1;
     }
     await prisma.listingImportRun.update({
       where: { id: run.id },
@@ -317,6 +344,7 @@ export async function importRealListings(
       dryRun: false,
       seen: fetched.length,
       selected: rows.length,
+      truncated: rows.length < targetResult.selected.length,
       categories: targetResult.selection,
       upserted,
       rejected,
@@ -326,7 +354,10 @@ export async function importRealListings(
       where: { id: run.id },
       data: {
         status: "FAILED",
-        errorSummary: error instanceof Error ? error.message.slice(0, 1000) : "Unknown error",
+        errorSummary:
+          error instanceof Error
+            ? error.message.slice(0, 1000)
+            : "Unknown error",
         finishedAt: new Date(),
       },
     });

@@ -23,6 +23,7 @@ export interface ProviderListing {
 export interface ListingProvider {
   name: string;
   sourceType: "real_api" | "real_public_provider";
+  externalIdPrefix: string;
   fetch(): Promise<ProviderListing[]>;
 }
 
@@ -100,7 +101,9 @@ function tradeIndiaNextData(html: string, sourceUrl: string) {
     /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
   );
   if (!match) {
-    throw new Error(`TradeIndia page changed shape and has no __NEXT_DATA__: ${sourceUrl}`);
+    throw new Error(
+      `TradeIndia page changed shape and has no __NEXT_DATA__: ${sourceUrl}`,
+    );
   }
   try {
     return JSON.parse(match[1]) as unknown;
@@ -128,7 +131,8 @@ function arrayFromPayload(payload: unknown): Array<Record<string, unknown>> {
   if (!payload || typeof payload !== "object") return [];
   const value = payload as Record<string, unknown>;
   for (const key of ["items", "data", "results", "listings"]) {
-    if (Array.isArray(value[key])) return value[key] as Array<Record<string, unknown>>;
+    if (Array.isArray(value[key]))
+      return value[key] as Array<Record<string, unknown>>;
   }
   return [];
 }
@@ -136,10 +140,14 @@ function arrayFromPayload(payload: unknown): Array<Record<string, unknown>> {
 export class JsonApiListingProvider implements ListingProvider {
   name = "Configured listing JSON API";
   sourceType = "real_api" as const;
+  externalIdPrefix = "json-api:";
 
   async fetch() {
     const url = process.env.REAL_LISTINGS_API_URL;
-    if (!url) throw new Error("REAL_LISTINGS_API_URL is required for the JSON API provider.");
+    if (!url)
+      throw new Error(
+        "REAL_LISTINGS_API_URL is required for the JSON API provider.",
+      );
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
@@ -148,8 +156,10 @@ export class JsonApiListingProvider implements ListingProvider {
           : {}),
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
     });
-    if (!response.ok) throw new Error(`Listing API returned HTTP ${response.status}.`);
+    if (!response.ok)
+      throw new Error(`Listing API returned HTTP ${response.status}.`);
     const rows = arrayFromPayload(await response.json());
     return rows.map((row, index) => {
       const externalId = decode(row.id || row.externalId || `row-${index}`);
@@ -180,15 +190,23 @@ export class JsonApiListingProvider implements ListingProvider {
 export class RecycleInMeProvider implements ListingProvider {
   name = "RecycleInMe India public sell-offer feed";
   sourceType = "real_public_provider" as const;
+  externalIdPrefix = "recycleinme:";
   private readonly baseUrl = "https://www.recycleinme.com";
   private readonly indiaFeedUrl = `${this.baseUrl}/scrap-sell-offer/country__India`;
 
   private async fetchPage(page: number) {
-    const response = await fetch(`${this.indiaFeedUrl}?country=India&page=${page}`, {
-      headers: { "user-agent": "Symbi-OS/1.0 listing importer" },
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`Provider page ${page} returned HTTP ${response.status}.`);
+    const response = await fetch(
+      `${this.indiaFeedUrl}?country=India&page=${page}`,
+      {
+        headers: { "user-agent": "Symbi-OS/1.0 listing importer" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(
+        `Provider page ${page} returned HTTP ${response.status}.`,
+      );
     const html = await response.text();
     const match = html.match(/data-page="([\s\S]*?)"/);
     if (!match) {
@@ -198,13 +216,19 @@ export class RecycleInMeProvider implements ListingProvider {
     }
     const payload = JSON.parse(decode(match[1]));
     if (payload.props?.currentcountry !== "India") {
-      throw new Error(`Provider page ${page} did not confirm the India country filter.`);
+      throw new Error(
+        `Provider page ${page} did not confirm the India country filter.`,
+      );
     }
     if (Number(payload.props?.selloffers?.current_page) !== page) {
-      throw new Error(`Provider returned the wrong pagination page for page ${page}.`);
+      throw new Error(
+        `Provider returned the wrong pagination page for page ${page}.`,
+      );
     }
     return {
-      rows: (payload.props?.selloffers?.data ?? []) as Array<Record<string, unknown>>,
+      rows: (payload.props?.selloffers?.data ?? []) as Array<
+        Record<string, unknown>
+      >,
       lastPage: Number(payload.props?.selloffers?.last_page ?? page),
     };
   }
@@ -213,12 +237,12 @@ export class RecycleInMeProvider implements ListingProvider {
     const first = await this.fetchPage(1);
     const maxPages = Math.min(
       Number(process.env.REAL_LISTINGS_MAX_PAGES || 10),
-      first.lastPage
+      first.lastPage,
     );
     const rest = await Promise.all(
       Array.from({ length: Math.max(0, maxPages - 1) }, (_, index) =>
-        this.fetchPage(index + 2)
-      )
+        this.fetchPage(index + 2),
+      ),
     );
     const rows = [first, ...rest]
       .flatMap((page) => page.rows)
@@ -241,10 +265,15 @@ export class RecycleInMeProvider implements ListingProvider {
         externalId: `recycleinme:${id}`,
         title,
         description: stripContacts(
-          row.Description || `${title}. Sell offer published by the source provider.`
+          row.Description ||
+            `${title}. Sell offer published by the source provider.`,
         ),
-        categoryText: decode(`${row.Category || ""} ${row.SubCategory || ""} ${title}`),
-        subcategory: decode(row.SubCategory || row.Category || "Industrial material"),
+        categoryText: decode(
+          `${row.Category || ""} ${row.SubCategory || ""} ${title}`,
+        ),
+        subcategory: decode(
+          row.SubCategory || row.Category || "Industrial material",
+        ),
         companyName: decode(row.CompanyName || `Provider seller ${id}`),
         city,
         state,
@@ -286,6 +315,7 @@ const TRADEINDIA_CATEGORY_PAGES = [
 export class TradeIndiaProvider implements ListingProvider {
   name = "TradeIndia public marketplace listings";
   sourceType = "real_public_provider" as const;
+  externalIdPrefix = "tradeindia:";
   private readonly baseUrl = "https://www.tradeindia.com";
 
   private async fetchCategory(slug: string, subcategory: string) {
@@ -296,16 +326,21 @@ export class TradeIndiaProvider implements ListingProvider {
         "user-agent": "Symbi-OS/1.0 listing importer",
       },
       cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
     });
     if (!response.ok) {
-      throw new Error(`TradeIndia category ${slug} returned HTTP ${response.status}.`);
+      throw new Error(
+        `TradeIndia category ${slug} returned HTTP ${response.status}.`,
+      );
     }
     const payload = tradeIndiaNextData(await response.text(), sourceUrl);
     return tradeIndiaProducts(payload)
       .filter((row) => decode(row.country_name).toLowerCase() === "india")
       .filter((row) => decode(row.product_status || "a").toLowerCase() === "a")
       .filter((row) =>
-        isTradeIndiaScrapProduct(decode(row.long_tail_prod_name || row.product_name)),
+        isTradeIndiaScrapProduct(
+          decode(row.long_tail_prod_name || row.product_name),
+        ),
       )
       .map((row): ProviderListing => {
         const id = decode(row.product_id);
@@ -317,10 +352,12 @@ export class TradeIndiaProvider implements ListingProvider {
         const trade = fields
           .filter((field) => field.section === "Trade_Information")
           .map((field) => `${field.label}: ${field.value}`);
-        const priceAndQuantity = fields
-          .filter((field) => field.section === "Price_And_Quantity");
+        const priceAndQuantity = fields.filter(
+          (field) => field.section === "Price_And_Quantity",
+        );
         const valueFor = (label: RegExp) =>
-          priceAndQuantity.find((field) => label.test(field.label))?.value ?? "";
+          priceAndQuantity.find((field) => label.test(field.label))?.value ??
+          "";
         const rawPrice =
           valueFor(/^Price(?: Range)?$/i) ||
           decode(row.price_range) ||
@@ -341,7 +378,9 @@ export class TradeIndiaProvider implements ListingProvider {
           trade.length
             ? `Trade information:\n${trade.map((line) => `- ${line}`).join("\n")}`
             : "",
-          rawPrice ? `Published price: ${rawPrice} per ${unit}.` : "Price on request.",
+          rawPrice
+            ? `Published price: ${rawPrice} per ${unit}.`
+            : "Price on request.",
         ].filter(Boolean);
         return {
           externalId: `tradeindia:${id}`,
@@ -351,7 +390,9 @@ export class TradeIndiaProvider implements ListingProvider {
             `${subcategory} ${row.category_name || ""} ${row.product_name || ""} ${specifications.join(" ")}`,
           ),
           subcategory,
-          companyName: decode(row.co_name || row.initial_co_name || `TradeIndia supplier ${id}`),
+          companyName: decode(
+            row.co_name || row.initial_co_name || `TradeIndia supplier ${id}`,
+          ),
           city: decode(row.city || "India"),
           state: decode(row.state || "India"),
           country: "India",
@@ -384,8 +425,10 @@ export class TradeIndiaProvider implements ListingProvider {
 }
 
 export function configuredProvider(): ListingProvider {
-  if (process.env.LISTINGS_PROVIDER === "json") return new JsonApiListingProvider();
-  if (process.env.LISTINGS_PROVIDER === "tradeindia") return new TradeIndiaProvider();
+  if (process.env.LISTINGS_PROVIDER === "json")
+    return new JsonApiListingProvider();
+  if (process.env.LISTINGS_PROVIDER === "tradeindia")
+    return new TradeIndiaProvider();
   return new RecycleInMeProvider();
 }
 
