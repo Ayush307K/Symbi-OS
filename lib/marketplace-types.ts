@@ -5,6 +5,8 @@
 export interface MaterialListing {
   id: string;
   materialId: string;
+  isEvalOnly: boolean;
+  evalScenarioTags: string[];
   title: string;
   name: string;
   toxicity: string;

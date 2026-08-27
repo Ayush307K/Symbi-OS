@@ -48,6 +48,12 @@ export function useCatalog(
   // were already applied, so the opening request was never sent and the page
   // sat on its skeletons forever. Any URL carrying a filter masked it.
   const appliedRef = useRef<string | null>(null);
+  // A personalized request may fall back to the public catalogue. Remember
+  // which endpoint produced its cursor so "load more" cannot send a catalogue
+  // cursor to the ranked-feed decoder.
+  const paginationEndpointRef = useRef<"/api/feed" | "/api/materials">(
+    "/api/materials",
+  );
 
   // Personalization decides which endpoint a given filter set is fetched from,
   // so it belongs in the applied signature. It resolves after the first render
@@ -79,13 +85,31 @@ export function useCatalog(
         // Personalization owns only the unfiltered buyer feed. Any explicit
         // query/filter stays on /api/materials, so this does not silently turn
         // into the search-ranking feature that is intentionally out of scope.
-        const endpoint =
-          personalized && filtersToQueryString(next) === ""
+        const preferredEndpoint = cursor
+          ? paginationEndpointRef.current
+          : personalized && filtersToQueryString(next) === ""
             ? "/api/feed"
             : "/api/materials";
-        const res = await fetch(`${endpoint}?${filtersToParams(next, cursor)}`);
-        if (!res.ok) throw new Error("Failed to fetch marketplace listings");
-        const payload = await res.json();
+        const params = filtersToParams(next, cursor);
+        let effectiveEndpoint = preferredEndpoint;
+        let res = await fetch(`${preferredEndpoint}?${params}`);
+        let payload = res.ok ? await res.json() : null;
+
+        // Personalization is an enhancement, never an availability gate. If
+        // the first ranked page is unavailable or empty, render the canonical
+        // catalogue instead. Cursor pages stay on their originating endpoint.
+        if (
+          !cursor &&
+          preferredEndpoint === "/api/feed" &&
+          (!res.ok || !Array.isArray(payload?.items) || payload.items.length === 0)
+        ) {
+          effectiveEndpoint = "/api/materials";
+          res = await fetch(`/api/materials?${params}`);
+          payload = res.ok ? await res.json() : null;
+        }
+        if (!res.ok || !payload) {
+          throw new Error("Failed to fetch marketplace listings");
+        }
         if (id !== requestId.current) return;
 
         const data: MaterialListing[] = Array.isArray(payload)
@@ -94,6 +118,7 @@ export function useCatalog(
         setListings((current) => (cursor ? [...current, ...data] : data));
         setNextCursor(payload.pageInfo?.nextCursor ?? null);
         setHasMore(Boolean(payload.pageInfo?.hasMore));
+        if (!cursor) paginationEndpointRef.current = effectiveEndpoint;
       } catch (err) {
         if (id !== requestId.current) return;
         if (!cursor) {
