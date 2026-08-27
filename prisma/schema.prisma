@@ -25,26 +25,30 @@ model User {
   lastLoginAt      DateTime?
   createdAt        DateTime  @default(now())
 
-  addresses            Address[]
-  cartItems            CartItem[]
-  wishlistItems        WishlistItem[]
-  orders               PurchaseOrder[]
-  reviews              Review[]
-  messageThreadsBuyer  MessageThread[]      @relation("ThreadBuyer")
-  messageThreadsSeller MessageThread[]      @relation("ThreadSeller")
-  messages             Message[]
-  notifications        Notification[]
-  sellerOnboarding     SellerOnboarding?
-  sessions             Session[]
-  authTokens           AuthToken[]
-  securityEvents       SecurityEvent[]
-  listingAssets        ListingAsset[]
-  listingEvents        ListingEvent[]       @relation("ListingEventActor")
-  demands              Demand[]
-  demandProfile        BuyerDemandProfile?
-  onboardingDocuments  OnboardingDocument[]
-  safetyEvents         SafetyEvent[]
-  company              Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  addresses              Address[]
+  cartItems              CartItem[]
+  wishlistItems          WishlistItem[]
+  orders                 PurchaseOrder[]
+  reviews                Review[]
+  messageThreadsBuyer    MessageThread[]         @relation("ThreadBuyer")
+  messageThreadsSeller   MessageThread[]         @relation("ThreadSeller")
+  messages               Message[]
+  notifications          Notification[]
+  sellerOnboarding       SellerOnboarding?
+  sessions               Session[]
+  authTokens             AuthToken[]
+  securityEvents         SecurityEvent[]
+  listingAssets          ListingAsset[]
+  listingEvents          ListingEvent[]          @relation("ListingEventActor")
+  demands                Demand[]
+  demandProfile          BuyerDemandProfile?
+  onboardingDocuments    OnboardingDocument[]
+  safetyEvents           SafetyEvent[]
+  assistantConversations AssistantConversation[]
+  supportTickets         SupportTicket[]         @relation("SupportTicketRequester")
+  assignedSupportTickets SupportTicket[]         @relation("SupportTicketAssignee")
+  supportTicketEvents    SupportTicketEvent[]
+  company                Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([isEvalOnly])
@@ -804,6 +808,77 @@ model KnowledgeChunk {
 
   @@unique([documentId, chunkIndex])
   @@index([documentId])
+}
+
+model AssistantConversation {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  status    String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages       AssistantMessage[]
+  supportTickets SupportTicket[]
+
+  @@index([userId, status, updatedAt])
+}
+
+model SupportTicket {
+  id             String    @id @default(uuid())
+  ticketNumber   String    @unique
+  requesterId    String
+  conversationId String?
+  assignedToId   String?
+  category       String
+  priority       String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  status         String    @default("OPEN") // OPEN | IN_PROGRESS | WAITING_ON_USER | RESOLVED | CLOSED
+  subject        String
+  description    String
+  resolutionNote String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  requester    User                   @relation("SupportTicketRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  assignedTo   User?                  @relation("SupportTicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  conversation AssistantConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  events       SupportTicketEvent[]
+
+  @@index([requesterId, status, updatedAt])
+  @@index([status, priority, createdAt])
+  @@index([assignedToId, status])
+  @@index([conversationId])
+}
+
+model SupportTicketEvent {
+  id          String   @id @default(uuid())
+  ticketId    String
+  actorUserId String?
+  type        String
+  note        String?
+  createdAt   DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([actorUserId])
+}
+
+model AssistantMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String // USER | ASSISTANT
+  content        String
+  citationsJson  Json
+  retrievalJson  Json
+  createdAt      DateTime @default(now())
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 model DemoPayment {

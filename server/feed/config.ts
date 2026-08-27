@@ -51,7 +51,9 @@ export const MARKETPLACE_RANKING_CONFIG = {
     gemini: {
       model: "gemini-flash-latest",
       temperature: 0.2,
-      maxOutputTokens: 2_048,
+      // Chat answers are deliberately compact; source details remain in the
+      // expandable citations instead of being repeated in model prose.
+      maxOutputTokens: 320,
     },
   },
   /**

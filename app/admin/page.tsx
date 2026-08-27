@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BadgeCheck,
   ClipboardCheck,
+  Headphones,
   Package,
   ShieldQuestion,
 } from "lucide-react";
@@ -19,6 +20,7 @@ interface Summary {
     pendingModeration: number;
     pendingVerification: number;
     openDisputes: number;
+    openSupport: number;
   };
   marketplace: {
     activeListings: number;
@@ -59,6 +61,13 @@ export default function AdminOverviewPage() {
       note: "Verification gates a seller's ability to publish at all.",
     },
     {
+      label: "Open support tickets",
+      href: "/admin/support",
+      icon: Headphones,
+      count: data?.queues.openSupport,
+      note: "Assistant escalations waiting for a human response.",
+    },
+    {
       label: "Open disputes",
       href: "/admin/disputes",
       icon: AlertTriangle,
@@ -73,7 +82,7 @@ export default function AdminOverviewPage() {
       title="Operations overview"
       description="What is waiting on an operator right now."
     >
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {queues.map((queue) => (
           <Link
             key={queue.href}
@@ -82,7 +91,9 @@ export default function AdminOverviewPage() {
               "group flex flex-col rounded-card border bg-surface-card p-5 shadow-card transition-all",
               "hover:border-ink-300 hover:shadow-raised",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700",
-              queue.danger && queue.count ? "border-danger-border" : "border-ink-200",
+              queue.danger && queue.count
+                ? "border-danger-border"
+                : "border-ink-200",
             )}
           >
             <div className="flex items-center justify-between gap-2">
@@ -112,8 +123,12 @@ export default function AdminOverviewPage() {
               </p>
             )}
 
-            <p className="mt-2 text-sm font-semibold text-ink-900">{queue.label}</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-ink-500">{queue.note}</p>
+            <p className="mt-2 text-sm font-semibold text-ink-900">
+              {queue.label}
+            </p>
+            <p className="mt-1 text-[12px] leading-relaxed text-ink-500">
+              {queue.note}
+            </p>
           </Link>
         ))}
       </div>
@@ -170,7 +185,9 @@ function Stat({
       {loading ? (
         <Skeleton className="mt-2 h-7 w-14" />
       ) : (
-        <dd className="mt-1 text-2xl font-semibold text-ink-900">{value ?? "—"}</dd>
+        <dd className="mt-1 text-2xl font-semibold text-ink-900">
+          {value ?? "—"}
+        </dd>
       )}
       {note ? <p className="mt-1 text-[12px] text-ink-500">{note}</p> : null}
     </div>

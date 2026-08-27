@@ -16,6 +16,7 @@ export async function GET() {
       pendingModeration,
       pendingVerification,
       openDisputes,
+      openSupport,
       activeListings,
       awaitingConfirmation,
       unverifiedActiveListings,
@@ -27,6 +28,9 @@ export async function GET() {
         where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
       }),
       prisma.purchaseOrder.count({ where: { disputeStatus: "OPEN" } }),
+      prisma.supportTicket.count({
+        where: { status: { in: ["OPEN", "IN_PROGRESS", "WAITING_ON_USER"] } },
+      }),
       prisma.marketplaceListing.count({
         where: { status: { in: ["ACTIVE", "active"] } },
       }),
@@ -41,8 +45,17 @@ export async function GET() {
     ]);
 
     return NextResponse.json({
-      queues: { pendingModeration, pendingVerification, openDisputes },
-      marketplace: { activeListings, unverifiedActiveListings, awaitingConfirmation },
+      queues: {
+        pendingModeration,
+        pendingVerification,
+        openDisputes,
+        openSupport,
+      },
+      marketplace: {
+        activeListings,
+        unverifiedActiveListings,
+        awaitingConfirmation,
+      },
     });
   } catch (error) {
     return apiError(error);

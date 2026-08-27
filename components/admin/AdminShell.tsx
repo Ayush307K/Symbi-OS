@@ -15,6 +15,7 @@ const TABS = [
   { label: "Overview", href: "/admin" },
   { label: "Listing moderation", href: "/admin/moderation" },
   { label: "Seller verification", href: "/admin/sellers" },
+  { label: "Support", href: "/admin/support" },
   { label: "Disputes", href: "/admin/disputes" },
 ];
 
@@ -33,7 +34,12 @@ export interface AdminShellProps {
  * which reads as a broken product rather than a closed door. This states the
  * reason plainly instead.
  */
-export function AdminShell({ title, description, action, children }: AdminShellProps) {
+export function AdminShell({
+  title,
+  description,
+  action,
+  children,
+}: AdminShellProps) {
   const { user, isLoading } = useAuth();
   const pathname = usePathname();
 
@@ -57,7 +63,11 @@ export function AdminShell({ title, description, action, children }: AdminShellP
                 : "Sign in with a platform operator account to reach this area."
             }
             action={
-              <Button variant="primary" size="sm" onClick={() => (window.location.href = "/")}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => (window.location.href = "/")}
+              >
                 Back to the marketplace
               </Button>
             }
@@ -77,7 +87,9 @@ export function AdminShell({ title, description, action, children }: AdminShellP
                     {title}
                   </h1>
                   {description ? (
-                    <p className="mt-1 text-[13px] text-ink-500">{description}</p>
+                    <p className="mt-1 text-[13px] text-ink-500">
+                      {description}
+                    </p>
                   ) : null}
                 </div>
                 {action ? <div className="shrink-0">{action}</div> : null}

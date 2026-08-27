@@ -1,4 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
+import {
+  FunctionCallingConfigMode,
+  GoogleGenAI,
+  type FunctionDeclaration,
+} from "@google/genai";
 import { MARKETPLACE_RANKING_CONFIG } from "@/server/feed/config";
 
 /**
@@ -15,6 +19,23 @@ export interface GenerationProvider {
   /** False when the provider has no credentials; callers fall back extractively. */
   isConfigured(): boolean;
   generate(input: { instructions: string; prompt: string }): Promise<string>;
+  /** Optional structured tool selection used by the marketplace assistant. */
+  selectTool?(input: {
+    instructions: string;
+    prompt: string;
+    tools: GenerationToolDefinition[];
+  }): Promise<GenerationToolCall | null>;
+}
+
+export interface GenerationToolDefinition {
+  name: string;
+  description: string;
+  parametersJsonSchema: Record<string, unknown>;
+}
+
+export interface GenerationToolCall {
+  name: string;
+  args: Record<string, unknown>;
 }
 
 class GeminiGenerationProvider implements GenerationProvider {
@@ -34,12 +55,19 @@ class GeminiGenerationProvider implements GenerationProvider {
 
   private getClient() {
     const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) throw new Error("GEMINI_API_KEY is required for Gemini generation.");
+    if (!apiKey)
+      throw new Error("GEMINI_API_KEY is required for Gemini generation.");
     this.client ??= new GoogleGenAI({ apiKey });
     return this.client;
   }
 
-  async generate({ instructions, prompt }: { instructions: string; prompt: string }) {
+  async generate({
+    instructions,
+    prompt,
+  }: {
+    instructions: string;
+    prompt: string;
+  }) {
     const settings = MARKETPLACE_RANKING_CONFIG.generation.gemini;
     const response = await this.getClient().models.generateContent({
       model: this.model,
@@ -55,6 +83,40 @@ class GeminiGenerationProvider implements GenerationProvider {
     });
     return (response.text ?? "").trim();
   }
+
+  async selectTool({
+    instructions,
+    prompt,
+    tools,
+  }: {
+    instructions: string;
+    prompt: string;
+    tools: GenerationToolDefinition[];
+  }): Promise<GenerationToolCall | null> {
+    const response = await this.getClient().models.generateContent({
+      model: this.model,
+      contents: prompt,
+      config: {
+        systemInstruction: instructions,
+        temperature: 0,
+        maxOutputTokens: 256,
+        tools: [
+          {
+            functionDeclarations: tools.map((tool): FunctionDeclaration => ({
+              name: tool.name,
+              description: tool.description,
+              parametersJsonSchema: tool.parametersJsonSchema,
+            })),
+          },
+        ],
+        toolConfig: {
+          functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO },
+        },
+      },
+    });
+    const call = response.functionCalls?.[0];
+    return call?.name ? { name: call.name, args: call.args ?? {} } : null;
+  }
 }
 
 const providers = new Map<string, () => GenerationProvider>([
@@ -68,7 +130,9 @@ export function registerGenerationProvider(
   providers.set(name.trim().toLowerCase(), factory);
 }
 
-export function getGenerationProvider(name = process.env.RAG_GENERATION_PROVIDER) {
+export function getGenerationProvider(
+  name = process.env.RAG_GENERATION_PROVIDER,
+) {
   const selected =
     name?.trim().toLowerCase() ||
     MARKETPLACE_RANKING_CONFIG.generation.defaultProvider;

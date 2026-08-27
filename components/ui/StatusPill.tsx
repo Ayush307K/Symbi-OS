@@ -21,10 +21,13 @@ const STATUS_TONES: Record<string, Tone> = {
   DELIVERED: "success",
   PUBLISHED: "success",
   VERIFIED: "success",
+  RESOLVED: "success",
 
   // In flight: someone still owes an action.
   DRAFT: "neutral",
   OPEN: "warning",
+  IN_PROGRESS: "warning",
+  WAITING_ON_USER: "warning",
   PENDING: "warning",
   PENDING_REVIEW: "warning",
   SUBMITTED: "warning",
@@ -72,7 +75,10 @@ export function statusTone(status: string): Tone {
 
 /** AWAITING_BUYER_CONFIRMATION -> Awaiting buyer confirmation */
 export function statusLabel(status: string): string {
-  const words = String(status ?? "").replace(/_/g, " ").toLowerCase().trim();
+  const words = String(status ?? "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Unknown";
 }
 
