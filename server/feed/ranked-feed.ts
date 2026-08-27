@@ -46,23 +46,27 @@ function lexicalSimilarity(left: string, right: string) {
   return intersection / Math.sqrt(a.size * b.size);
 }
 
+async function recentSeeds(limit: number) {
+  const recent = await prisma.marketplaceListing.findMany({
+    where: publicListingWhere,
+    select: { id: true, materialId: true },
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    take: limit,
+  });
+  return recent.map((item) => ({
+    id: item.id,
+    material_id: item.materialId,
+    semantic_fit: 0,
+  }));
+}
+
 async function semanticSeeds(profileEmbedding: number[] | null) {
   const limit = MARKETPLACE_RANKING_CONFIG.retrieval.semanticSeedCount;
   if (!profileEmbedding) {
-    const recent = await prisma.marketplaceListing.findMany({
-      where: publicListingWhere,
-      select: { id: true, materialId: true },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: limit,
-    });
-    return recent.map((item) => ({
-      id: item.id,
-      material_id: item.materialId,
-      semantic_fit: 0,
-    }));
+    return recentSeeds(limit);
   }
 
-  return prisma.$transaction(async (tx) => {
+  const semantic = await prisma.$transaction(async (tx) => {
     // ef_search defaults below our top-k and filtered ANN queries can return
     // too few rows. Keep both settings transaction-local for pooled/serverless
     // connections so they cannot leak into an unrelated request.
@@ -88,9 +92,21 @@ async function semanticSeeds(profileEmbedding: number[] | null) {
                    AND listing."category" IN (${Prisma.join([...SAFE_CATEGORIES])})
                    AND material."toxicityLevel" IN ('none', 'low')
                  ORDER BY listing."embedding" <=> CAST(${vectorLiteral(profileEmbedding)} AS vector)
-                 LIMIT ${limit}`,
+      LIMIT ${limit}`,
     );
   });
+
+  // A buyer profile can be embedded before the catalogue backfill has run.
+  // ANN retrieval then returns zero (or only a partial old corpus), which must
+  // not turn a healthy marketplace into an empty homepage. Fill the remaining
+  // candidate budget with recent active listings and keep semantic rows first.
+  if (semantic.length >= limit) return semantic;
+  const semanticIds = new Set(semantic.map((item) => item.id));
+  const recent = await recentSeeds(limit);
+  return [
+    ...semantic,
+    ...recent.filter((item) => !semanticIds.has(item.id)),
+  ].slice(0, limit);
 }
 
 async function expandMaterials(seedMaterialIds: string[]) {

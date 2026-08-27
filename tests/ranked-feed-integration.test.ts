@@ -181,4 +181,22 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
       first.pageInfo.nextCursor?.asOf,
     );
   });
+
+  it("falls back to recent listings when the profile is embedded before the catalogue", async () => {
+    await prisma.$executeRaw`
+      UPDATE "MarketplaceListing"
+      SET "embedding" = NULL
+      WHERE "id" IN (${listingId}, ${secondListingId})
+    `;
+    await prisma.buyerDemandProfile.deleteMany({ where: { userId: buyerId } });
+
+    try {
+      const result = await rankBuyerFeed(buyerId, { limit: 10 });
+      expect(result.items.length).toBeGreaterThan(0);
+      expect(result.ranking).toMatchObject({ coldStart: true });
+    } finally {
+      await refreshListingEmbedding(listingId);
+      await refreshListingEmbedding(secondListingId);
+    }
+  });
 });
