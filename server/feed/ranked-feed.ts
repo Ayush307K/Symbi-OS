@@ -9,7 +9,6 @@ import {
   sellerReliabilityScore,
 } from "@/server/feed/scoring";
 import {
-  PUBLIC_LISTING_SOURCE_TYPES,
   publicListingWhere,
 } from "@/server/listings/policy";
 import { vectorLiteral } from "@/server/semantic/listing-embeddings";
@@ -85,9 +84,7 @@ async function semanticSeeds(profileEmbedding: number[] | null) {
                  FROM "MarketplaceListing" listing
                  JOIN "WasteMaterial" material ON material."id" = listing."materialId"
                  WHERE listing."embedding" IS NOT NULL
-                   AND listing."isEvalOnly" = false
                    AND listing."status" IN ('ACTIVE', 'active')
-                   AND listing."sourceType" IN (${Prisma.join([...PUBLIC_LISTING_SOURCE_TYPES])})
                    AND listing."category" IN (${Prisma.join([...SAFE_CATEGORIES])})
                    AND material."toxicityLevel" IN ('none', 'low')
                  ORDER BY listing."embedding" <=> CAST(${vectorLiteral(profileEmbedding)} AS vector)
@@ -221,6 +218,8 @@ export async function rankBuyerFeed(
       materialId: true,
       title: true,
       slug: true,
+      isEvalOnly: true,
+      evalScenarioTags: true,
       category: true,
       subcategory: true,
       area: true,
@@ -386,6 +385,8 @@ export async function rankBuyerFeed(
         id: listing.id,
         materialId: listing.materialId,
         slug: listing.slug,
+        isEvalOnly: listing.isEvalOnly,
+        evalScenarioTags: listing.evalScenarioTags,
         title: listing.title,
         name: listing.material.name,
         toxicity: listing.material.toxicityLevel,

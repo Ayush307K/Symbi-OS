@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GOLDEN_SET } from "@/eval/golden-set";
 import { EVAL_LISTINGS } from "@/eval/fixtures/listings";
-import { publicListingWhere } from "@/server/listings/policy";
+import {
+  publicListingWhere,
+  transactableListingWhere,
+} from "@/server/listings/policy";
 import { isTradeIndiaScrapProduct } from "@/server/listings/providers";
 import { assertRagEvaluationAccess } from "@/server/rag/eval-access";
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("evaluation corpus definition", () => {
-  it("keeps every synthetic listing explicitly evaluation-only by policy", () => {
-    expect(publicListingWhere).toMatchObject({ isEvalOnly: false });
+  it("shows synthetic listings without making them transactable", () => {
+    expect(publicListingWhere).not.toHaveProperty("isEvalOnly");
+    expect(transactableListingWhere).toMatchObject({ isEvalOnly: false });
     expect(EVAL_LISTINGS).toHaveLength(28);
     expect(EVAL_LISTINGS.some((listing) => listing.category === ("Glass" as never))).toBe(
       false,

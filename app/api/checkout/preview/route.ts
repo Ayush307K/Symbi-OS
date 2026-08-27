@@ -3,7 +3,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { apiError, ApiError, requireUser } from "@/server/http";
 import { calculateFees } from "@/server/fees";
-import { publicListingWhere } from "@/server/listings/policy";
+import { transactableListingWhere } from "@/server/listings/policy";
 
 const schema = z.object({
   listingId: z.string().min(1),
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const { listingId, quantity } = parsed.data;
 
     const listing = await prisma.marketplaceListing.findFirst({
-      where: { AND: [{ id: listingId }, publicListingWhere] },
+      where: { AND: [{ id: listingId }, transactableListingWhere] },
       select: {
         id: true,
         title: true,

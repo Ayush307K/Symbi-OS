@@ -10,7 +10,7 @@ import {
   parseJson,
   requireUser,
 } from "@/server/http";
-import { publicListingWhere } from "@/server/listings/policy";
+import { transactableListingWhere } from "@/server/listings/policy";
 import { enforceRateLimit } from "@/server/rate-limit";
 import { releaseExpiredReservations } from "@/server/inventory";
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const listing = await prisma.marketplaceListing.findFirst({
-      where: { id: body.listingId, ...publicListingWhere },
+      where: { id: body.listingId, ...transactableListingWhere },
       include: { material: true, seller: true },
     });
     if (!listing) {

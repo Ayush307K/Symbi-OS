@@ -37,18 +37,21 @@ export function catalogOrderBy(
  */
 export const fixedPriceOnly = { priceMode: "FIXED" } as const;
 
-export const PUBLIC_LISTING_SOURCE_TYPES = [
-  "real_api",
-  "real_public_provider",
-  "seller_submitted",
-] as const;
-
+/**
+ * The temporary all-corpus catalogue policy requested for the demo.
+ *
+ * Evaluation metadata remains on each row, but it is intentionally not a
+ * visibility predicate: every active, in-scope listing is discoverable. Draft,
+ * archived, expired, or unsafe material still stays out of the public surface.
+ */
 export const publicListingWhere = {
-  isEvalOnly: false,
   status: { in: ["ACTIVE", "active"] },
-  sourceType: {
-    in: [...PUBLIC_LISTING_SOURCE_TYPES],
-  },
   category: { in: [...SAFE_CATEGORIES] },
   material: { toxicityLevel: { in: ["none", "low"] } },
+} satisfies Prisma.MarketplaceListingWhereInput;
+
+/** Evaluation fixtures are visible for the demo but can never be purchased. */
+export const transactableListingWhere = {
+  ...publicListingWhere,
+  isEvalOnly: false,
 } satisfies Prisma.MarketplaceListingWhereInput;

@@ -10,7 +10,7 @@ import {
   parseJson,
   requireUser,
 } from "@/server/http";
-import { publicListingWhere } from "@/server/listings/policy";
+import { transactableListingWhere } from "@/server/listings/policy";
 import { calculateFees } from "@/server/fees";
 import {
   invoiceNumber,
@@ -301,7 +301,7 @@ async function directCheckout(input: {
     const listings = await tx.marketplaceListing.findMany({
       where: {
         id: { in: cartItems.map((item) => item.listingId) },
-        ...publicListingWhere,
+        ...transactableListingWhere,
       },
     });
     const listingById = new Map(listings.map((listing) => [listing.id, listing]));

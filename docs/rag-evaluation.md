@@ -25,7 +25,7 @@ deduplicates by external ID, and rejects adjacent equipment. It fails before
 writing if a category cannot meet its quota; another category is never used to
 hide a shortfall.
 
-## Synthetic isolation
+## Synthetic tagging and temporary catalogue visibility
 
 Synthetic listings stay in `MarketplaceListing` so evaluation exercises the
 real persistence and retrieval path. They are marked `sourceType=synthetic`
@@ -33,13 +33,19 @@ and `isEvalOnly=true`, with `evalScenarioTags` and optional `evalClusterId`.
 The derived `KnowledgeDocument` repeats `isEvalOnly` because RAG retrieves from
 documents rather than listings.
 
-Buyer-visible policy always requires `MarketplaceListing.isEvalOnly=false`.
-Normal RAG retrieval always requires `KnowledgeDocument.isEvalOnly=false`.
-Evaluation corpora require both an explicit environment opt-in and secret
-header. Synthetic users are disabled and their users/orders are flagged.
-Production material-edge refreshes exclude flagged users, orders, and listings.
+For the current demo, buyer catalogue and ranked-feed policy intentionally show
+all active safe listings, including the tagged synthetic rows. The API returns
+`isEvalOnly` and `evalScenarioTags` so clients retain provenance. Evaluation
+listings remain non-transactable: cart mutations, checkout, and bids require
+`isEvalOnly=false`. Normal RAG retrieval also still requires
+`KnowledgeDocument.isEvalOnly=false`; evaluation corpora require both an
+explicit environment opt-in and secret header. Synthetic users remain disabled,
+and production material-edge refreshes continue to exclude flagged users,
+orders, and listings.
 
-Evaluation seeding is intentionally refused for non-local database hosts.
+Full evaluation seeding remains restricted to local database hosts. Production
+catalogue synchronization upserts only the 28 listing/company/material rows; it
+never creates synthetic buyers, orders, carts, or graph signals.
 
 ## Synthetic scenarios
 

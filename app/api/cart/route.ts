@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { parsePositiveInt, requireAuth } from "@/lib/marketplace";
-import { publicListingWhere } from "@/server/listings/policy";
+import {
+  publicListingWhere,
+  transactableListingWhere,
+} from "@/server/listings/policy";
 import { assertTrustedOrigin } from "@/server/http";
 import { hasRole } from "@/lib/auth";
 
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest) {
   if (!listingId) return NextResponse.json({ error: "listingId is required." }, { status: 400 });
 
   const listing = await prisma.marketplaceListing.findFirst({
-    where: { id: listingId, ...publicListingWhere },
+    where: { id: listingId, ...transactableListingWhere },
   });
   if (!listing) {
     return NextResponse.json({ error: "Listing is unavailable." }, { status: 404 });
@@ -83,7 +86,7 @@ export async function PATCH(request: NextRequest) {
   if (!listingId) return NextResponse.json({ error: "listingId is required." }, { status: 400 });
 
   const listing = await prisma.marketplaceListing.findFirst({
-    where: { id: listingId, ...publicListingWhere },
+    where: { id: listingId, ...transactableListingWhere },
   });
   if (
     !listing ||
