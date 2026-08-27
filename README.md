@@ -310,8 +310,11 @@ containing prohibited material terms are rejected and counted in
 1. Register as Seller or Buyer and Seller.
 2. In demo mode, email verification is completed using the one-time sandbox
    token returned by registration.
-3. Complete all six onboarding steps.
-4. Submit and run the clearly labelled sandbox verification.
+3. Complete the routed seller journey in order: Business, Tax, Bank, KYC,
+   Warehouse, and Policies. Required PDFs are uploaded within the relevant
+   stage; future routes remain locked in both the UI and API.
+4. Review the complete application, submit it, and run the clearly labelled
+   sandbox verification.
 5. Publish a non-hazardous listing.
 6. Review and accept valid, inventory-bounded bids.
 

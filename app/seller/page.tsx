@@ -21,9 +21,15 @@ import {
   Star,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { SellerOnboardingForm } from "@/components/SellerOnboardingForm";
 
-type Tab = "Overview" | "Listings" | "Orders" | "Bids" | "Onboarding" | "Reviews" | "Messages";
+type Tab =
+  | "Overview"
+  | "Listings"
+  | "Orders"
+  | "Bids"
+  | "Onboarding"
+  | "Reviews"
+  | "Messages";
 
 interface MetricItem {
   label: string;
@@ -73,10 +79,13 @@ export default function SellerPage() {
     try {
       const res = await fetch("/api/seller/dashboard", { cache: "no-store" });
       const payload = await res.json();
-      if (!res.ok) throw new Error(payload.error ?? "Unable to load seller dashboard.");
+      if (!res.ok)
+        throw new Error(payload.error ?? "Unable to load seller dashboard.");
       setData(payload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load seller dashboard.");
+      setError(
+        err instanceof Error ? err.message : "Unable to load seller dashboard.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -88,14 +97,44 @@ export default function SellerPage() {
 
   const cards = useMemo<MetricItem[]>(
     () => [
-      { label: "Active listings", value: data?.stats.activeListings ?? 0, detail: "Live supply records", icon: Package },
-      { label: "Incoming bids", value: data?.stats.pendingBids ?? 0, detail: "Pending buyer quotes", icon: Gavel },
-      { label: "Orders", value: data?.stats.orders ?? 0, detail: money(data?.stats.revenue ?? 0), icon: Box },
-      { label: "Reviews", value: data?.stats.reviews ?? 0, detail: `${(data?.stats.avgRating ?? 0).toFixed(1)} avg rating`, icon: Star },
-      { label: "Open messages", value: data?.stats.openThreads ?? 0, detail: "Buyer threads", icon: MessageCircle },
-      { label: "Onboarding", value: data?.onboarding?.status ?? "DRAFT", detail: data?.onboarding?.currentStep ?? "BUSINESS", icon: BadgeCheck },
+      {
+        label: "Active listings",
+        value: data?.stats.activeListings ?? 0,
+        detail: "Live supply records",
+        icon: Package,
+      },
+      {
+        label: "Incoming bids",
+        value: data?.stats.pendingBids ?? 0,
+        detail: "Pending buyer quotes",
+        icon: Gavel,
+      },
+      {
+        label: "Orders",
+        value: data?.stats.orders ?? 0,
+        detail: money(data?.stats.revenue ?? 0),
+        icon: Box,
+      },
+      {
+        label: "Reviews",
+        value: data?.stats.reviews ?? 0,
+        detail: `${(data?.stats.avgRating ?? 0).toFixed(1)} avg rating`,
+        icon: Star,
+      },
+      {
+        label: "Open messages",
+        value: data?.stats.openThreads ?? 0,
+        detail: "Buyer threads",
+        icon: MessageCircle,
+      },
+      {
+        label: "Onboarding",
+        value: data?.onboarding?.status ?? "DRAFT",
+        detail: data?.onboarding?.journey?.currentStep ?? "BUSINESS",
+        icon: BadgeCheck,
+      },
     ],
-    [data]
+    [data],
   );
 
   return (
@@ -104,12 +143,18 @@ export default function SellerPage() {
       <header className="border-b border-ink-200 bg-surface-card">
         <div className="mx-auto flex max-w-[1440px] flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <Link href="/" className="text-sm font-semibold text-copper-800 hover:text-copper-900">
+            <Link
+              href="/"
+              className="text-sm font-semibold text-copper-800 hover:text-copper-900"
+            >
               Back to marketplace
             </Link>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Seller dashboard</h1>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+              Seller dashboard
+            </h1>
             <p className="mt-1 text-sm text-ink-500">
-              {data?.user.companyName ?? "Company workspace"} · seller operations
+              {data?.user.companyName ?? "Company workspace"} · seller
+              operations
             </p>
           </div>
           <div className="flex gap-2">
@@ -124,7 +169,10 @@ export default function SellerPage() {
               onClick={load}
               className="flex items-center gap-2 rounded-md border border-ink-300 bg-surface-card px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-surface-sunken"
             >
-              <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={16}
+                className={isLoading ? "animate-spin" : ""}
+              />
               Refresh
             </button>
             <Link
@@ -149,7 +197,7 @@ export default function SellerPage() {
                   "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                   activeTab === tab.label
                     ? "bg-brand-50 text-brand"
-                    : "text-ink-600 hover:bg-surface-sunken hover:text-ink-900"
+                    : "text-ink-600 hover:bg-surface-sunken hover:text-ink-900",
                 )}
               >
                 <span className="flex items-center gap-2">
@@ -181,29 +229,46 @@ export default function SellerPage() {
                     {cards.map((card) => {
                       const Icon = card.icon;
                       return (
-                      <div key={card.label} className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{card.label}</p>
-                          <Icon size={18} className="text-brand" />
+                        <div
+                          key={card.label}
+                          className="rounded-lg border border-ink-200 bg-surface-card p-4 shadow-sm"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
+                              {card.label}
+                            </p>
+                            <Icon size={18} className="text-brand" />
+                          </div>
+                          <p className="mt-3 text-2xl font-semibold">
+                            {String(card.value)}
+                          </p>
+                          <p className="mt-1 text-sm text-ink-500">
+                            {card.detail}
+                          </p>
                         </div>
-                        <p className="mt-3 text-2xl font-semibold">{String(card.value)}</p>
-                        <p className="mt-1 text-sm text-ink-500">{card.detail}</p>
-                      </div>
                       );
                     })}
                   </div>
                   <Panel title="Seller readiness">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <p className="font-semibold">Onboarding status: {data.onboarding.status}</p>
-                        <p className="mt-1 text-sm text-ink-500">Current step: {data.onboarding.currentStep}</p>
+                        <p className="font-semibold">
+                          Onboarding status: {data.onboarding.status}
+                        </p>
+                        <p className="mt-1 text-sm text-ink-500">
+                          Current step:{" "}
+                          {data.onboarding.journey?.currentStep ??
+                            data.onboarding.currentStep}
+                        </p>
                       </div>
-                      <button
-                        onClick={() => setActiveTab("Onboarding")}
+                      <Link
+                        href="/seller/onboarding"
                         className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand"
                       >
-                        Complete onboarding
-                      </button>
+                        {data.onboarding.status === "APPROVED"
+                          ? "View verification"
+                          : "Continue onboarding"}
+                      </Link>
                     </div>
                   </Panel>
                 </div>
@@ -219,7 +284,33 @@ export default function SellerPage() {
               )}
               {activeTab === "Onboarding" && (
                 <Panel title="Seller onboarding">
-                  <SellerOnboardingForm onboarding={data.onboarding} onChanged={load} />
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-semibold">
+                        {data.onboarding.journey?.percentage ??
+                          data.onboarding.completion?.percentage ??
+                          0}
+                        % complete
+                      </p>
+                      <p className="mt-1 text-sm text-ink-500">
+                        Complete the guided business-verification journey one
+                        step at a time.
+                      </p>
+                      <p className="mt-2 text-xs font-medium uppercase tracking-wide text-ink-500">
+                        Next:{" "}
+                        {data.onboarding.journey?.currentStep ??
+                          data.onboarding.currentStep}
+                      </p>
+                    </div>
+                    <Link
+                      href="/seller/onboarding"
+                      className="rounded-md bg-brand px-4 py-2 text-center text-sm font-semibold text-white hover:bg-brand"
+                    >
+                      {data.onboarding.status === "APPROVED"
+                        ? "View application"
+                        : "Open onboarding"}
+                    </Link>
+                  </div>
                 </Panel>
               )}
               {activeTab === "Reviews" && <ReviewList items={data.reviews} />}
@@ -232,7 +323,13 @@ export default function SellerPage() {
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-lg border border-ink-200 bg-surface-card shadow-sm">
       <div className="border-b border-ink-200 px-4 py-3">
@@ -403,7 +500,11 @@ function OrderItemList({
       if (!response.ok) throw new Error(payload.error ?? "Action failed.");
       onChanged();
     } catch (error) {
-      toast({ tone: "danger", title: "Action failed.", description: error instanceof Error ? error.message : undefined });
+      toast({
+        tone: "danger",
+        title: "Action failed.",
+        description: error instanceof Error ? error.message : undefined,
+      });
     } finally {
       setBusy(null);
     }
@@ -418,7 +519,8 @@ function OrderItemList({
               <div>
                 <p className="font-semibold">{item.title}</p>
                 <p className="mt-1 text-sm text-ink-500">
-                  {item.order.orderNumber} · {item.order.buyer.companyName} · {item.status}
+                  {item.order.orderNumber} · {item.order.buyer.companyName} ·{" "}
+                  {item.status}
                 </p>
               </div>
               <p className="font-semibold">{money(item.lineTotal)}</p>
@@ -494,61 +596,64 @@ function BidList({
   if (!items.length) return <Empty label="No incoming bids yet." />;
   return (
     <>
-    <Panel title="Incoming bids">
-      {message && (
-        <p className="mb-3 rounded-md bg-surface-page p-2 text-sm">{message}</p>
-      )}
-      <div className="divide-y divide-ink-200">
-        {items.map((item) => (
-          <div key={item.id} className="py-3">
-            <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold">{item.materialName}</p>
-              <p className="text-sm text-ink-500">
-                {item.bidderCompany} · Qty {item.quantity} {item.unit} · {item.status}
-              </p>
-            </div>
-            <p className="font-semibold">{money(item.pricePerUnit)}</p>
-            </div>
-            {["PENDING", "COUNTERED"].includes(item.status) && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {[
-                  ["ACCEPT", "Accept"],
-                  ["COUNTER", "Counter"],
-                  ["REJECT", "Reject"],
-                  ["CANCEL", "Cancel"],
-                ].map(([action, label]) => (
-                  <button
-                    key={action}
-                    disabled={busy === item.id}
-                    onClick={() => void act(item, action)}
-                    className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold disabled:opacity-50"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {item.order && (
-              <p className="mt-2 text-xs text-brand">
-                Order {item.order.orderNumber} · {item.order.status}
-              </p>
-            )}
-            {item.revisions?.length > 1 && (
-              <details className="mt-2 text-xs text-ink-500">
-                <summary>{item.revisions.length} offer revisions</summary>
-                {item.revisions.map((revision: any) => (
-                  <p key={revision.id} className="mt-1">
-                    #{revision.sequence}: {revision.quantity} {revision.unit} at{" "}
-                    {money(revision.pricePerUnit)} · {revision.status}
+      <Panel title="Incoming bids">
+        {message && (
+          <p className="mb-3 rounded-md bg-surface-page p-2 text-sm">
+            {message}
+          </p>
+        )}
+        <div className="divide-y divide-ink-200">
+          {items.map((item) => (
+            <div key={item.id} className="py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{item.materialName}</p>
+                  <p className="text-sm text-ink-500">
+                    {item.bidderCompany} · Qty {item.quantity} {item.unit} ·{" "}
+                    {item.status}
                   </p>
-                ))}
-              </details>
-            )}
-          </div>
-        ))}
-      </div>
-    </Panel>
+                </div>
+                <p className="font-semibold">{money(item.pricePerUnit)}</p>
+              </div>
+              {["PENDING", "COUNTERED"].includes(item.status) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[
+                    ["ACCEPT", "Accept"],
+                    ["COUNTER", "Counter"],
+                    ["REJECT", "Reject"],
+                    ["CANCEL", "Cancel"],
+                  ].map(([action, label]) => (
+                    <button
+                      key={action}
+                      disabled={busy === item.id}
+                      onClick={() => void act(item, action)}
+                      className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold disabled:opacity-50"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {item.order && (
+                <p className="mt-2 text-xs text-brand">
+                  Order {item.order.orderNumber} · {item.order.status}
+                </p>
+              )}
+              {item.revisions?.length > 1 && (
+                <details className="mt-2 text-xs text-ink-500">
+                  <summary>{item.revisions.length} offer revisions</summary>
+                  {item.revisions.map((revision: any) => (
+                    <p key={revision.id} className="mt-1">
+                      #{revision.sequence}: {revision.quantity} {revision.unit}{" "}
+                      at {money(revision.pricePerUnit)} · {revision.status}
+                    </p>
+                  ))}
+                </details>
+              )}
+            </div>
+          ))}
+        </div>
+      </Panel>
       <CounterOfferDialog
         open={Boolean(counterTarget)}
         onClose={() => setCounterTarget(null)}
@@ -580,7 +685,9 @@ function ReviewList({ items }: { items: Array<any> }) {
       <div className="grid gap-3">
         {items.map((item) => (
           <div key={item.id} className="rounded-md border border-ink-200 p-3">
-            <p className="font-semibold">{item.rating}/5 · {item.user.companyName}</p>
+            <p className="font-semibold">
+              {item.rating}/5 · {item.user.companyName}
+            </p>
             <p className="mt-1 text-sm text-ink-500">{item.body}</p>
             <p className="mt-2 text-xs text-ink-400">{item.listing.title}</p>
           </div>
@@ -596,7 +703,11 @@ function ThreadList({ items }: { items: Array<any> }) {
     <Panel title="Messages">
       <div className="divide-y divide-ink-200">
         {items.map((thread) => (
-          <Link key={thread.id} href={`/messages/${thread.id}`} className="block py-3">
+          <Link
+            key={thread.id}
+            href={`/messages/${thread.id}`}
+            className="block py-3"
+          >
             <p className="font-semibold">{thread.subject}</p>
             <p className="mt-1 line-clamp-1 text-sm text-ink-500">
               {thread.messages[0]?.body ?? "No messages yet"}

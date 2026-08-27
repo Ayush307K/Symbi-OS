@@ -110,7 +110,8 @@ const initialDraft: Draft = {
 
 function fieldErrors(draft: Draft, photos: number) {
   const errors: Record<string, string> = {};
-  if (draft.title.trim().length < 3) errors.title = "Use at least 3 characters.";
+  if (draft.title.trim().length < 3)
+    errors.title = "Use at least 3 characters.";
   if (draft.subcategory.trim().length < 2) {
     errors.subcategory = "Add the subtype, grade, or specification.";
   }
@@ -120,18 +121,13 @@ function fieldErrors(draft: Draft, photos: number) {
   if (Number(draft.quantityAvailable) <= 0) {
     errors.quantityAvailable = "Quantity must be positive.";
   }
-  if (
-    draft.priceMode === "FIXED" &&
-    Number(draft.pricePerUnit) <= 0
-  ) {
+  if (draft.priceMode === "FIXED" && Number(draft.pricePerUnit) <= 0) {
     errors.pricePerUnit = "Add a positive price.";
   }
   if (Number(draft.minOrderQuantity) <= 0) {
     errors.minOrderQuantity = "MOQ must be positive.";
   }
-  if (
-    Number(draft.minOrderQuantity) > Number(draft.quantityAvailable)
-  ) {
+  if (Number(draft.minOrderQuantity) > Number(draft.quantityAvailable)) {
     errors.minOrderQuantity = "MOQ cannot exceed available quantity.";
   }
   if (Number(draft.lotIncrement) <= 0) {
@@ -155,10 +151,7 @@ function fieldErrors(draft: Draft, photos: number) {
     errors.longitude = "Add both coordinates or leave both blank.";
   }
   if (!draft.availableFrom) errors.availableFrom = "Choose a date.";
-  if (
-    draft.availableUntil &&
-    draft.availableUntil <= draft.availableFrom
-  ) {
+  if (draft.availableUntil && draft.availableUntil <= draft.availableFrom) {
     errors.availableUntil = "End date must be after the start date.";
   }
   if (photos < 1 || photos > 5) errors.photos = "Upload 1–5 photos.";
@@ -191,8 +184,7 @@ function draftFromListing(record: ListingRecord): Draft {
   return {
     ...initialDraft,
     title: value("title"),
-    category:
-      (record.category as Draft["category"]) || initialDraft.category,
+    category: (record.category as Draft["category"]) || initialDraft.category,
     subcategory: value("subcategory"),
     description: value("description"),
     priceMode:
@@ -251,9 +243,9 @@ export default function NewSellerListingPage() {
             listingId?: string;
           })
         : ({} as {
-        draft?: Draft;
-        listingId?: string;
-      });
+            draft?: Draft;
+            listingId?: string;
+          });
       if (parsed.draft && !queryId) {
         setDraft({ ...initialDraft, ...parsed.draft });
       }
@@ -316,7 +308,9 @@ export default function NewSellerListingPage() {
       setMessage(payload.message || "Draft saved.");
       return payload.listing as ListingRecord;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save draft.");
+      setMessage(
+        error instanceof Error ? error.message : "Unable to save draft.",
+      );
       return null;
     } finally {
       setBusy(false);
@@ -486,13 +480,19 @@ export default function NewSellerListingPage() {
             icon={<ShieldAlert />}
             title="Seller verification is required first"
             description={
-              onboardingStatus === "SUBMITTED"
+              ["SUBMITTED", "UNDER_REVIEW"].includes(onboardingStatus)
                 ? "Your onboarding is submitted and awaiting review. Listing creation unlocks once it is approved."
                 : "Complete seller onboarding and verification before creating a listing. Buyers only see listings from verified sellers."
             }
             action={
-              <Button variant="primary" size="sm" onClick={() => router.push("/seller")}>
-                {onboardingStatus === "SUBMITTED" ? "Back to dashboard" : "Complete onboarding"}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => router.push("/seller/onboarding")}
+              >
+                {["SUBMITTED", "UNDER_REVIEW"].includes(onboardingStatus)
+                  ? "View verification status"
+                  : "Complete onboarding"}
               </Button>
             }
           />
@@ -579,7 +579,10 @@ export default function NewSellerListingPage() {
 
           <Section title="Quantity, price, and availability">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Available quantity" error={errors.quantityAvailable}>
+              <Field
+                label="Available quantity"
+                error={errors.quantityAvailable}
+              >
                 <input
                   type="number"
                   min="1"
@@ -719,7 +722,9 @@ export default function NewSellerListingPage() {
                   max="180"
                   step="any"
                   value={draft.longitude}
-                  onChange={(event) => setField("longitude", event.target.value)}
+                  onChange={(event) =>
+                    setField("longitude", event.target.value)
+                  }
                   className={inputClass(errors.longitude)}
                   placeholder="77.5946"
                 />
@@ -799,7 +804,9 @@ export default function NewSellerListingPage() {
                     className="h-36 w-full object-cover"
                   />
                   <div className="flex items-center justify-between gap-2 p-2">
-                    <p className="min-w-0 truncate text-xs">{photo.originalName}</p>
+                    <p className="min-w-0 truncate text-xs">
+                      {photo.originalName}
+                    </p>
                     <div className="flex gap-1">
                       <IconButton
                         label="Move photo earlier"
@@ -914,12 +921,16 @@ export default function NewSellerListingPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="truncate">{item.file.name}</span>
-                <span>{item.state === "failed" ? item.error : `${item.progress}%`}</span>
+                <span>
+                  {item.state === "failed" ? item.error : `${item.progress}%`}
+                </span>
               </div>
               {item.state === "failed" && (
                 <button
                   onClick={() => {
-                    setUploads((values) => values.filter((value) => value !== item));
+                    setUploads((values) =>
+                      values.filter((value) => value !== item),
+                    );
                     void upload(item.file, item.kind);
                   }}
                   className="mt-2 flex min-h-10 items-center gap-2 font-semibold text-danger-strong"
@@ -978,7 +989,9 @@ export default function NewSellerListingPage() {
                   />
                 )}
                 <div className="p-3">
-                  <p className="font-semibold">{draft.title || "Untitled listing"}</p>
+                  <p className="font-semibold">
+                    {draft.title || "Untitled listing"}
+                  </p>
                   <p className="mt-1 text-xs text-ink-500">
                     {draft.category} · {draft.subcategory || "Grade pending"}
                   </p>
@@ -1004,7 +1017,11 @@ export default function NewSellerListingPage() {
             disabled={busy}
             className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-ink-300 px-5 text-sm font-semibold hover:bg-surface-sunken disabled:opacity-50"
           >
-            {busy ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+            {busy ? (
+              <Loader2 className="animate-spin" size={16} />
+            ) : (
+              <Save size={16} />
+            )}
             Save draft
           </button>
           <button
@@ -1012,7 +1029,11 @@ export default function NewSellerListingPage() {
             disabled={busy || listing?.status === "PENDING_MODERATION"}
             className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand px-5 text-sm font-semibold text-white hover:bg-brand disabled:opacity-50"
           >
-            {busy ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+            {busy ? (
+              <Loader2 className="animate-spin" size={16} />
+            ) : (
+              <Send size={16} />
+            )}
             Submit for moderation
           </button>
         </div>
