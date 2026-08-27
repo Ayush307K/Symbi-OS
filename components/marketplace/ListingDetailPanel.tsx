@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toast";
 import ListingImage from "@/components/ListingImage";
 import { cn } from "@/lib/cn";
+import { listingFallbackImage } from "@/lib/listing-images";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
 interface ListingReview {
@@ -372,6 +373,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
           <div className="overflow-hidden rounded-card border border-ink-200 bg-surface-card">
             <ListingImage
               src={listing.imageUrl}
+              fallbackSrc={listingFallbackImage(listing)}
               alt={listing.title}
               className="aspect-[4/3] w-full object-cover"
             />
@@ -382,7 +384,15 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
               <span className="text-[12px] font-medium uppercase tracking-wide text-ink-500">
                 {listing.category}
               </span>
-              {listing.verified ? (
+              {listing.isEvalOnly ? (
+                <Badge
+                  tone="neutral"
+                  icon={<Info />}
+                  title="Synthetic evaluation listing. It is not a live seller offer."
+                >
+                  Demo listing
+                </Badge>
+              ) : listing.verified ? (
                 <Badge tone="brand" icon={<BadgeCheck />}>
                   Verified seller
                 </Badge>
@@ -512,53 +522,62 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             </div>
 
             <div className="mt-4 flex flex-col gap-2">
-              {price ? (
-                <Button
-                  variant="primary"
-                  fullWidth
-                  onClick={buyNow}
-                  disabled={Boolean(quantityError)}
-                  title={quantityError ?? undefined}
-                >
-                  Buy now
-                </Button>
-              ) : null}
-              <Button
-                variant={price ? "secondary" : "primary"}
-                fullWidth
-                leadingIcon={<Gavel className="h-4 w-4" />}
-                onClick={() => {
-                  // Seed with the list price where there is one, so a buyer
-                  // negotiating from a stated price starts at it rather than
-                  // from an empty field.
-                  setBidPrice(price && listing.price ? String(listing.price) : "");
-                  setIsBidOpen(true);
-                }}
-                disabled={Boolean(quantityError)}
-                title={quantityError ?? undefined}
-              >
-                Place a bid
-              </Button>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="ghost"
-                  leadingIcon={<ShoppingCart className="h-4 w-4" />}
-                  loading={pending === "cart"}
-                  onClick={addToCart}
-                  disabled={Boolean(quantityError)}
-                  title={quantityError ?? undefined}
-                >
-                  Cart
-                </Button>
-                <Button
-                  variant="ghost"
-                  leadingIcon={<MessageSquare className="h-4 w-4" />}
-                  loading={pending === "message"}
-                  onClick={messageSeller}
-                >
-                  Message
-                </Button>
-              </div>
+              {listing.isEvalOnly ? (
+                <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] leading-relaxed text-ink-600">
+                  Synthetic evaluation listing. It remains visible for demo and
+                  retrieval testing, but cannot be purchased, bid on, or messaged.
+                </div>
+              ) : (
+                <>
+                  {price ? (
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={buyNow}
+                      disabled={Boolean(quantityError)}
+                      title={quantityError ?? undefined}
+                    >
+                      Buy now
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant={price ? "secondary" : "primary"}
+                    fullWidth
+                    leadingIcon={<Gavel className="h-4 w-4" />}
+                    onClick={() => {
+                      // Seed with the list price where there is one, so a buyer
+                      // negotiating from a stated price starts at it rather than
+                      // from an empty field.
+                      setBidPrice(price && listing.price ? String(listing.price) : "");
+                      setIsBidOpen(true);
+                    }}
+                    disabled={Boolean(quantityError)}
+                    title={quantityError ?? undefined}
+                  >
+                    Place a bid
+                  </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="ghost"
+                      leadingIcon={<ShoppingCart className="h-4 w-4" />}
+                      loading={pending === "cart"}
+                      onClick={addToCart}
+                      disabled={Boolean(quantityError)}
+                      title={quantityError ?? undefined}
+                    >
+                      Cart
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      leadingIcon={<MessageSquare className="h-4 w-4" />}
+                      loading={pending === "message"}
+                      onClick={messageSeller}
+                    >
+                      Message
+                    </Button>
+                  </div>
+                </>
+              )}
               <Button
                 variant="ghost"
                 fullWidth

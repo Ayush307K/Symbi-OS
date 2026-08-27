@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title description">
+  <title id="title">Metal scrap evaluation artwork</title>
+  <desc id="description">Illustrative metal pieces used for a synthetic demo listing</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c1917"/>
+      <stop offset="1" stop-color="#57534e"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fafaf9"/>
+      <stop offset=".48" stop-color="#a8a29e"/>
+      <stop offset="1" stop-color="#44403c"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <circle cx="690" cy="96" r="180" fill="#f97316" opacity=".13"/>
+  <g transform="translate(110 155)" stroke="#292524" stroke-width="8">
+    <path d="M15 260 125 45l86 38-109 215z" fill="url(#steel)"/>
+    <path d="m164 280 80-236 92 31-80 236z" fill="#78716c"/>
+    <path d="m288 293 118-213 82 45-118 213z" fill="url(#steel)"/>
+    <path d="m421 295 55-208 96 25-55 208z" fill="#a8a29e"/>
+  </g>
+  <rect x="34" y="34" width="176" height="38" rx="19" fill="#fafaf9" opacity=".94"/>
+  <text x="122" y="59" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="#44403c">DEMO MATERIAL</text>
+  <text x="400" y="535" text-anchor="middle" font-family="Arial, sans-serif" font-size="31" font-weight="700" fill="#fafaf9">METAL SCRAP</text>
+</svg>

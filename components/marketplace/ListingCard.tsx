@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import ListingImage from "@/components/ListingImage";
 import { cn } from "@/lib/cn";
+import { listingFallbackImage } from "@/lib/listing-images";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
 /**
@@ -64,6 +65,7 @@ export function ListingCard({
         >
           <ListingImage
             src={listing.imageUrl}
+            fallbackSrc={listingFallbackImage(listing)}
             alt={listing.title}
             className="h-40 w-full object-cover transition-transform duration-[240ms] ease-out group-hover:scale-[1.03]"
           />
@@ -72,7 +74,16 @@ export function ListingCard({
         {/* Verification is stated either way. A listing carried in from a public
             provider feed is real and attributed, but its seller has not been
             verified — saying nothing would let it read as verified by default. */}
-        {listing.verified ? (
+        {listing.isEvalOnly ? (
+          <Badge
+            tone="neutral"
+            icon={<Info />}
+            title="Synthetic evaluation listing. It is visible for demo and retrieval testing, but is not a live seller offer."
+            className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
+          >
+            Demo listing
+          </Badge>
+        ) : listing.verified ? (
           <Badge
             tone="brand"
             icon={<BadgeCheck />}
@@ -181,7 +192,11 @@ export function ListingCard({
             so these lead to the surface that collects it rather than firing an
             action from here. */}
         <div className="mt-auto flex flex-col gap-1.5 pt-1">
-          {price ? (
+          {listing.isEvalOnly ? (
+            <Button variant="secondary" size="sm" fullWidth disabled>
+              Evaluation only
+            </Button>
+          ) : price ? (
             <>
               <Button
                 variant="primary"

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title description">
+  <title id="title">Plastic scrap evaluation artwork</title>
+  <desc id="description">Illustrative plastic flakes and bales used for a synthetic demo listing</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#064e3b"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <circle cx="690" cy="100" r="190" fill="#f97316" opacity=".18"/>
+  <g transform="translate(118 150)">
+    <rect x="0" y="98" width="250" height="214" rx="28" fill="#dbeafe" opacity=".94"/>
+    <path d="M0 177h250M83 98v214M167 98v214" stroke="#2563eb" stroke-width="10" opacity=".58"/>
+    <g fill="#fef3c7" stroke="#f59e0b" stroke-width="5">
+      <path d="m320 64 55-20 35 43-36 48-59-18z"/>
+      <path d="m419 116 58-9 21 54-49 39-50-29z"/>
+      <path d="m301 181 49-34 45 36-22 58-60 2z"/>
+      <path d="m405 232 54-27 42 40-28 57-61-5z"/>
+      <path d="m505 167 49-20 31 43-31 49-54-14z"/>
+    </g>
+  </g>
+  <rect x="34" y="34" width="176" height="38" rx="19" fill="#ecfdf5" opacity=".96"/>
+  <text x="122" y="59" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="#065f46">DEMO MATERIAL</text>
+  <text x="400" y="535" text-anchor="middle" font-family="Arial, sans-serif" font-size="31" font-weight="700" fill="#ecfdf5">PLASTIC SCRAP</text>
+</svg>

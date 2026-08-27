@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-labelledby="title description">
+  <title id="title">Rubber scrap evaluation artwork</title>
+  <desc id="description">Illustrative tyre chips used for a synthetic demo listing</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#292524"/>
+      <stop offset="1" stop-color="#0c0a09"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <circle cx="676" cy="104" r="184" fill="#ea580c" opacity=".2"/>
+  <g transform="translate(126 138)">
+    <circle cx="190" cy="171" r="132" fill="#1c1917" stroke="#78716c" stroke-width="25"/>
+    <circle cx="190" cy="171" r="57" fill="#a8a29e" stroke="#44403c" stroke-width="16"/>
+    <g fill="#57534e" stroke="#a8a29e" stroke-width="3">
+      <path d="m372 74 54-26 43 41-20 58-62 5-31-43z"/>
+      <path d="m451 158 58-10 30 51-36 50-61-12-18-55z"/>
+      <path d="m351 221 51-31 48 35-15 62-61 10-38-47z"/>
+      <path d="m465 277 52-24 42 39-20 56-59 5-34-43z"/>
+    </g>
+  </g>
+  <rect x="34" y="34" width="176" height="38" rx="19" fill="#fafaf9" opacity=".94"/>
+  <text x="122" y="59" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" letter-spacing="2" fill="#44403c">DEMO MATERIAL</text>
+  <text x="400" y="535" text-anchor="middle" font-family="Arial, sans-serif" font-size="31" font-weight="700" fill="#fafaf9">RUBBER SCRAP</text>
+</svg>

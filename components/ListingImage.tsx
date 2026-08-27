@@ -9,15 +9,17 @@ type ListingImageProps = Omit<
   "src"
 > & {
   src?: string | null;
+  fallbackSrc?: string;
 };
 
 export default function ListingImage({
   src,
+  fallbackSrc = PLACEHOLDER,
   alt,
   onError,
   ...props
 }: ListingImageProps) {
-  const initialSource = src || PLACEHOLDER;
+  const initialSource = src || fallbackSrc;
   const [currentSource, setCurrentSource] = useState(initialSource);
 
   useEffect(() => {
@@ -36,6 +38,8 @@ export default function ListingImage({
           currentSource.endsWith(".webp")
         ) {
           setCurrentSource(`${currentSource.slice(0, -5)}.jpg`);
+        } else if (currentSource !== fallbackSrc) {
+          setCurrentSource(fallbackSrc);
         } else if (currentSource !== PLACEHOLDER) {
           setCurrentSource(PLACEHOLDER);
         }
