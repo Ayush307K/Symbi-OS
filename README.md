@@ -19,13 +19,13 @@ default ingestion workflow. A database file must never be committed.
 
 ## Architecture
 
-| Layer | Location | Responsibility |
-| --- | --- | --- |
-| Web UI | `app/`, `components/` | Marketplace and account workflows |
-| HTTP boundary | `app/api/`, `server/http.ts` | Authentication, origin checks, validation, safe errors |
-| Domains | `server/auth`, `server/listings`, `server/rag` | Business rules and provider integrations |
-| Persistence | `prisma/` | Versioned schema and migrations |
-| Background/CLI | `scripts/` | Real listing ingestion and RAG indexing |
+| Layer          | Location                                       | Responsibility                                         |
+| -------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| Web UI         | `app/`, `components/`                          | Marketplace and account workflows                      |
+| HTTP boundary  | `app/api/`, `server/http.ts`                   | Authentication, origin checks, validation, safe errors |
+| Domains        | `server/auth`, `server/listings`, `server/rag` | Business rules and provider integrations               |
+| Persistence    | `prisma/`                                      | Versioned schema and migrations                        |
+| Background/CLI | `scripts/`                                     | Real listing ingestion and RAG indexing                |
 
 This is intentionally not a microservice system. Domain modules have clear
 boundaries but share one process and one database for v0.
@@ -106,11 +106,11 @@ accounts into the live product, an encryption key diverged so a deployment
 could not read its own records, and a migration landed on one database and not
 the other.
 
-| | Database | Secrets | Data |
-| --- | --- | --- | --- |
-| Local dev | docker-compose PostgreSQL | `.env`, generated locally | Real listings via `npm run ingest:real` |
-| Tests | the same docker database | test values | Fixtures each run, cleaned up after |
-| Production | Supabase | Vercel dashboard | Live |
+|            | Database                  | Secrets                   | Data                                    |
+| ---------- | ------------------------- | ------------------------- | --------------------------------------- |
+| Local dev  | docker-compose PostgreSQL | `.env`, generated locally | Real listings via `npm run ingest:real` |
+| Tests      | the same docker database  | test values               | Fixtures each run, cleaned up after     |
+| Production | Supabase                  | Vercel dashboard          | Live                                    |
 
 Rules that follow from that split:
 
@@ -171,7 +171,6 @@ smoke workflow calls this endpoint after Vercel reports success.
 The same workflow also requires `/api/stats` to report at least 148 active
 listings, preventing an apparently healthy deployment with an incomplete feed.
 
-
 ## Environment
 
 The complete template is in `.env.example`.
@@ -212,12 +211,12 @@ The complete template is in `.env.example`.
 
 Both pipelines share one vector store, so they must share one model and width.
 
-| | |
-| --- | --- |
-| Embedding model | `gemini-embedding-001` |
-| Dimension | 768 (`MarketplaceListing.embedding`, `KnowledgeChunk.embedding`, `BuyerDemandProfile.embedding`) |
-| Index | HNSW, `vector_cosine_ops`, `m=16`, `ef_construction=64` |
-| Generation model | `gemini-flash-latest` |
+|                  |                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Embedding model  | `gemini-embedding-001`                                                                           |
+| Dimension        | 768 (`MarketplaceListing.embedding`, `KnowledgeChunk.embedding`, `BuyerDemandProfile.embedding`) |
+| Index            | HNSW, `vector_cosine_ops`, `m=16`, `ef_construction=64`                                          |
+| Generation model | `gemini-flash-latest`                                                                            |
 
 `gemini-embedding-001` is natively 3072-wide and Matryoshka-truncatable, so 768
 is requested to match the columns. **Truncated vectors are not unit length** —
@@ -343,6 +342,67 @@ a decision rather than an absence.
 
 When the embedding provider is unreachable, retrieval falls back to lexical and
 reports `degraded: true` rather than silently looking healthy.
+
+### Marketplace assistant
+
+The global **Ask Symbi** panel is the buyer-facing chatbot built on the same
+real-only RAG path. It is not a second model or index. Signed-in users can ask
+follow-up questions, reopen their 20 most recent conversations, and open cited
+listings directly from an answer.
+
+Implementation checklist:
+
+- [x] Authenticated, user-owned conversation and message persistence.
+- [x] Follow-up retrieval context from the three most recent user questions;
+      prior assistant prose never becomes retrieval evidence.
+- [x] Real-corpus isolation, prompt-injection-resistant generation, and source
+      citations inherited from the existing RAG core.
+- [x] Semantic/lexical retrieval status, an explicit degraded fallback, and a
+      stable `503 KNOWLEDGE_INDEX_EMPTY` operational state.
+- [x] Deterministic first-party product guidance for buyer, seller, account,
+      bid, checkout, messaging, RFQ, verification, listing, location, review,
+      and safety workflows; these answers do not depend on the catalogue index,
+      embeddings, or a generation provider.
+- [x] Authenticated live-account answers for buyer orders, bids, cart, saved
+      listings, messages, notifications, addresses, seller listings, and
+      incoming bids, resolved directly from user-scoped database queries.
+- [x] Provider-swappable function selection over a server-owned read-only tool
+      registry: catalogue search, listing details, orders, bids, bid diagnosis,
+      messages, seller onboarding, and support cases. The model only selects a
+      typed tool; authenticated application code validates arguments and runs
+      it. A deterministic selector keeps these tools available without a model
+      key.
+- [x] Compact response policy: generated answers are capped at 70–90 words and
+      three bullets, deterministic guidance is similarly abbreviated, and
+      detail stays in expandable citations.
+- [x] Constraint-aware follow-ups and deterministic troubleshooting for common
+      failed workflows, with repeated canned answers treated as an escalation
+      signal instead of being sent again.
+- [x] Persisted support tickets with the recent assistant transcript attached,
+      user-visible status tracking, admin assignment/resolution, in-app admin
+      notifications, and duplicate-open-ticket prevention by issue category.
+- [x] Per-user assistant rate limiting and same-origin mutation protection.
+- [x] Responsive signed-in, signed-out, empty, loading, error, and history UI.
+- [ ] Token streaming. v0 returns one complete grounded response so persistence
+      remains atomic; streaming can be added behind the generation interface.
+- [ ] Conversation archive/delete and an operator-configurable retention job.
+
+API surfaces:
+
+- `POST /api/assistant/query` creates a conversation when `conversationId` is
+  absent and appends a grounded turn when it is present.
+- `GET /api/assistant/conversations` returns the 20 most recent active threads.
+- `GET /api/assistant/conversations/:id` returns up to the latest 100 messages,
+  after enforcing ownership.
+- `GET /api/support/tickets` returns only the signed-in user's support cases.
+- `GET /api/admin/support` and `PATCH /api/admin/support/:id` expose the
+  administrator support queue, assignment, information-request, and resolution
+  workflow.
+
+Without `GEMINI_API_KEY`, the panel still works with the cited lexical and
+extractive fallback plus deterministic tool selection; that mode is visibly
+labelled and is not reported as a semantic answer. Tool execution remains
+server-side and user-scoped in both modes.
 
 ### Ranked buyer feed
 
