@@ -5,6 +5,11 @@ import {
   score,
   sellerReliabilityScore,
 } from "@/server/feed/scoring";
+import {
+  applyCategoryAffinity,
+  buildPreferredCategories,
+  inferIndustryCategories,
+} from "@/server/feed/category-affinity";
 
 const now = new Date("2026-08-09T12:00:00.000Z");
 
@@ -120,5 +125,36 @@ describe("business signal normalization", () => {
     });
     expect(reliable).toBeGreaterThan(unknown);
     expect(reliable).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("company-industry cold start", () => {
+  it("maps specific company industries onto marketplace categories", () => {
+    expect(inferIndustryCategories("Plastic packaging factory")).toContain(
+      "Plastic Scrap",
+    );
+    expect(inferIndustryCategories("Steel fabrication and foundry")).toContain(
+      "Metal Scrap",
+    );
+    expect(inferIndustryCategories("General manufacturing")).toEqual([]);
+  });
+
+  it("puts industry first when the buyer has no behavioral history", () => {
+    expect(
+      buildPreferredCategories({
+        industry: "Plastic polymer manufacturing",
+        behavioralCategories: [],
+        hasHistory: false,
+      }),
+    ).toEqual(["Plastic Scrap"]);
+  });
+
+  it("gives a matching cold-start category a strong semantic floor", () => {
+    const preferred = ["Plastic Scrap"] as const;
+    expect(
+      applyCategoryAffinity(0.1, "Plastic Scrap", preferred, false),
+    ).toBeGreaterThan(
+      applyCategoryAffinity(0.1, "Metal Scrap", preferred, false),
+    );
   });
 });

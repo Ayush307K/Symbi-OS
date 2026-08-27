@@ -76,6 +76,10 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
         capacity: 100,
       },
     });
+    await prisma.user.update({
+      where: { id: buyerId },
+      data: { companyId },
+    });
     await prisma.wasteMaterial.create({
       data: {
         id: materialId,
@@ -166,6 +170,7 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
     expect(fixture?.relevanceKind).toBe("relevance");
     expect(fixture?.relevanceScore).toBeGreaterThan(0);
     expect(result.ranking).toMatchObject({ coldStart: true, historyEventCount: 0 });
+    expect(result.ranking).toMatchObject({ preferredCategories: ["Metal Scrap"] });
   });
 
   it("uses a stable scoring snapshot across cursor pages", async () => {
@@ -193,6 +198,7 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
     try {
       const result = await rankBuyerFeed(buyerId, { limit: 10 });
       expect(result.items.length).toBeGreaterThan(0);
+      expect(result.items.every((item) => item.category === "Metal Scrap")).toBe(true);
       expect(result.ranking).toMatchObject({ coldStart: true });
     } finally {
       await refreshListingEmbedding(listingId);

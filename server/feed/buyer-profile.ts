@@ -7,11 +7,16 @@ import {
   validateEmbedding,
 } from "@/server/semantic/embedding-provider";
 import { vectorLiteral } from "@/server/semantic/listing-embeddings";
+import {
+  buildPreferredCategories,
+  type PreferredCategory,
+} from "@/server/feed/category-affinity";
 
 export interface BuyerDemandProfile extends BuyerScoringContext {
   profileText: string;
   embedding: number[] | null;
   seedMaterialIds: string[];
+  preferredCategories: PreferredCategory[];
   historyEventCount: number;
   sourceUpdatedAt: Date;
 }
@@ -173,6 +178,17 @@ export async function buildBuyerDemandProfile(
   const orderItems = orders.flatMap((order) => order.items);
   const historyEventCount =
     demands.length + orders.length + bids.length + cartItems.length + wishlistItems.length;
+  const preferredCategories = buildPreferredCategories({
+    industry: user.company?.industry,
+    behavioralCategories: [
+      ...demands.map((item) => item.category),
+      ...orderItems.map((item) => item.listing.category),
+      ...bids.map((item) => item.listing?.category),
+      ...cartItems.map((item) => item.listing.category),
+      ...wishlistItems.map((item) => item.listing.category),
+    ],
+    hasHistory: historyEventCount > 0,
+  });
   const seedMaterialIds = [
     ...demands.map((item) => item.materialId),
     ...orderItems.map((item) => item.listing.materialId),
@@ -309,6 +325,7 @@ export async function buildBuyerDemandProfile(
     profileText,
     embedding,
     seedMaterialIds: [...new Set(seedMaterialIds)],
+    preferredCategories,
     historyEventCount,
     sourceUpdatedAt,
     latitude:

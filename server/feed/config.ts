@@ -94,6 +94,9 @@ export const MARKETPLACE_RANKING_CONFIG = {
   },
   retrieval: {
     semanticSeedCount: 60,
+    // Reserve deterministic candidates for inferred industry/category fit;
+    // ANN still provides the semantic pool, but cannot erase cold-start intent.
+    categoryAffinitySeedCount: 20,
     // Higher than top-k so filtered HNSW queries have enough dynamic candidates.
     hnswEfSearch: 100,
     maxSeedMaterials: 40,
@@ -123,6 +126,13 @@ export const MARKETPLACE_RANKING_CONFIG = {
     supplyFrequencySaturation: 6,
   },
   scoring: {
+    // A taxonomy match inferred from company industry/history is treated as a
+    // minimum semantic relevance. Cold-start buyers lean on it more strongly;
+    // behavioral buyers still let vector and graph evidence differentiate.
+    categoryAffinityFloor: {
+      coldStart: 0.9,
+      behavioral: 0.72,
+    },
     // Scrap is logistics-heavy, so business signals deliberately total 70%.
     weights: {
       semanticFit: 0.2,

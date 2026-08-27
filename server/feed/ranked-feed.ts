@@ -4,13 +4,15 @@ import { SAFE_CATEGORIES } from "@/lib/listing-constants";
 import { buildBuyerDemandProfile } from "@/server/feed/buyer-profile";
 import { MARKETPLACE_RANKING_CONFIG } from "@/server/feed/config";
 import {
+  applyCategoryAffinity,
+  type PreferredCategory,
+} from "@/server/feed/category-affinity";
+import {
   haversineDistanceKm,
   score,
   sellerReliabilityScore,
 } from "@/server/feed/scoring";
-import {
-  publicListingWhere,
-} from "@/server/listings/policy";
+import { publicListingWhere } from "@/server/listings/policy";
 import { vectorLiteral } from "@/server/semantic/listing-embeddings";
 
 interface SemanticSeedRow {
@@ -46,24 +48,59 @@ function lexicalSimilarity(left: string, right: string) {
   return intersection / Math.sqrt(a.size * b.size);
 }
 
-async function recentSeeds(limit: number) {
-  const recent = await prisma.marketplaceListing.findMany({
-    where: publicListingWhere,
+async function preferredCategorySeeds(
+  limit: number,
+  preferredCategories: readonly PreferredCategory[] = [],
+) {
+  if (!preferredCategories.length || limit <= 0) return [];
+  return prisma.marketplaceListing.findMany({
+    where: {
+      AND: [
+        publicListingWhere,
+        { category: { in: [...preferredCategories] } },
+      ],
+    },
     select: { id: true, materialId: true },
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     take: limit,
   });
-  return recent.map((item) => ({
+}
+
+async function recentSeeds(
+  limit: number,
+  preferredCategories: readonly PreferredCategory[] = [],
+) {
+  const preferred = await preferredCategorySeeds(limit, preferredCategories);
+  const remaining = Math.max(0, limit - preferred.length);
+  const recent = remaining
+    ? await prisma.marketplaceListing.findMany({
+        where: {
+          AND: [
+            publicListingWhere,
+            preferred.length
+              ? { id: { notIn: preferred.map((item) => item.id) } }
+              : {},
+          ],
+        },
+        select: { id: true, materialId: true },
+        orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+        take: remaining,
+      })
+    : [];
+  return [...preferred, ...recent].map((item) => ({
     id: item.id,
     material_id: item.materialId,
     semantic_fit: 0,
   }));
 }
 
-async function semanticSeeds(profileEmbedding: number[] | null) {
+async function semanticSeeds(
+  profileEmbedding: number[] | null,
+  preferredCategories: readonly PreferredCategory[],
+) {
   const limit = MARKETPLACE_RANKING_CONFIG.retrieval.semanticSeedCount;
   if (!profileEmbedding) {
-    return recentSeeds(limit);
+    return recentSeeds(limit, preferredCategories);
   }
 
   const semantic = await prisma.$transaction(async (tx) => {
@@ -92,21 +129,42 @@ async function semanticSeeds(profileEmbedding: number[] | null) {
                    AND listing."category" IN (${Prisma.join([...SAFE_CATEGORIES])})
                    AND material."toxicityLevel" IN ('none', 'low')
                  ORDER BY listing."embedding" <=> CAST(${vectorLiteral(profileEmbedding)} AS vector)
-      LIMIT ${limit}`,
+                 LIMIT ${limit}`,
     );
   });
+
+  const affinity = await preferredCategorySeeds(
+    MARKETPLACE_RANKING_CONFIG.retrieval.categoryAffinitySeedCount,
+    preferredCategories,
+  );
+  const semanticIds = new Set(semantic.map((item) => item.id));
+  const affinityRows: SemanticSeedRow[] = affinity
+    .filter((item) => !semanticIds.has(item.id))
+    .map((item) => ({
+      id: item.id,
+      material_id: item.materialId,
+      semantic_fit: 0,
+    }));
 
   // A buyer profile can be embedded before the catalogue backfill has run.
   // ANN retrieval then returns zero (or only a partial old corpus), which must
   // not turn a healthy marketplace into an empty homepage. Fill the remaining
-  // candidate budget with recent active listings and keep semantic rows first.
-  if (semantic.length >= limit) return semantic;
-  const semanticIds = new Set(semantic.map((item) => item.id));
-  const recent = await recentSeeds(limit);
+  // candidate budget with industry/category-aware active listings and keep
+  // semantic rows first.
+  if (semantic.length >= limit) return [...semantic, ...affinityRows];
+  const selectedIds = new Set([
+    ...semantic.map((item) => item.id),
+    ...affinityRows.map((item) => item.id),
+  ]);
+  const recent = await recentSeeds(limit, preferredCategories);
   return [
     ...semantic,
-    ...recent.filter((item) => !semanticIds.has(item.id)),
-  ].slice(0, limit);
+    ...affinityRows,
+    ...recent.filter((item) => !selectedIds.has(item.id)),
+  ].slice(
+    0,
+    limit + MARKETPLACE_RANKING_CONFIG.retrieval.categoryAffinitySeedCount,
+  );
 }
 
 async function expandMaterials(seedMaterialIds: string[]) {
@@ -197,7 +255,7 @@ export async function rankBuyerFeed(
     Math.max(1, options.limit ?? config.defaultPageSize),
   );
   const profile = await buildBuyerDemandProfile(buyerId);
-  const seeds = await semanticSeeds(profile.embedding);
+  const seeds = await semanticSeeds(profile.embedding, profile.preferredCategories);
   const seedMaterialIds = [
     ...profile.seedMaterialIds,
     ...seeds.map((seed) => seed.material_id),
@@ -350,12 +408,18 @@ export async function rankBuyerFeed(
     const verified =
       listing.sourceType === "seller_submitted" && approvedCompanies.has(listing.seller.id);
     const ordersCompleted = ordersByCompany.get(listing.seller.id) ?? 0;
-    const semanticFit =
+    const baseSemanticFit =
       similarityById.get(listing.id) ??
       lexicalSimilarity(
         profile.profileText,
         `${listing.title} ${listing.category} ${listing.subcategory} ${listing.material.name}`,
       );
+    const semanticFit = applyCategoryAffinity(
+      baseSemanticFit,
+      listing.category,
+      profile.preferredCategories,
+      profile.hasHistory,
+    );
     const graphSignal = graphByMaterial.get(listing.materialId) ?? 0;
     const reliability = sellerReliabilityScore({
       reviewAverage: review?._avg.rating ?? null,
@@ -485,6 +549,7 @@ export async function rankBuyerFeed(
       version: "buyer-feed-v1",
       historyEventCount: profile.historyEventCount,
       coldStart: !profile.hasHistory,
+      preferredCategories: profile.preferredCategories,
     },
   };
 }

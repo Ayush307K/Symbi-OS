@@ -354,8 +354,10 @@ calibrated probability of purchase.
 
 Retrieval is deliberately bounded for the hot path:
 
-1. Look up or refresh the buyer demand-profile embedding.
-2. Retrieve the top 60 listing seeds with pgvector cosine distance.
+1. Build the buyer profile from company industry plus demands, purchases, bids,
+   cart, and wishlist activity, then look up or refresh its embedding.
+2. Retrieve the top 60 listing seeds with pgvector cosine distance and reserve
+   up to 20 additional candidates for inferred industry/category affinity.
 3. Expand their material IDs through `material_edges` with ordinary SQL joins,
    limited to one or two hops.
 4. Load at most 240 candidates, calculate the signals in batches, score, and
@@ -364,14 +366,19 @@ Retrieval is deliberately bounded for the hot path:
 The scorer blends these signals:
 
 - semantic fit between the cached buyer profile and listing embedding;
+- explicit category affinity inferred from company industry and observed
+  categories (used as a semantic floor, especially for cold start);
 - `co_purchased`, `substitutable`, and `category_affinity` graph edges;
 - freight/location distance, price fit, quantity match, listing freshness, and
   seller reliability (reviews, response rate, fulfilled orders, approved
   onboarding, and supporting documents).
 
 For scrap, the business signals intentionally contribute 70% of the normal
-score. A buyer with no behavioral history uses only semantic fit, location,
-and freshness. All weights, normalization thresholds, retrieval limits, and
+score. A buyer with no behavioral history uses company-industry/category fit,
+semantic fit, location, and freshness. If ANN candidates are missing during an
+embedding backfill, retrieval fills the bounded seed set with the buyer's
+preferred categories first, then recent active listings. All weights,
+normalization thresholds, retrieval limits, and
 graph-decay settings live in the single documented object in
 `server/feed/config.ts`; tune that object rather than introducing constants in
 queries or routes.
