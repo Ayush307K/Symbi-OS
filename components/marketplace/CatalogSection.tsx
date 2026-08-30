@@ -32,6 +32,8 @@ export interface CatalogSectionProps {
   /** Lets the parent mirror the live count, e.g. into the hero. */
   onCountChange?: (count: number) => void;
   deliveryAddressId?: string | null;
+  deliveryLatitude?: number | null;
+  deliveryLongitude?: number | null;
 }
 
 export function CatalogSection({
@@ -39,10 +41,22 @@ export function CatalogSection({
   personalized = false,
   onCountChange,
   deliveryAddressId,
+  deliveryLatitude,
+  deliveryLongitude,
 }: CatalogSectionProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const catalog = useCatalog({ personalized, deliveryAddressId });
+  const catalog = useCatalog({
+    personalized,
+    deliveryAddressId,
+    deliveryLatitude,
+    deliveryLongitude,
+  });
+  const canSortByNearest =
+    deliveryLatitude !== null &&
+    deliveryLatitude !== undefined &&
+    deliveryLongitude !== null &&
+    deliveryLongitude !== undefined;
   const wishlist = useWishlist();
   const [inquiryPendingId, setInquiryPendingId] = useState<string | null>(null);
 
@@ -71,7 +85,11 @@ export function CatalogSection({
       }
       const result = await wishlist.toggle(listing.id);
       if (!result.ok) {
-        toast({ tone: "danger", title: "Could not update saved products", description: result.error });
+        toast({
+          tone: "danger",
+          title: "Could not update saved products",
+          description: result.error,
+        });
       }
     },
     [isAuthenticated, toast, wishlist],
@@ -115,7 +133,11 @@ export function CatalogSection({
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Unable to message seller");
-        toast({ tone: "success", title: "Inquiry sent", description: "A message thread is open with the seller." });
+        toast({
+          tone: "success",
+          title: "Inquiry sent",
+          description: "A message thread is open with the seller.",
+        });
         router.push(`/messages/${data.threadId}`);
       } catch (err) {
         toast({
@@ -138,7 +160,10 @@ export function CatalogSection({
   const hasActiveFilters = countActiveFilters(catalog.filters) > 0;
 
   return (
-    <section id="catalogue" className="mx-auto w-full max-w-[1440px] px-4 sm:px-6">
+    <section
+      id="catalogue"
+      className="mx-auto w-full max-w-[1440px] px-4 sm:px-6"
+    >
       <div className="flex gap-8 py-6">
         <FilterSidebar
           filters={catalog.filters}
@@ -158,12 +183,20 @@ export function CatalogSection({
                   <span className="font-semibold text-ink-900">
                     {catalog.totalCount ?? catalog.listings.length}
                   </span>{" "}
-                  listing{(catalog.totalCount ?? catalog.listings.length) === 1 ? "" : "s"}
-                  {catalog.totalCount !== null && catalog.totalCount > catalog.listings.length
+                  listing
+                  {(catalog.totalCount ?? catalog.listings.length) === 1
+                    ? ""
+                    : "s"}
+                  {catalog.totalCount !== null &&
+                  catalog.totalCount > catalog.listings.length
                     ? ` · showing ${catalog.listings.length}`
                     : ""}
-                  {catalog.filters.category ? ` · ${catalog.filters.category}` : ""}
-                  {catalog.filters.location ? ` · ${catalog.filters.location}` : ""}
+                  {catalog.filters.category
+                    ? ` · ${catalog.filters.category}`
+                    : ""}
+                  {catalog.filters.location
+                    ? ` · ${catalog.filters.location}`
+                    : ""}
                   {catalog.filters.q ? ` · “${catalog.filters.q}”` : ""}
                 </>
               )}
@@ -183,8 +216,14 @@ export function CatalogSection({
                 className="h-9 cursor-pointer rounded-control border border-ink-200 bg-surface-card px-2.5 pr-7 text-[13px] font-medium text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
               >
                 {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                  <option
+                    key={option.value}
+                    value={option.value}
+                    disabled={option.value === "nearest" && !canSortByNearest}
+                  >
+                    {option.value === "nearest" && !canSortByNearest
+                      ? "Nearest · select delivery plant"
+                      : option.label}
                   </option>
                 ))}
               </select>

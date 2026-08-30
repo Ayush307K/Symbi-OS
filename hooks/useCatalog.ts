@@ -26,9 +26,17 @@ export function useCatalog(
     syncUrl?: boolean;
     personalized?: boolean;
     deliveryAddressId?: string | null;
+    deliveryLatitude?: number | null;
+    deliveryLongitude?: number | null;
   } = {},
 ) {
-  const { syncUrl = true, personalized = false, deliveryAddressId = null } = options;
+  const {
+    syncUrl = true,
+    personalized = false,
+    deliveryAddressId = null,
+    deliveryLatitude = null,
+    deliveryLongitude = null,
+  } = options;
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -98,6 +106,18 @@ export function useCatalog(
             ? "/api/feed"
             : "/api/materials";
         const params = filtersToParams(next, cursor);
+        // Freight relevance is based on the selected delivery plant, not the
+        // buyer's current device location. Keep private saved-address
+        // coordinates out of the shareable URL and add them only to the API
+        // request that needs them.
+        if (
+          next.sort === "nearest" &&
+          deliveryLatitude !== null &&
+          deliveryLongitude !== null
+        ) {
+          params.set("lat", String(deliveryLatitude));
+          params.set("lng", String(deliveryLongitude));
+        }
         if (preferredEndpoint === "/api/feed" && deliveryAddressId) {
           params.set("deliveryAddressId", deliveryAddressId);
         }
@@ -111,7 +131,9 @@ export function useCatalog(
         if (
           !cursor &&
           preferredEndpoint === "/api/feed" &&
-          (!res.ok || !Array.isArray(payload?.items) || payload.items.length === 0)
+          (!res.ok ||
+            !Array.isArray(payload?.items) ||
+            payload.items.length === 0)
         ) {
           effectiveEndpoint = "/api/materials";
           res = await fetch(`/api/materials?${filtersToParams(next)}`);
@@ -156,7 +178,7 @@ export function useCatalog(
         }
       }
     },
-    [deliveryAddressId, personalized],
+    [deliveryAddressId, deliveryLatitude, deliveryLongitude, personalized],
   );
 
   // The URL is the single source of truth, watched through Next's own
@@ -242,7 +264,9 @@ export function useWishlist() {
         if (cancelled) return;
         setSavedIds(
           new Set(
-            (data.items ?? []).map((item: { listingId: string }) => item.listingId),
+            (data.items ?? []).map(
+              (item: { listingId: string }) => item.listingId,
+            ),
           ),
         );
       } catch {
@@ -256,7 +280,9 @@ export function useWishlist() {
   }, []);
 
   const toggle = useCallback(
-    async (listingId: string): Promise<{ ok: boolean; saved: boolean; error?: string }> => {
+    async (
+      listingId: string,
+    ): Promise<{ ok: boolean; saved: boolean; error?: string }> => {
       const wasSaved = savedIds.has(listingId);
 
       // Optimistic: flip immediately, roll back if the request fails.
@@ -275,12 +301,15 @@ export function useWishlist() {
             : "/api/wishlist",
           {
             method: wasSaved ? "DELETE" : "POST",
-            headers: wasSaved ? undefined : { "Content-Type": "application/json" },
+            headers: wasSaved
+              ? undefined
+              : { "Content-Type": "application/json" },
             body: wasSaved ? undefined : JSON.stringify({ listingId }),
           },
         );
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? "Unable to update saved products");
+        if (!res.ok)
+          throw new Error(data.error ?? "Unable to update saved products");
         return { ok: true, saved: !wasSaved };
       } catch (err) {
         setSavedIds((current) => {
@@ -292,7 +321,10 @@ export function useWishlist() {
         return {
           ok: false,
           saved: wasSaved,
-          error: err instanceof Error ? err.message : "Unable to update saved products.",
+          error:
+            err instanceof Error
+              ? err.message
+              : "Unable to update saved products.",
         };
       } finally {
         setPendingIds((current) => {

@@ -28,7 +28,9 @@ export default function Home() {
     <div className="flex min-h-screen flex-col bg-surface-page text-ink-900">
       <MarketplaceNav
         deliveryLocations={isBuyer ? deliveryLocation.addresses : undefined}
-        selectedDeliveryLocationId={isBuyer ? deliveryLocation.selectedId : undefined}
+        selectedDeliveryLocationId={
+          isBuyer ? deliveryLocation.selectedId : undefined
+        }
         onDeliveryLocationChange={isBuyer ? deliveryLocation.select : undefined}
       />
 
@@ -41,7 +43,11 @@ export default function Home() {
               const params = new URLSearchParams(window.location.search);
               if (query) params.set("q", query);
               else params.delete("q");
-              window.history.pushState(null, "", params.size ? `/?${params}` : "/");
+              window.history.pushState(
+                null,
+                "",
+                params.size ? `/?${params}` : "/",
+              );
               window.dispatchEvent(new PopStateEvent("popstate"));
               document
                 .getElementById("catalogue")
@@ -54,6 +60,8 @@ export default function Home() {
           isAuthenticated={Boolean(user)}
           personalized={isBuyer}
           deliveryAddressId={deliveryLocation.selectedId}
+          deliveryLatitude={deliveryLocation.selected?.latitude}
+          deliveryLongitude={deliveryLocation.selected?.longitude}
         />
       </main>
 
