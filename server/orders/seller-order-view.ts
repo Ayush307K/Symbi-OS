@@ -57,6 +57,31 @@ export const sellerOrderItemInclude = {
           verificationStatus: true,
         },
       },
+      freightQuotes: {
+        select: {
+          id: true,
+          amount: true,
+          source: true,
+          distanceKm: true,
+          deliveryTerm: true,
+          expiresAt: true,
+          acceptedAt: true,
+        },
+      },
+      shipment: {
+        select: {
+          id: true,
+          carrierName: true,
+          serviceLevel: true,
+          trackingNumber: true,
+          vehicleNumber: true,
+          proofOfDispatchReference: true,
+          dispatchedAt: true,
+          estimatedDeliveryAt: true,
+          deliveredAt: true,
+          status: true,
+        },
+      },
     },
   },
   listing: {
@@ -65,6 +90,7 @@ export const sellerOrderItemInclude = {
       title: true,
       slug: true,
       status: true,
+      deliveryTerm: true,
     },
   },
 } satisfies Prisma.PurchaseOrderItemInclude;

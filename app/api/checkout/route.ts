@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
+import prisma, { type ExtendedTransactionClient } from "@/lib/prisma";
 import { notify, orderNumber } from "@/lib/marketplace";
 import {
   apiError,
@@ -30,6 +30,7 @@ const schema = z
     billingAddressId: z.string().uuid().optional(),
     purchaseOrderNumber: z.string().trim().max(80).optional(),
     notes: z.string().trim().max(1000).optional(),
+    freightQuoteIds: z.array(z.string().uuid()).min(1).max(100),
   })
   .strict()
   .refine((value) => !(value.bidId && value.listingId), {
@@ -65,6 +66,8 @@ export async function POST(request: NextRequest) {
             items: true,
             shippingAddress: true,
             invoice: true,
+            freightQuotes: true,
+            shipment: true,
           },
         },
       },
@@ -117,6 +120,7 @@ export async function POST(request: NextRequest) {
           billingAddressId: billingAddress.id,
           purchaseOrderNumber: body.purchaseOrderNumber,
           notes: body.notes,
+          freightQuoteIds: body.freightQuoteIds,
           idempotencyKey,
         })
       : await directCheckout({
@@ -128,6 +132,7 @@ export async function POST(request: NextRequest) {
           billingAddressId: billingAddress.id,
           purchaseOrderNumber: body.purchaseOrderNumber,
           notes: body.notes,
+          freightQuoteIds: body.freightQuoteIds,
           idempotencyKey,
         });
 
@@ -161,6 +166,7 @@ async function payAcceptedOffer(input: {
   purchaseOrderNumber?: string;
   notes?: string;
   idempotencyKey: string;
+  freightQuoteIds: string[];
 }) {
   return prisma.$transaction(async (tx) => {
     const order = await tx.purchaseOrder.findFirst({
@@ -189,7 +195,23 @@ async function payAcceptedOffer(input: {
         "RESERVATION_EXPIRED",
       );
     }
-    const feeQuote = calculateFees(order.subtotal);
+    if (order.items.length !== 1) {
+      throw new ApiError(409, "Accepted offers must contain one seller listing.", "ORDER_SHAPE_INVALID");
+    }
+    const freightQuotes = await validatedFreightQuotes(tx, {
+      ids: input.freightQuoteIds,
+      buyerUserId: input.buyerUserId,
+      shippingAddressId: input.shippingAddressId,
+      items: order.items.map((item) => ({
+        listingId: item.listingId,
+        quantity: item.quantity,
+      })),
+    });
+    const shippingAmount = freightQuotes.reduce(
+      (sum, quote) => sum + Number(quote.amount),
+      0,
+    );
+    const feeQuote = calculateFees(order.subtotal, { shippingAmount });
     const claimed = await tx.purchaseOrder.updateMany({
       where: {
         id: order.id,
@@ -255,9 +277,13 @@ async function payAcceptedOffer(input: {
         confirmedAt: new Date(),
       },
     });
+    await tx.freightQuote.updateMany({
+      where: { id: { in: freightQuotes.map((quote) => quote.id) }, status: "QUOTED" },
+      data: { status: "ACCEPTED", acceptedAt: new Date(), orderId: order.id },
+    });
     const updated = await tx.purchaseOrder.findUniqueOrThrow({
       where: { id: order.id },
-      include: { items: true, shippingAddress: true },
+      include: { items: true, shippingAddress: true, freightQuotes: true },
     });
     const invoice = await tx.invoice.create({
       data: {
@@ -290,6 +316,7 @@ async function directCheckout(input: {
   purchaseOrderNumber?: string;
   notes?: string;
   idempotencyKey: string;
+  freightQuoteIds: string[];
 }) {
   const cartItems = input.listingId
     ? [{ listingId: input.listingId, quantity: input.quantity ?? 1 }]
@@ -358,7 +385,28 @@ async function directCheckout(input: {
       };
     });
     const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
-    const fees = calculateFees(subtotal);
+    const sellerIds = new Set(orderItems.map((item) => item.listing.sellerCompanyId));
+    if (sellerIds.size !== 1) {
+      throw new ApiError(
+        422,
+        "Checkout one seller at a time so freight and dispatch remain accountable.",
+        "MULTI_SELLER_CHECKOUT_UNSUPPORTED",
+      );
+    }
+    const freightQuotes = await validatedFreightQuotes(tx, {
+      ids: input.freightQuoteIds,
+      buyerUserId: input.buyerUserId,
+      shippingAddressId: input.shippingAddressId,
+      items: orderItems.map((item) => ({
+        listingId: item.listing.id,
+        quantity: item.quantity,
+      })),
+    });
+    const shippingAmount = freightQuotes.reduce(
+      (sum, quote) => sum + Number(quote.amount),
+      0,
+    );
+    const fees = calculateFees(subtotal, { shippingAmount });
     const order = await tx.purchaseOrder.create({
       data: {
         orderNumber: orderNumber(),
@@ -392,7 +440,7 @@ async function directCheckout(input: {
           })),
         },
       },
-      include: { items: true, shippingAddress: true },
+      include: { items: true, shippingAddress: true, freightQuotes: true },
     });
     for (const item of orderItems) {
       const changed = await tx.marketplaceListing.updateMany({
@@ -450,7 +498,23 @@ async function directCheckout(input: {
         confirmedAt: new Date(),
       },
     });
-    const snapshot = orderInvoiceSnapshot(order);
+    await tx.freightQuote.updateMany({
+      where: { id: { in: freightQuotes.map((quote) => quote.id) }, status: "QUOTED" },
+      data: { status: "ACCEPTED", acceptedAt: new Date(), orderId: order.id },
+    });
+    // Re-read after attaching the freight decision so the response and the
+    // immutable invoice snapshot both describe the commercial terms that the
+    // buyer accepted. The create() include runs before quote attachment.
+    const completedOrder = await tx.purchaseOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: {
+        items: true,
+        shippingAddress: true,
+        freightQuotes: true,
+        shipment: true,
+      },
+    });
+    const snapshot = orderInvoiceSnapshot(completedOrder);
     const invoice = await tx.invoice.create({
       data: {
         orderId: order.id,
@@ -470,6 +534,49 @@ async function directCheckout(input: {
     if (!input.listingId) {
       await tx.cartItem.deleteMany({ where: { userId: input.buyerUserId } });
     }
-    return { order, payment, invoice };
+    return { order: completedOrder, payment, invoice };
   });
+}
+
+async function validatedFreightQuotes(
+  tx: ExtendedTransactionClient,
+  input: {
+    ids: string[];
+    buyerUserId: string;
+    shippingAddressId: string;
+    items: Array<{ listingId: string; quantity: number }>;
+  },
+) {
+  const uniqueIds = [...new Set(input.ids)];
+  const quotes = await tx.freightQuote.findMany({
+    where: { id: { in: uniqueIds } },
+    include: { listing: { select: { deliveryTerm: true } } },
+  });
+  if (quotes.length !== input.items.length || uniqueIds.length !== input.items.length) {
+    throw new ApiError(
+      422,
+      "A current freight decision is required for every checkout item.",
+      "FREIGHT_QUOTE_REQUIRED",
+    );
+  }
+  const now = new Date();
+  for (const item of input.items) {
+    const quote = quotes.find((candidate) => candidate.listingId === item.listingId);
+    if (
+      !quote ||
+      quote.buyerUserId !== input.buyerUserId ||
+      quote.shippingAddressId !== input.shippingAddressId ||
+      quote.quantity !== item.quantity ||
+      quote.status !== "QUOTED" ||
+      quote.expiresAt <= now ||
+      quote.deliveryTerm !== quote.listing.deliveryTerm
+    ) {
+      throw new ApiError(
+        409,
+        "The freight quote is missing, expired, or no longer matches this order.",
+        "FREIGHT_QUOTE_INVALID",
+      );
+    }
+  }
+  return quotes;
 }

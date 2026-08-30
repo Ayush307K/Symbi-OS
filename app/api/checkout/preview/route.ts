@@ -55,6 +55,9 @@ export async function GET(request: NextRequest) {
         imageUrl: true,
         verified: true,
         expiresAt: true,
+        deliveryTerm: true,
+        latitude: true,
+        longitude: true,
         seller: { select: { name: true } },
       },
     });
@@ -70,6 +73,15 @@ export async function GET(request: NextRequest) {
     }
     if (listing.priceMode !== "FIXED" || listing.pricePerUnit <= 0) {
       blockers.push("This seller quotes on request. Send an inquiry or place a bid instead.");
+    }
+    if (!listing.deliveryTerm) {
+      blockers.push("The seller has not stated who arranges and pays for freight.");
+    }
+    if (
+      listing.deliveryTerm === "FREIGHT_QUOTE_REQUIRED" &&
+      (listing.latitude === null || listing.longitude === null)
+    ) {
+      blockers.push("The dispatch location must be geocoded before freight can be quoted.");
     }
     if (quantity < listing.minOrderQuantity) {
       blockers.push(`Minimum order is ${listing.minOrderQuantity} ${listing.unit}.`);

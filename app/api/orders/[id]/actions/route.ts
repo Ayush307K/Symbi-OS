@@ -101,9 +101,13 @@ export async function POST(
             }),
           },
         });
+        await tx.shipment.updateMany({
+          where: { orderId: order.id, status: "DISPATCHED" },
+          data: { status: "DELIVERED", deliveredAt: new Date() },
+        });
         return tx.purchaseOrder.findUniqueOrThrow({
           where: { id: order.id },
-          include: { items: true },
+          include: { items: true, shipment: true },
         });
       });
       await notify(

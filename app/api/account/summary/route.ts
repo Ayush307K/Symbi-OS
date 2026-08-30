@@ -16,6 +16,8 @@ export async function GET() {
         include: {
           items: true,
           shippingAddress: true,
+          freightQuotes: true,
+          shipment: true,
           invoice: true,
           reservations: true,
         },

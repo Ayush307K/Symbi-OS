@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
 import { useToast } from "@/components/ui/Toast";
 import { CounterOfferDialog } from "@/components/marketplace/CounterOfferDialog";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
+import { Textarea } from "@/components/ui/Textarea";
 import Link from "next/link";
 import {
   BadgeCheck,
@@ -506,23 +510,30 @@ function OrderItemList({
 }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  async function act(orderId: string, action: string) {
+  const [dispatchTarget, setDispatchTarget] = useState<any | null>(null);
+  async function act(
+    orderId: string,
+    action: string,
+    details: Record<string, unknown> = {},
+  ) {
     setBusy(orderId);
     try {
       const response = await fetch(`/api/seller/orders/${orderId}/actions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...details }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Action failed.");
       onChanged();
+      return true;
     } catch (error) {
       toast({
         tone: "danger",
         title: "Action failed.",
         description: error instanceof Error ? error.message : undefined,
       });
+      return false;
     } finally {
       setBusy(null);
     }
@@ -540,6 +551,21 @@ function OrderItemList({
                   {item.order.orderNumber} · {item.order.buyer.companyName} ·{" "}
                   {item.status}
                 </p>
+                <p className="mt-1 text-xs text-ink-500">
+                  {item.listing.deliveryTerm?.replaceAll("_", " ") || "Delivery terms unavailable"}
+                  {item.order.freightQuotes?.[0]
+                    ? ` · Freight ${item.order.freightQuotes[0].source === "BUYER_ARRANGED" ? "buyer arranged" : item.order.freightQuotes[0].source === "INCLUDED_IN_PRICE" ? "included" : money(item.order.freightQuotes[0].amount)}`
+                    : ""}
+                </p>
+                {item.order.shipment ? (
+                  <p className="mt-2 rounded-md bg-surface-sunken px-3 py-2 text-xs text-ink-700">
+                    {item.order.shipment.carrierName}
+                    {item.order.shipment.trackingNumber
+                      ? ` · Tracking ${item.order.shipment.trackingNumber}`
+                      : ` · Vehicle ${item.order.shipment.vehicleNumber}`}
+                    {` · ETA ${new Date(item.order.shipment.estimatedDeliveryAt).toLocaleDateString("en-IN")}`}
+                  </p>
+                ) : null}
               </div>
               <p className="font-semibold">{money(item.lineTotal)}</p>
             </div>
@@ -558,7 +584,7 @@ function OrderItemList({
                 item.order.fulfillmentStatus === "PROCESSING" && (
                   <button
                     disabled={busy === item.order.id}
-                    onClick={() => void act(item.order.id, "MARK_DISPATCHED")}
+                    onClick={() => setDispatchTarget(item)}
                     className="min-h-10 rounded-md border border-ink-300 px-3 text-xs font-semibold disabled:opacity-50"
                   >
                     Mark dispatched
@@ -568,7 +594,119 @@ function OrderItemList({
           </div>
         ))}
       </div>
+      <DispatchDialog
+        item={dispatchTarget}
+        submitting={busy === dispatchTarget?.order?.id}
+        onClose={() => setDispatchTarget(null)}
+        onSubmit={async (details) => {
+          if (!dispatchTarget) return;
+          const completed = await act(
+            dispatchTarget.order.id,
+            "MARK_DISPATCHED",
+            details,
+          );
+          if (completed) setDispatchTarget(null);
+        }}
+      />
     </Panel>
+  );
+}
+
+function localDateTime(date: Date) {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function DispatchDialog({
+  item,
+  submitting,
+  onClose,
+  onSubmit,
+}: {
+  item: any | null;
+  submitting: boolean;
+  onClose: () => void;
+  onSubmit: (details: Record<string, unknown>) => Promise<void>;
+}) {
+  const [carrierName, setCarrierName] = useState("");
+  const [serviceLevel, setServiceLevel] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [vehicleNumber, setVehicleNumber] = useState("");
+  const [proof, setProof] = useState("");
+  const [dispatchedAt, setDispatchedAt] = useState(localDateTime(new Date()));
+  const [estimatedDeliveryAt, setEstimatedDeliveryAt] = useState(
+    localDateTime(new Date(Date.now() + 3 * 86_400_000)),
+  );
+
+  useEffect(() => {
+    if (!item) return;
+    setCarrierName("");
+    setServiceLevel("");
+    setTrackingNumber("");
+    setVehicleNumber("");
+    setProof("");
+    setDispatchedAt(localDateTime(new Date()));
+    setEstimatedDeliveryAt(localDateTime(new Date(Date.now() + 3 * 86_400_000)));
+  }, [item]);
+
+  const valid =
+    carrierName.trim().length >= 2 &&
+    Boolean(trackingNumber.trim() || vehicleNumber.trim()) &&
+    proof.trim().length >= 3 &&
+    Boolean(dispatchedAt && estimatedDeliveryAt) &&
+    new Date(estimatedDeliveryAt) > new Date(dispatchedAt);
+
+  return (
+    <Modal
+      open={Boolean(item)}
+      onClose={onClose}
+      title="Record dispatch"
+      description={item?.order?.orderNumber}
+      size="md"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={submitting}
+            disabled={!valid}
+            onClick={() =>
+              valid &&
+              void onSubmit({
+                carrierName: carrierName.trim(),
+                serviceLevel: serviceLevel.trim() || undefined,
+                trackingNumber: trackingNumber.trim() || undefined,
+                vehicleNumber: vehicleNumber.trim() || undefined,
+                proofOfDispatchReference: proof.trim(),
+                dispatchedAt: new Date(dispatchedAt).toISOString(),
+                estimatedDeliveryAt: new Date(estimatedDeliveryAt).toISOString(),
+              })
+            }
+          >
+            Mark dispatched
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input label="Carrier" required value={carrierName} onChange={(event) => setCarrierName(event.target.value)} />
+        <Input label="Service level" value={serviceLevel} onChange={(event) => setServiceLevel(event.target.value)} placeholder="Road / express / full truck load" />
+        <Input label="Tracking or LR number" value={trackingNumber} onChange={(event) => setTrackingNumber(event.target.value)} />
+        <Input label="Vehicle number" value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)} />
+        <Input label="Dispatched at" type="datetime-local" required value={dispatchedAt} onChange={(event) => setDispatchedAt(event.target.value)} />
+        <Input label="Estimated delivery" type="datetime-local" required value={estimatedDeliveryAt} onChange={(event) => setEstimatedDeliveryAt(event.target.value)} />
+        <Textarea
+          label="Proof of dispatch"
+          required
+          rows={3}
+          containerClassName="sm:col-span-2"
+          value={proof}
+          onChange={(event) => setProof(event.target.value)}
+          placeholder="E-way bill, LR, weighbridge slip, or uploaded document reference"
+          hint="At least one tracking/vehicle identifier and proof reference are required."
+        />
+      </div>
+    </Modal>
   );
 }
 

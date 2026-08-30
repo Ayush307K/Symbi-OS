@@ -31,6 +31,9 @@ interface Address {
   city: string;
   state: string;
   pincode: string;
+  latitude: number | null;
+  longitude: number | null;
+  verificationStatus: string;
   isDefaultShipping: boolean;
 }
 
@@ -47,6 +50,7 @@ interface Preview {
     state: string;
     imageUrl: string;
     verified: boolean;
+    deliveryTerm: string | null;
     seller: { name: string };
   };
   quantity: number;
@@ -59,6 +63,24 @@ interface Preview {
     taxNote: string;
   } | null;
   blockers: string[];
+}
+
+interface FreightDecision {
+  quote: {
+    id: string;
+    amount: number;
+    source: "BUYER_ARRANGED" | "INCLUDED_IN_PRICE" | "SANDBOX_ESTIMATOR";
+    distanceKm: number | null;
+    expiresAt: string;
+  };
+  fees: NonNullable<Preview["fees"]>;
+  delivery: {
+    term: string;
+    shortLabel: string;
+    responsibility: string;
+    freightDisposition: string;
+  };
+  sandbox: boolean;
 }
 
 const money = (value: number) =>
@@ -102,6 +124,9 @@ function CheckoutContent() {
   const [addingAddress, setAddingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressError, setAddressError] = useState<string | null>(null);
+  const [freight, setFreight] = useState<FreightDecision | null>(null);
+  const [freightError, setFreightError] = useState<string | null>(null);
+  const [quotingFreight, setQuotingFreight] = useState(false);
   const [draft, setDraft] = useState({
     contactName: "",
     phone: "",
@@ -160,6 +185,50 @@ function CheckoutContent() {
     };
   }, [listingId, quantity]);
 
+  useEffect(() => {
+    if (
+      !preview ||
+      preview.blockers.length > 0 ||
+      !selectedAddress ||
+      preview.quantity !== quantity
+    ) {
+      setFreight(null);
+      return;
+    }
+    let cancelled = false;
+    setFreight(null);
+    setFreightError(null);
+    setQuotingFreight(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/freight/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listingId,
+            shippingAddressId: selectedAddress,
+            quantity,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Freight could not be quoted.");
+        if (!cancelled) setFreight(payload as FreightDecision);
+      } catch (error) {
+        if (!cancelled) {
+          setFreightError(
+            error instanceof Error ? error.message : "Freight could not be quoted.",
+          );
+        }
+      } finally {
+        if (!cancelled) setQuotingFreight(false);
+      }
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [listingId, preview, quantity, selectedAddress]);
+
   async function saveAddress(event: React.FormEvent) {
     event.preventDefault();
     setSavingAddress(true);
@@ -198,6 +267,7 @@ function CheckoutContent() {
           listingId,
           quantity,
           shippingAddressId: selectedAddress,
+          freightQuoteIds: freight ? [freight.quote.id] : [],
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -266,10 +336,12 @@ function CheckoutContent() {
     );
   }
 
-  const { listing, fees, blockers } = preview;
+  const { listing, blockers } = preview;
+  const fees = freight?.fees ?? preview.fees;
   const address = addresses?.find((a) => a.id === selectedAddress) ?? null;
   const ready =
     Boolean(fees) &&
+    Boolean(freight) &&
     blockers.length === 0 &&
     Boolean(address) &&
     // The quote on screen must match the quantity being submitted.
@@ -364,7 +436,7 @@ function CheckoutContent() {
                           {item.street}, {item.city}, {item.state} {item.pincode}
                         </span>
                         <span className="mt-0.5 block text-[12px] text-ink-500">
-                          {item.phone}
+                          {item.phone} · {item.verificationStatus === "GPS_VERIFIED" ? "GPS verified" : item.latitude !== null && item.longitude !== null ? "Location validated" : "Distance unavailable"}
                         </span>
                       </span>
                     </label>
@@ -469,6 +541,9 @@ function CheckoutContent() {
                   <Truck aria-hidden="true" className="h-3.5 w-3.5" />
                   Dispatch in {listing.leadTimeDays} days
                 </p>
+                <p className="mt-1 text-[12px] text-ink-500">
+                  {freight?.delivery.shortLabel || "Calculating delivery terms…"}
+                </p>
               </div>
             </div>
 
@@ -509,7 +584,20 @@ function CheckoutContent() {
                 <dl className="mt-4 flex flex-col gap-2 text-[13px]">
                   <Row label="Subtotal" value={money(fees.subtotal)} />
                   <Row label="Buyer fee (1%)" value={money(fees.buyerFeeAmount)} />
-                  <Row label="Shipping" value={fees.shippingAmount ? money(fees.shippingAmount) : "Not quoted"} />
+                  <Row
+                    label="Freight"
+                    value={
+                      quotingFreight
+                        ? "Quoting…"
+                        : freight?.quote.source === "BUYER_ARRANGED"
+                          ? "Buyer arranged"
+                          : freight?.quote.source === "INCLUDED_IN_PRICE"
+                            ? "Included"
+                            : freight
+                              ? money(fees.shippingAmount)
+                              : "Quote required"
+                    }
+                  />
                   <Row label="Tax" value={fees.taxAmount ? money(fees.taxAmount) : "Not calculated"} />
                   <div className="mt-1 flex items-baseline justify-between border-t border-ink-200 pt-3">
                     <dt className="text-sm font-semibold text-ink-900">Total</dt>
@@ -534,6 +622,21 @@ function CheckoutContent() {
                 {!address ? (
                   <p className="mt-2 text-center text-[12px] text-ink-500">
                     Choose a delivery address to continue.
+                  </p>
+                ) : null}
+
+                {freight ? (
+                  <p className="mt-3 rounded-control bg-surface-sunken px-3 py-2 text-[12px] leading-relaxed text-ink-600">
+                    <span className="font-semibold text-ink-900">{freight.delivery.shortLabel}.</span>{" "}
+                    {freight.delivery.responsibility}
+                    {typeof freight.quote.distanceKm === "number"
+                      ? ` Estimated road distance: ${freight.quote.distanceKm.toLocaleString("en-IN")} km.`
+                      : ""}
+                  </p>
+                ) : null}
+                {freightError ? (
+                  <p role="alert" className="mt-3 text-[12px] text-danger-strong">
+                    {freightError}
                   </p>
                 ) : null}
 

@@ -8,7 +8,13 @@ export async function GET() {
 
   const orders = await prisma.purchaseOrder.findMany({
     where: { buyerUserId: guard.auth.userId },
-    include: { items: true, shippingAddress: true, billingAddress: true },
+    include: {
+      items: true,
+      shippingAddress: true,
+      billingAddress: true,
+      freightQuotes: true,
+      shipment: true,
+    },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ orders });

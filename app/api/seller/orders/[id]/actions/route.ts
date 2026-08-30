@@ -10,12 +10,31 @@ import {
   requireUser,
 } from "@/server/http";
 
-const schema = z
-  .object({
-    action: z.enum(["ACCEPT_ORDER", "MARK_DISPATCHED"]),
-    note: z.string().trim().max(500).optional(),
-  })
-  .strict();
+const schema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("ACCEPT_ORDER"),
+      note: z.string().trim().max(500).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("MARK_DISPATCHED"),
+      carrierName: z.string().trim().min(2).max(120),
+      serviceLevel: z.string().trim().max(120).optional(),
+      trackingNumber: z.string().trim().max(120).optional(),
+      vehicleNumber: z.string().trim().max(40).optional(),
+      proofOfDispatchReference: z.string().trim().min(3).max(500),
+      dispatchedAt: z.string().datetime({ offset: true }),
+      estimatedDeliveryAt: z.string().datetime({ offset: true }),
+      note: z.string().trim().max(500).optional(),
+    })
+    .strict()
+    .refine((value) => Boolean(value.trackingNumber || value.vehicleNumber), {
+      message: "Add a tracking number or vehicle number.",
+      path: ["trackingNumber"],
+    }),
+]);
 
 export async function POST(
   request: NextRequest,
@@ -34,9 +53,16 @@ export async function POST(
         id,
         items: { some: { sellerCompanyId: auth.companyId } },
       },
-      include: { items: true },
+      include: { items: true, shipment: true },
     });
     if (!order) throw new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
+    if (order.items.some((item) => item.sellerCompanyId !== auth.companyId)) {
+      throw new ApiError(
+        409,
+        "This legacy multi-seller order must be split by an operator before dispatch.",
+        "MULTI_SELLER_FULFILMENT_UNSUPPORTED",
+      );
+    }
     if (
       !["PAID", "SETTLED", "PARTIALLY_REFUNDED"].includes(
         order.paymentStatus,
@@ -62,6 +88,20 @@ export async function POST(
       body.action === "ACCEPT_ORDER" ? "PROCESSING" : order.status;
     const nextFulfillment =
       body.action === "ACCEPT_ORDER" ? "PROCESSING" : "DISPATCHED";
+    if (body.action === "MARK_DISPATCHED") {
+      if (order.shipment) {
+        throw new ApiError(409, "Dispatch information already exists.", "SHIPMENT_EXISTS");
+      }
+      const dispatchedAt = new Date(body.dispatchedAt);
+      const estimatedDeliveryAt = new Date(body.estimatedDeliveryAt);
+      if (estimatedDeliveryAt <= dispatchedAt) {
+        throw new ApiError(
+          422,
+          "Estimated delivery must be after dispatch.",
+          "DELIVERY_DATE_INVALID",
+        );
+      }
+    }
     const updated = await prisma.$transaction(async (tx) => {
       const claimed = await tx.purchaseOrder.updateMany({
         where: {
@@ -94,12 +134,40 @@ export async function POST(
           type: body.action,
           fromStatus: `${order.status}/${order.fulfillmentStatus}`,
           toStatus: `${nextStatus}/${nextFulfillment}`,
-          snapshotJson: JSON.stringify({ note: body.note }),
+          snapshotJson: JSON.stringify(
+            body.action === "MARK_DISPATCHED"
+              ? {
+                  note: body.note,
+                  carrierName: body.carrierName,
+                  serviceLevel: body.serviceLevel,
+                  trackingNumber: body.trackingNumber,
+                  vehicleNumber: body.vehicleNumber,
+                  proofOfDispatchReference: body.proofOfDispatchReference,
+                  dispatchedAt: body.dispatchedAt,
+                  estimatedDeliveryAt: body.estimatedDeliveryAt,
+                }
+              : { note: body.note },
+          ),
         },
       });
+      if (body.action === "MARK_DISPATCHED") {
+        await tx.shipment.create({
+          data: {
+            orderId: order.id,
+            sellerCompanyId: auth.companyId!,
+            carrierName: body.carrierName,
+            serviceLevel: body.serviceLevel,
+            trackingNumber: body.trackingNumber,
+            vehicleNumber: body.vehicleNumber,
+            proofOfDispatchReference: body.proofOfDispatchReference,
+            dispatchedAt: new Date(body.dispatchedAt),
+            estimatedDeliveryAt: new Date(body.estimatedDeliveryAt),
+          },
+        });
+      }
       return tx.purchaseOrder.findUniqueOrThrow({
         where: { id: order.id },
-        include: { items: true },
+        include: { items: true, shipment: true },
       });
     });
 
@@ -112,7 +180,7 @@ export async function POST(
       accepted ? "Seller confirmed your order" : "Your order has been dispatched",
       accepted
         ? `${order.orderNumber} is being prepared by ${auth.companyName}.`
-        : `${order.orderNumber} is on its way. Confirm delivery once it arrives.`,
+        : `${order.orderNumber} is on its way with ${body.action === "MARK_DISPATCHED" ? body.carrierName : auth.companyName}. Confirm delivery once it arrives.`,
       "/account",
     );
 

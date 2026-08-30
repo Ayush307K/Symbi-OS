@@ -357,13 +357,38 @@ function OrderList({
     if (!order.sourceBidId) return;
     setBusy(order.id);
     try {
+      const addressResponse = await fetch("/api/addresses", { cache: "no-store" });
+      const addressPayload = await addressResponse.json();
+      const address = (addressPayload.addresses || []).find(
+        (item: any) => item.isDefaultShipping,
+      ) || addressPayload.addresses?.[0];
+      if (!address) throw new Error("Add a delivery address before confirming this offer.");
+      const item = order.items?.[0];
+      if (!item) throw new Error("This offer has no purchasable item.");
+      const freightResponse = await fetch("/api/freight/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: item.listingId,
+          shippingAddressId: address.id,
+          quantity: item.quantity,
+        }),
+      });
+      const freightPayload = await freightResponse.json();
+      if (!freightResponse.ok) {
+        throw new Error(freightPayload.error || "Freight could not be quoted.");
+      }
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": crypto.randomUUID(),
         },
-        body: JSON.stringify({ bidId: order.sourceBidId }),
+        body: JSON.stringify({
+          bidId: order.sourceBidId,
+          shippingAddressId: address.id,
+          freightQuoteIds: [freightPayload.quote.id],
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Payment failed.");
@@ -448,6 +473,29 @@ function OrderList({
               </div>
               <p className="text-lg font-semibold">{money(order.totalAmount)}</p>
             </div>
+            {order.freightQuotes?.length ? (
+              <p className="mt-2 text-xs text-ink-500">
+                Freight: {order.freightQuotes[0].source === "BUYER_ARRANGED"
+                  ? "buyer arranged"
+                  : order.freightQuotes[0].source === "INCLUDED_IN_PRICE"
+                    ? "included in material price"
+                    : money(order.shippingAmount)}
+              </p>
+            ) : null}
+            {order.shipment ? (
+              <div className="mt-3 rounded-md bg-surface-sunken px-3 py-2 text-sm text-ink-700">
+                <p className="font-semibold">{order.shipment.carrierName}</p>
+                <p className="mt-1 text-xs text-ink-500">
+                  {order.shipment.trackingNumber
+                    ? `Tracking ${order.shipment.trackingNumber}`
+                    : `Vehicle ${order.shipment.vehicleNumber}`}
+                  {` · ETA ${new Date(order.shipment.estimatedDeliveryAt).toLocaleDateString("en-IN")}`}
+                </p>
+                <p className="mt-1 text-xs text-ink-500">
+                  Dispatch proof: {order.shipment.proofOfDispatchReference}
+                </p>
+              </div>
+            ) : null}
             {order.status === "AWAITING_BUYER_CONFIRMATION" && (
               <button
                 onClick={() => void pay(order)}
