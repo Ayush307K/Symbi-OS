@@ -2,13 +2,17 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 
 export const REQUIRED_SCHEMA_MIGRATION =
-  "20260830193000_listing_modes";
+  "20260831003000_location_logistics";
 
 export interface ProductionSchemaState {
   vectorExtension: boolean;
   userEvalOnly: boolean;
   listingEvalOnly: boolean;
   listingMode: boolean;
+  listingDeliveryTerm: boolean;
+  listingGeocoding: boolean;
+  freightQuotes: boolean;
+  shipments: boolean;
   listingScenarioTags: boolean;
   listingClusterId: boolean;
   orderEvalOnly: boolean;
@@ -45,6 +49,28 @@ export async function productionReadiness() {
               AND table_name = 'MarketplaceListing'
               AND column_name = 'listingMode'
           ) AS "listingMode",
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'MarketplaceListing'
+              AND column_name = 'deliveryTerm'
+          ) AS "listingDeliveryTerm",
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'MarketplaceListing'
+              AND column_name = 'geocodingProvider'
+          ) AS "listingGeocoding",
+          EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'FreightQuote'
+          ) AS "freightQuotes",
+          EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'Shipment'
+          ) AS "shipments",
           EXISTS (
             SELECT 1 FROM information_schema.columns
             WHERE table_schema = current_schema()

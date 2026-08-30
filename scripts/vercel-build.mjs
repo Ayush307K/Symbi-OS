@@ -69,6 +69,15 @@ if (process.env.VERCEL_ENV === "production") {
     console.log("[VercelBuild] Synchronizing the complete production catalogue.");
     runNpmScript("catalog:sync:production");
   }
+  if (process.env.SKIP_GEOCODING_BACKFILL === "true") {
+    console.log("[VercelBuild] Location backfill explicitly skipped.");
+  } else {
+    // Catalogue sync is target-based and may correctly skip an already-full
+    // corpus. The idempotent backfill is still required after the location
+    // migration so pre-existing rows receive coordinates and provenance.
+    console.log("[VercelBuild] Backfilling missing listing and plant locations.");
+    runNpmScript("location:backfill");
+  }
 } else {
   console.log(
     `[VercelBuild] Skipping database migrations for ${process.env.VERCEL_ENV || "local"} build.`,

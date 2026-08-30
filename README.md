@@ -168,10 +168,12 @@ env $(grep -v "^#" .env.production.local | xargs) npx tsx scripts/backfill-price
 
 Vercel uses `npm run vercel:build`. When `VERCEL_ENV=production`, that command
 first runs `npm run db:deploy` through `DIRECT_URL`, synchronizes the idempotent
-120-real + 28-synthetic demo catalogue, then starts `next build`. This ordering
-prevents a generated Prisma client from reaching production before its required
-columns or required demo data exist. Set `SKIP_CATALOG_SYNC=true` only as an
-explicit emergency override. Vercel must define both connection strings:
+120-real + 28-synthetic demo catalogue, backfills missing location/provenance
+data, then starts `next build`. This ordering prevents a generated Prisma
+client from reaching production before its required columns or required demo
+data exist. Set `SKIP_CATALOG_SYNC=true` or
+`SKIP_GEOCODING_BACKFILL=true` only as an explicit emergency override. Vercel
+must define both connection strings:
 
 - `DATABASE_URL`: pooled runtime connection.
 - `DIRECT_URL`: direct, non-pooler migration connection.
@@ -210,6 +212,10 @@ The complete template is in `.env.example`.
   catalogue adapter, `recycleinme` for the legacy public feed, or `json` for an
   authenticated listing API.
 - `REAL_LISTINGS_API_URL` and `REAL_LISTINGS_API_KEY`: configured JSON API.
+- `GEOCODING_API_URL`: optional licensed, self-hosted, or commercial
+  Nominatim-compatible geocoder. When absent, the offline India city/pincode
+  centroid adapter is used and truthfully labelled as lower precision.
+- `GEOCODING_USER_AGENT`: identifies SymbiOS to the configured geocoder.
 - `GEMINI_API_KEY`: enables embeddings and generated RAG answers. Without it,
   the same cited retrieval pipeline returns an extractive answer from lexical
   retrieval. Server-side only — never prefix it with `NEXT_PUBLIC_`.
@@ -324,6 +330,59 @@ Rows outside India, with unsupported categories, missing provenance, or
 containing prohibited material terms are rejected and counted in
 `ListingImportRun`.
 
+## Location and logistics
+
+Listings and buyer delivery plants store coordinates together with
+`geocodingProvider`, `geocodingPrecision`, `geocodingConfidence`, and
+`geocodedAt`. Seller-supplied GPS is labelled `MANUAL` with full confidence;
+the offline fallback reports `CITY` or `POSTCODE` with moderate confidence so
+a city centroid is never presented as a rooftop location. A configured remote
+provider falls back to the offline adapter when unavailable.
+
+Backfill missing location data and report active/managed coverage with:
+
+```bash
+npm run location:backfill -- --dry-run
+npm run location:backfill
+# Optional: --managed-only --limit=500
+```
+
+The script throttles Nominatim-compatible providers and is idempotent: it only
+selects rows missing coordinates or provenance. The public OpenStreetMap
+Nominatim endpoint is not a production default and must not be used for regular
+bulk jobs; configure an endpoint whose capacity and terms permit the workload.
+
+Authenticated buyers can select one of their geocoded delivery plants in the
+marketplace header. That address overrides the profile centroid used by the
+ranked feed, so distance is calculated for the selected receiving plant. API
+responses expose `distanceStatus`; the UI prints a kilometre value only when
+both endpoints are available and otherwise says `Distance unavailable`.
+
+Every managed listing must state one delivery term before submission:
+
+| Term | Commercial meaning | Checkout freight treatment |
+| --- | --- | --- |
+| `EX_WORKS` | Seller makes material ready at origin; buyer arranges freight | `BUYER_ARRANGED`, no SymbiOS freight charge |
+| `FOB` | Seller loads at the named origin; buyer arranges onward freight | `BUYER_ARRANGED`, no SymbiOS freight charge |
+| `DELIVERED` | Seller arranges delivery and freight is included in price | `INCLUDED_IN_PRICE`, no separate freight charge |
+| `FREIGHT_QUOTE_REQUIRED` | Freight is priced separately | Persisted 24-hour sandbox quote required before payment |
+
+`POST /api/freight/quotes` creates the authoritative freight decision for one
+listing, quantity, buyer, and delivery address. v0 uses a clearly labelled,
+deterministic sandbox estimator for separately quoted freight; its rate,
+minimum charge, road-distance factor, and validity live together in
+`server/logistics/freight.ts`. Checkout verifies ownership, listing term,
+quantity, destination, status, and expiry, then attaches the accepted quote to
+the order and invoice. Multi-seller checkout is rejected until orders can be
+split per seller without weakening freight and dispatch accountability.
+
+Dispatch is also structured. A seller must first accept a paid order and then
+provide carrier, tracking number or vehicle number, proof-of-dispatch
+reference, dispatch timestamp, and a later estimated-delivery timestamp.
+Those values are persisted in one `Shipment` per order, shown to buyer and
+seller, audited in the order timeline, and marked delivered when the buyer
+confirms receipt.
+
 ## Working demo flows
 
 ### Seller
@@ -336,16 +395,19 @@ containing prohibited material terms are rejected and counted in
    stage; future routes remain locked in both the UI and API.
 4. Review the complete application, submit it, and run the clearly labelled
    sandbox verification.
-5. Publish a non-hazardous listing.
+5. Publish a non-hazardous listing with a geocoded dispatch point and explicit
+   delivery term.
 6. Review and accept valid, inventory-bounded bids.
+7. Accept paid orders and submit structured dispatch/tracking information.
 
 ### Buyer and transaction
 
-1. Add a verified address.
+1. Add a geocoded delivery plant and select it in the marketplace header.
 2. Place a quantity- and price-validated bid, or buy a priced listing.
-3. Checkout sends an `Idempotency-Key`.
-4. The sandbox payment, order, inventory decrement, and inventory movement are
-   committed atomically. No real funds are moved.
+3. Review the listing's delivery term and obtain the explicit freight decision.
+4. Checkout sends an `Idempotency-Key` plus the current freight quote ID.
+5. The sandbox payment, order, accepted freight decision, inventory decrement,
+   and inventory movement are committed atomically. No real funds are moved.
 
 ### RAG
 
