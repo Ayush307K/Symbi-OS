@@ -4,15 +4,23 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowUpRight,
+  BadgeCheck,
   Bot,
   BookOpen,
   Clock3,
   Headphones,
   History,
+  LifeBuoy,
   MessageCircleQuestion,
+  MessagesSquare,
+  Package,
   Plus,
+  ReceiptIndianRupee,
+  Search,
   Send,
   Sparkles,
+  Store,
   X,
 } from "lucide-react";
 import {
@@ -31,6 +39,13 @@ import type {
   AssistantConversationSummary,
   AssistantMessageDto,
 } from "@/lib/assistant-types";
+import {
+  ASSISTANT_RESOLUTION,
+  ASSISTANT_TOPICS,
+  getAssistantTopic,
+  type AssistantTopic,
+  type AssistantTopicId,
+} from "@/lib/assistant-guidance";
 import { cn } from "@/lib/cn";
 import { externalHttpUrl } from "@/lib/external-url";
 
@@ -40,14 +55,10 @@ const HIDDEN_PATHS = [
   "/forgot-password",
   "/reset-password",
 ];
-const SUGGESTIONS = [
-  "Find HDPE scrap suppliers near Pune",
-  "Compare PET bottle scrap options",
-  "How do I place a bid?",
-];
 const GREETING_MESSAGE_ID = "new-conversation-greeting";
 const GREETING_MESSAGE =
-  "Hi! I’m Symbi. What material are you looking for, or how can I help with your account?";
+  "Hi! I’m Symbi. What can I help you with today?";
+type ResolutionState = "prompt" | "complete" | null;
 
 function newConversationGreeting(): AssistantMessageDto {
   return {
@@ -58,6 +69,28 @@ function newConversationGreeting(): AssistantMessageDto {
     retrieval: null,
     createdAt: new Date().toISOString(),
   };
+}
+
+function topicSelectionMessages(topic: AssistantTopic): AssistantMessageDto[] {
+  const createdAt = new Date().toISOString();
+  return [
+    {
+      id: `topic-selection-${topic.id}`,
+      role: "USER",
+      content: topic.label,
+      citations: [],
+      retrieval: null,
+      createdAt,
+    },
+    {
+      id: `topic-follow-up-${topic.id}`,
+      role: "ASSISTANT",
+      content: topic.followUp,
+      citations: [],
+      retrieval: null,
+      createdAt,
+    },
+  ];
 }
 
 interface ConversationResponse {
@@ -101,9 +134,13 @@ export function MarketplaceAssistant() {
   const [conversationTitle, setConversationTitle] =
     useState("New conversation");
   const [messages, setMessages] = useState<AssistantMessageDto[]>([]);
+  const [selectedTopicId, setSelectedTopicId] =
+    useState<AssistantTopicId | null>(null);
   const [draft, setDraft] = useState("");
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [sending, setSending] = useState(false);
+  const [resolutionState, setResolutionState] =
+    useState<ResolutionState>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -120,6 +157,10 @@ export function MarketplaceAssistant() {
       setConversationId(payload.conversation.id);
       setConversationTitle(payload.conversation.title);
       setMessages(payload.messages);
+      setSelectedTopicId(null);
+      setResolutionState(
+        payload.messages.at(-1)?.role === "ASSISTANT" ? "prompt" : null,
+      );
       setShowHistory(false);
     } catch (loadError) {
       setError(
@@ -159,6 +200,8 @@ export function MarketplaceAssistant() {
     setConversationId(null);
     setConversationTitle("New conversation");
     setMessages(nextUserId ? [newConversationGreeting()] : []);
+    setSelectedTopicId(null);
+    setResolutionState(null);
     setError(null);
     if (open && user) void refreshConversations();
   }, [open, refreshConversations, user]);
@@ -179,7 +222,7 @@ export function MarketplaceAssistant() {
   useEffect(() => {
     if (!open) return;
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, open, sending]);
+  }, [messages, open, resolutionState, sending]);
 
   const openPanel = () => {
     setOpen(true);
@@ -187,6 +230,8 @@ export function MarketplaceAssistant() {
     setConversationId(null);
     setConversationTitle("New conversation");
     setMessages(user ? [newConversationGreeting()] : []);
+    setSelectedTopicId(null);
+    setResolutionState(null);
     setDraft("");
     setError(null);
     if (user) void refreshConversations();
@@ -196,14 +241,40 @@ export function MarketplaceAssistant() {
     setConversationId(null);
     setConversationTitle("New conversation");
     setMessages([newConversationGreeting()]);
+    setSelectedTopicId(null);
+    setResolutionState(null);
     setDraft("");
     setError(null);
     setShowHistory(false);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
+  const selectTopic = (topicId: AssistantTopicId) => {
+    const topic = getAssistantTopic(topicId);
+    if (!topic) return;
+    setSelectedTopicId(topic.id);
+    setResolutionState(null);
+    setMessages([newConversationGreeting(), ...topicSelectionMessages(topic)]);
+    setDraft("");
+    setError(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const resetTopicSelection = () => {
+    if (conversationId) return;
+    setSelectedTopicId(null);
+    setResolutionState(null);
+    setMessages([newConversationGreeting()]);
+    setDraft("");
+    setError(null);
+  };
+
   const sendQuestion = async (suggested?: string) => {
     if (!user || sending) return;
+    if (!conversationId && !selectedTopicId) {
+      setError("Choose a help topic before asking your question.");
+      return;
+    }
     const question = (suggested ?? draft).replace(/\s+/g, " ").trim();
     if (question.length < 3) {
       setError("Ask a marketplace question using at least 3 characters.");
@@ -221,6 +292,8 @@ export function MarketplaceAssistant() {
     setMessages((current) => [...current, optimistic]);
     setDraft("");
     setError(null);
+    const priorResolutionState = resolutionState;
+    setResolutionState(null);
     setSending(true);
     try {
       const response = await fetch("/api/assistant/query", {
@@ -228,6 +301,7 @@ export function MarketplaceAssistant() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: question,
+          ...(selectedTopicId ? { topic: selectedTopicId } : {}),
           ...(conversationId ? { conversationId } : {}),
         }),
       });
@@ -239,12 +313,16 @@ export function MarketplaceAssistant() {
         payload.userMessage,
         payload.assistantMessage,
       ]);
+      setResolutionState("prompt");
       void refreshConversations();
     } catch (sendError) {
       setMessages((current) =>
         current.filter((message) => message.id !== optimisticId),
       );
       setDraft(question);
+      setResolutionState(
+        priorResolutionState === "prompt" ? "prompt" : null,
+      );
       setError(
         sendError instanceof Error
           ? sendError.message
@@ -264,6 +342,20 @@ export function MarketplaceAssistant() {
   };
 
   if (HIDDEN_PATHS.some((path) => pathname.startsWith(path))) return null;
+
+  const selectedTopic = selectedTopicId
+    ? getAssistantTopic(selectedTopicId)
+    : null;
+  const choosingTopic =
+    !conversationId &&
+    !selectedTopic &&
+    messages.length === 1 &&
+    messages[0]?.id === GREETING_MESSAGE_ID;
+  const choosingQuestion =
+    !conversationId &&
+    Boolean(selectedTopic) &&
+    messages.length === 3 &&
+    messages[0]?.id === GREETING_MESSAGE_ID;
 
   return (
     <>
@@ -369,11 +461,25 @@ export function MarketplaceAssistant() {
                       ))}
                       {sending ? <ThinkingMessage /> : null}
                     </ol>
-                    {messages.length === 1 &&
-                    messages[0]?.id === GREETING_MESSAGE_ID ? (
-                      <StarterSuggestions
+                    {choosingTopic ? (
+                      <StarterTopics onSelect={selectTopic} />
+                    ) : null}
+                    {choosingQuestion && selectedTopic ? (
+                      <TopicQuickReplies
+                        topic={selectedTopic}
+                        sending={sending}
                         onSelect={(query) => void sendQuestion(query)}
+                        onBack={resetTopicSelection}
                       />
+                    ) : null}
+                    {resolutionState === "prompt" && !sending ? (
+                      <ResolutionPrompt
+                        onContinue={newConversation}
+                        onFinish={() => setResolutionState("complete")}
+                      />
+                    ) : null}
+                    {resolutionState === "complete" ? (
+                      <ResolutionComplete onContinue={newConversation} />
                     ) : null}
                   </>
                 )}
@@ -393,47 +499,120 @@ export function MarketplaceAssistant() {
                     <span>{error}</span>
                   </div>
                 ) : null}
-                <div className="flex items-end gap-2 rounded-card border border-ink-300 bg-surface-card p-2 focus-within:border-copper-700 focus-within:ring-1 focus-within:ring-copper-700/20">
-                  <label htmlFor="symbi-assistant-input" className="sr-only">
-                    Ask Symbi a marketplace question
-                  </label>
-                  <textarea
-                    ref={inputRef}
-                    id="symbi-assistant-input"
-                    rows={1}
-                    maxLength={1000}
-                    value={draft}
-                    disabled={sending}
-                    placeholder="Ask about listings or how SymbiOS works…"
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={handleComposerKeyDown}
-                    className="scrollbar-thin max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-[13px] leading-relaxed text-ink-900 outline-none placeholder:text-ink-400 disabled:opacity-60"
-                  />
-                  <IconButton
-                    icon={
-                      sending ? (
-                        <Spinner size="sm" label={null} />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )
-                    }
-                    label="Send question"
-                    variant="primary"
-                    size="sm"
-                    disabled={sending || draft.trim().length < 3}
-                    onClick={() => void sendQuestion()}
-                  />
-                </div>
-                <p className="mt-1.5 text-center text-[10.5px] leading-relaxed text-ink-400">
-                  Grounded in the current catalogue and verified SymbiOS product
-                  guidance.
-                </p>
+                {resolutionState === "complete" ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-ink-500">
+                      This request is complete.
+                    </p>
+                    <Button variant="primary" size="sm" onClick={newConversation}>
+                      Ask another question
+                    </Button>
+                  </div>
+                ) : selectedTopic || conversationId ? (
+                  <>
+                    {selectedTopic ? (
+                      <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-copper-800">
+                        {selectedTopic.label}
+                      </p>
+                    ) : null}
+                    <div className="flex items-end gap-2 rounded-card border border-ink-300 bg-surface-card p-2 focus-within:border-copper-700 focus-within:ring-1 focus-within:ring-copper-700/20">
+                      <label htmlFor="symbi-assistant-input" className="sr-only">
+                        Ask Symbi a marketplace question
+                      </label>
+                      <textarea
+                        ref={inputRef}
+                        id="symbi-assistant-input"
+                        rows={1}
+                        maxLength={1000}
+                        value={draft}
+                        disabled={sending}
+                        placeholder={
+                          selectedTopic?.inputPlaceholder ??
+                          "Ask a follow-up question…"
+                        }
+                        onChange={(event) => setDraft(event.target.value)}
+                        onKeyDown={handleComposerKeyDown}
+                        className="scrollbar-thin max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-[13px] leading-relaxed text-ink-900 outline-none placeholder:text-ink-400 disabled:opacity-60"
+                      />
+                      <IconButton
+                        icon={
+                          sending ? (
+                            <Spinner size="sm" label={null} />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )
+                        }
+                        label="Send question"
+                        variant="primary"
+                        size="sm"
+                        disabled={sending || draft.trim().length < 3}
+                        onClick={() => void sendQuestion()}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-center text-[10.5px] leading-relaxed text-ink-400">
+                      Routed to catalogue, account or support help as needed.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-center text-[11px] text-ink-500">
+                    Choose a topic above to get started.
+                  </p>
+                )}
               </div>
             </>
           )}
         </section>
       )}
     </>
+  );
+}
+
+function ResolutionPrompt({
+  onContinue,
+  onFinish,
+}: {
+  onContinue: () => void;
+  onFinish: () => void;
+}) {
+  return (
+    <div className="ml-9 mt-4 rounded-card border border-ink-200 bg-surface-sunken p-3">
+      <p className="text-[12px] font-semibold text-ink-800">
+        {ASSISTANT_RESOLUTION.question}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onContinue}
+          className="rounded-full border border-copper-700 bg-copper-700 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-copper-800"
+        >
+          {ASSISTANT_RESOLUTION.continueLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onFinish}
+          className="rounded-full border border-ink-300 bg-surface-card px-3 py-1.5 text-[11px] font-semibold text-ink-700 transition-colors hover:border-ink-400 hover:bg-ink-50"
+        >
+          {ASSISTANT_RESOLUTION.finishLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ResolutionComplete({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div className="ml-9 mt-4 rounded-card border border-success-border bg-success-subtle p-3">
+      <p className="text-[12px] font-medium leading-relaxed text-success-strong">
+        {ASSISTANT_RESOLUTION.completedMessage}
+      </p>
+      <button
+        type="button"
+        onClick={onContinue}
+        className="mt-2 text-[11px] font-semibold text-copper-800 underline-offset-4 hover:underline"
+      >
+        Start another question
+      </button>
+    </div>
   );
 }
 
@@ -471,23 +650,93 @@ function SignedOutState({
   );
 }
 
-function StarterSuggestions({
+function StarterTopics({
   onSelect,
 }: {
+  onSelect: (topicId: AssistantTopicId) => void;
+}) {
+  return (
+    <div className="ml-9 mt-4">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+        Choose a topic
+      </p>
+      <div className="flex flex-col gap-2">
+        {ASSISTANT_TOPICS.map((topic) => (
+          <TopicButton key={topic.id} topic={topic} onSelect={onSelect} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopicButton({
+  topic,
+  onSelect,
+}: {
+  topic: AssistantTopic;
+  onSelect: (topicId: AssistantTopicId) => void;
+}) {
+  const icons = {
+    catalogue: Search,
+    orders: ReceiptIndianRupee,
+    selling: Store,
+    messages: MessagesSquare,
+    account: BadgeCheck,
+    support: LifeBuoy,
+  };
+  const Icon = icons[topic.id];
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(topic.id)}
+      className="group flex w-full items-center gap-3 rounded-control border border-ink-200 bg-surface-card px-3 py-2.5 text-left transition-colors hover:border-copper-300 hover:bg-copper-50"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-surface-sunken text-copper-700 group-hover:bg-white">
+        <Icon aria-hidden="true" className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-semibold text-ink-800">
+          {topic.label}
+        </span>
+        <span className="block text-[11px] leading-relaxed text-ink-500">
+          {topic.description}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function TopicQuickReplies({
+  topic,
+  sending,
+  onSelect,
+  onBack,
+}: {
+  topic: AssistantTopic;
+  sending: boolean;
   onSelect: (query: string) => void;
+  onBack: () => void;
 }) {
   return (
     <div className="ml-9 mt-4 flex flex-col gap-2">
-      {SUGGESTIONS.map((suggestion) => (
+      {topic.quickReplies.map((reply) => (
         <button
-          key={suggestion}
+          key={reply.label}
           type="button"
-          onClick={() => onSelect(suggestion)}
-          className="rounded-control border border-ink-200 bg-surface-card px-3 py-2.5 text-left text-[13px] font-medium text-ink-700 transition-colors hover:border-ink-300 hover:bg-ink-50"
+          disabled={sending}
+          onClick={() => onSelect(reply.query)}
+          className="rounded-full border border-copper-200 bg-copper-50 px-3 py-2 text-left text-[12px] font-medium text-copper-900 transition-colors hover:border-copper-400 hover:bg-copper-100 disabled:opacity-50"
         >
-          {suggestion}
+          {reply.label}
         </button>
       ))}
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-1 self-start text-[11px] font-semibold text-ink-500 underline-offset-4 hover:text-ink-800 hover:underline"
+      >
+        Choose another topic
+      </button>
     </div>
   );
 }
@@ -565,6 +814,9 @@ function HistoryView({
 
 function ChatMessage({ message }: { message: AssistantMessageDto }) {
   const assistant = message.role === "ASSISTANT";
+  const hasListingCitations = message.citations.some(
+    (citation) => citation.sourceType === "LISTING",
+  );
   return (
     <li className={cn("flex", assistant ? "justify-start" : "justify-end")}>
       <div
@@ -585,13 +837,20 @@ function ChatMessage({ message }: { message: AssistantMessageDto }) {
             </span>
             <div className="min-w-0 flex-1">
               <AnswerText
-                content={message.content}
+                content={
+                  hasListingCitations
+                    ? conciseListingAnswer(message.content)
+                    : message.content
+                }
                 citations={message.citations}
               />
               {message.retrieval?.mode === "support" && message.citations[0] ? (
                 <SupportTicketLink citation={message.citations[0]} />
               ) : (
-                <CitationList citations={message.citations} />
+                <>
+                  <ListingCitationTable citations={message.citations} />
+                  <CitationList citations={message.citations} />
+                </>
               )}
               {message.retrieval ? (
                 <p className="mt-2 flex items-center gap-1 text-[10.5px] text-ink-400">
@@ -620,6 +879,16 @@ function ChatMessage({ message }: { message: AssistantMessageDto }) {
       </div>
     </li>
   );
+}
+
+function conciseListingAnswer(content: string) {
+  const concise = content
+    .split("\n")
+    .filter((line) => !/^\s*(?:[-*]\s*)?listing:/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return concise || "Here are the most relevant listings I found.";
 }
 
 function toolLabel(toolName: string) {
@@ -667,6 +936,9 @@ function AnswerText({
           {line.split(/(\[S\d+\])/g).map((part, index) => {
             const id = /^\[(S\d+)\]$/.exec(part)?.[1];
             const citation = id ? citationById.get(id) : null;
+            if (citation?.sourceType === "LISTING") {
+              return <span key={`${part}-${index}`} />;
+            }
             return citation ? (
               <CitationToken key={`${part}-${index}`} citation={citation}>
                 {id}
@@ -677,6 +949,156 @@ function AnswerText({
           })}
         </p>
       ))}
+    </div>
+  );
+}
+
+function formatListingPrice(citation: AssistantCitation) {
+  const listing = citation.listing;
+  if (!listing || listing.priceMode === "ON_REQUEST") return "Quote";
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: listing.currency,
+    maximumFractionDigits: 0,
+  }).format(listing.pricePerUnit);
+}
+
+function ListingThumbnail({ src }: { src: string | null | undefined }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-copper-50 text-copper-700">
+        <Package aria-hidden="true" className="h-4 w-4" />
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-10 w-10 shrink-0 rounded-control border border-ink-200 object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function ListingCitationTable({
+  citations,
+}: {
+  citations: AssistantCitation[];
+}) {
+  const listings = citations.filter(
+    (citation) => citation.sourceType === "LISTING",
+  );
+  if (!listings.length) return null;
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-card border border-ink-200 bg-surface-card">
+      <table className="w-full table-fixed text-left">
+        <caption className="sr-only">Recommended marketplace listings</caption>
+        <colgroup>
+          <col />
+          <col className="w-[72px]" />
+          <col className="w-8" />
+        </colgroup>
+        <thead className="border-b border-ink-200 bg-surface-sunken">
+          <tr className="text-[9.5px] font-semibold uppercase tracking-wide text-ink-500">
+            <th scope="col" className="px-2.5 py-2">
+              Listing
+            </th>
+            <th scope="col" className="px-1.5 py-2 text-right">
+              Price · stock
+            </th>
+            <th scope="col" className="py-2 pr-2">
+              <span className="sr-only">Open listing</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ink-200">
+          {listings.map((citation) => {
+            const href = citationHref(citation);
+            const listing = citation.listing;
+            const meta = listing
+              ? [listing.sellerName, listing.location].filter(Boolean).join(" · ")
+              : citation.excerpt;
+            return (
+              <tr key={citation.id} className="align-middle hover:bg-copper-50/50">
+                <td className="min-w-0 px-2.5 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <ListingThumbnail src={listing?.imageUrl} />
+                    <div className="min-w-0">
+                      {href ? (
+                        <Link
+                          href={href}
+                          target={href.startsWith("/") ? undefined : "_blank"}
+                          rel={
+                            href.startsWith("/")
+                              ? undefined
+                              : "noreferrer noopener"
+                          }
+                          className="line-clamp-2 text-[11px] font-semibold leading-snug text-ink-900 hover:text-copper-800 hover:underline"
+                        >
+                          {citation.title}
+                        </Link>
+                      ) : (
+                        <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-ink-900">
+                          {citation.title}
+                        </p>
+                      )}
+                      <p className="mt-0.5 truncate text-[9.5px] text-ink-500">
+                        {meta}
+                      </p>
+                      {listing?.verified || citation.isEvalOnly ? (
+                        <p className="mt-1 flex items-center gap-1 text-[9px] font-semibold text-ink-500">
+                          {listing?.verified ? (
+                            <BadgeCheck
+                              aria-hidden="true"
+                              className="h-3 w-3 text-success-strong"
+                            />
+                          ) : null}
+                          {listing?.verified ? "Verified seller" : "Demo listing"}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-1.5 py-2.5 text-right align-middle">
+                  <p className="prose-numerals text-[10.5px] font-bold text-ink-900">
+                    {formatListingPrice(citation)}
+                  </p>
+                  {listing ? (
+                    <>
+                      <p className="prose-numerals mt-0.5 text-[9px] text-ink-500">
+                        {listing.quantityAvailable.toLocaleString("en-IN")} {listing.unit}
+                      </p>
+                      <p className="prose-numerals text-[8.5px] text-ink-400">
+                        MOQ {listing.minOrderQuantity.toLocaleString("en-IN")}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-0.5 text-[9px] text-ink-400">Details</p>
+                  )}
+                </td>
+                <td className="py-2.5 pr-2 text-right align-middle">
+                  {href ? (
+                    <Link
+                      href={href}
+                      target={href.startsWith("/") ? undefined : "_blank"}
+                      rel={
+                        href.startsWith("/") ? undefined : "noreferrer noopener"
+                      }
+                      aria-label={`View ${citation.title}`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-copper-700 hover:bg-copper-100"
+                    >
+                      <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
+                    </Link>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -714,7 +1136,9 @@ function CitationToken({
 }
 
 function CitationList({ citations }: { citations: AssistantCitation[] }) {
-  const realCitations = citations.filter((citation) => !citation.isEvalOnly);
+  const realCitations = citations.filter(
+    (citation) => !citation.isEvalOnly && citation.sourceType !== "LISTING",
+  );
   if (!realCitations.length) return null;
   return (
     <details className="mt-3 rounded-control border border-ink-200 bg-surface-sunken/60">
