@@ -1,4 +1,5 @@
 import type { ListingMode } from "@/lib/listing-mode";
+import type { DeliveryTerm } from "@/lib/logistics";
 
 /**
  * Shapes returned by GET /api/materials. These mirror the API response exactly
@@ -24,6 +25,12 @@ export interface MaterialListing {
   city: string;
   state: string;
   country: string;
+  pincode?: string | null;
+  distanceKm?: number | null;
+  distanceStatus?: "AVAILABLE" | "UNAVAILABLE" | "NOT_REQUESTED";
+  geocodingPrecision?: string | null;
+  geocodingConfidence?: number | null;
+  deliveryTerm?: DeliveryTerm | null;
   imageUrl: string;
   priceMode: string;
   price: number | null;

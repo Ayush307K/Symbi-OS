@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Heart, Info, MapPin, MessageSquare, Package, ShoppingCart } from "lucide-react";
+import { BadgeCheck, Heart, Info, MapPin, MessageSquare, Package, ShoppingCart, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { listingFallbackImage } from "@/lib/listing-images";
 import { listingCapabilities, listingTrustLabel } from "@/lib/listing-mode";
 import type { MaterialListing } from "@/lib/marketplace-types";
+import { deliveryTermLabel } from "@/lib/logistics";
 
 /**
  * The API maps an ON_REQUEST listing to price: null, so null is the signal for
@@ -196,7 +197,19 @@ export function ListingCard({
           <div className="flex items-center gap-1.5">
             <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             <dt className="sr-only">Location</dt>
-            <dd className="truncate">{place}</dd>
+            <dd className="truncate">
+              {place}
+              {listing.distanceStatus === "AVAILABLE" && typeof listing.distanceKm === "number"
+                ? ` · ${listing.distanceKm.toLocaleString("en-IN")} km`
+                : listing.distanceStatus === "UNAVAILABLE"
+                  ? " · Distance unavailable"
+                  : ""}
+            </dd>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Truck aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <dt className="sr-only">Delivery terms</dt>
+            <dd className="truncate">{deliveryTermLabel(listing.deliveryTerm)}</dd>
           </div>
         </dl>
 

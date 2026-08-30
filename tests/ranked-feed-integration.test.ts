@@ -131,8 +131,8 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
         sellerCompanyId: companyId,
         category: "Metal Scrap",
         subcategory: "Copper wire",
-        area: "Bandra",
-        city: "Mumbai",
+        area: "Chakan",
+        city: "Pune",
         state: "Maharashtra",
         country: "India",
         pricePerUnit: 52_000,
@@ -147,8 +147,8 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
         packaging: "Bales",
         paymentTerms: "On request",
         status: "ACTIVE",
-        latitude: 19.06,
-        longitude: 72.84,
+        latitude: 18.5204,
+        longitude: 73.8567,
       },
     });
     await refreshListingEmbedding(listingId);
@@ -183,6 +183,57 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
     });
     expect(result.ranking).toMatchObject({
       preferredCategories: ["Metal Scrap"],
+    });
+  });
+
+  it("reranks the same candidates from the buyer-selected delivery plant", async () => {
+    const fromMumbai = await rankBuyerFeed(buyerId, {
+      limit: 50,
+      deliveryLocation: {
+        id: "mumbai-plant",
+        label: "Mumbai plant",
+        city: "Mumbai",
+        state: "Maharashtra",
+        latitude: 19.076,
+        longitude: 72.8777,
+      },
+    });
+    const fromPune = await rankBuyerFeed(buyerId, {
+      limit: 50,
+      deliveryLocation: {
+        id: "pune-plant",
+        label: "Pune plant",
+        city: "Pune",
+        state: "Maharashtra",
+        latitude: 18.5204,
+        longitude: 73.8567,
+      },
+    });
+    const mumbaiListing = fromMumbai.items.find((item) => item.id === listingId)!;
+    const mumbaiViewOfPune = fromMumbai.items.find(
+      (item) => item.id === secondListingId,
+    )!;
+    const puneListing = fromPune.items.find(
+      (item) => item.id === secondListingId,
+    )!;
+    const puneViewOfMumbai = fromPune.items.find(
+      (item) => item.id === listingId,
+    )!;
+
+    expect(mumbaiListing.relevanceScore).toBeGreaterThan(
+      mumbaiViewOfPune.relevanceScore,
+    );
+    expect(puneListing.relevanceScore).toBeGreaterThan(
+      puneViewOfMumbai.relevanceScore,
+    );
+    expect(fromPune.ranking).toBeDefined();
+    expect(fromPune.ranking!.deliveryLocation).toMatchObject({
+      id: "pune-plant",
+      city: "Pune",
+    });
+    expect(puneListing).toMatchObject({
+      distanceStatus: "AVAILABLE",
+      distanceKm: 0,
     });
   });
 

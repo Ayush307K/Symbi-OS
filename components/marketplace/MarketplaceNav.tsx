@@ -9,12 +9,16 @@ import { useAuth } from "@/context/AuthContext";
 import { AccountMenu } from "./AccountMenu";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
+import type { DeliveryLocationOption } from "@/hooks/useDeliveryLocation";
 
 export interface MarketplaceNavProps {
   /** Current applied query, so the field reflects the results below. */
   query?: string;
   locationLabel?: string;
   onSearch?: (query: string) => void;
+  deliveryLocations?: DeliveryLocationOption[];
+  selectedDeliveryLocationId?: string | null;
+  onDeliveryLocationChange?: (id: string) => void;
 }
 
 /**
@@ -33,6 +37,9 @@ export function MarketplaceNav({
   query = "",
   locationLabel = "All India",
   onSearch,
+  deliveryLocations,
+  selectedDeliveryLocationId,
+  onDeliveryLocationChange,
 }: MarketplaceNavProps) {
   const router = useRouter();
   // Read auth here rather than take a prop: every screen mounts this nav, and a
@@ -71,11 +78,31 @@ export function MarketplaceNav({
           </span>
         </Link>
 
-        <div className="hidden shrink-0 flex-col leading-tight md:flex">
+        <div className="hidden max-w-[190px] shrink-0 flex-col leading-tight md:flex">
           <span className="text-[11px] text-ink-500">Deliver to</span>
           <span className="flex items-center gap-1 text-[12.5px] font-semibold text-ink-900">
             <MapPin aria-hidden="true" className="h-3.5 w-3.5 text-copper-700" />
-            {locationLabel}
+            {deliveryLocations && onDeliveryLocationChange ? (
+              <select
+                aria-label="Delivery plant"
+                value={selectedDeliveryLocationId || ""}
+                onChange={(event) => onDeliveryLocationChange(event.target.value)}
+                className="max-w-[155px] cursor-pointer border-0 bg-transparent p-0 text-[12.5px] font-semibold text-ink-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper-700"
+              >
+                <option value="">All India</option>
+                {deliveryLocations.map((location) => (
+                  <option
+                    key={location.id}
+                    value={location.id}
+                    disabled={location.latitude === null || location.longitude === null}
+                  >
+                    {location.label} · {location.city}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              locationLabel
+            )}
           </span>
         </div>
 

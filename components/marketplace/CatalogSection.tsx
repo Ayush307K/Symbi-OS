@@ -31,16 +31,18 @@ export interface CatalogSectionProps {
   personalized?: boolean;
   /** Lets the parent mirror the live count, e.g. into the hero. */
   onCountChange?: (count: number) => void;
+  deliveryAddressId?: string | null;
 }
 
 export function CatalogSection({
   isAuthenticated,
   personalized = false,
   onCountChange,
+  deliveryAddressId,
 }: CatalogSectionProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const catalog = useCatalog({ personalized });
+  const catalog = useCatalog({ personalized, deliveryAddressId });
   const wishlist = useWishlist();
   const [inquiryPendingId, setInquiryPendingId] = useState<string | null>(null);
 

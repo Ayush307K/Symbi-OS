@@ -22,9 +22,13 @@ import {
  * "load more" appends using the cursor the API already returned.
  */
 export function useCatalog(
-  options: { syncUrl?: boolean; personalized?: boolean } = {},
+  options: {
+    syncUrl?: boolean;
+    personalized?: boolean;
+    deliveryAddressId?: string | null;
+  } = {},
 ) {
-  const { syncUrl = true, personalized = false } = options;
+  const { syncUrl = true, personalized = false, deliveryAddressId = null } = options;
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -62,8 +66,9 @@ export function useCatalog(
   // true reads as "same filters, already applied" and the personalized feed is
   // never requested at all.
   const signatureFor = useCallback(
-    (query: string) => `${personalized ? "feed" : "catalog"}|${query}`,
-    [personalized],
+    (query: string) =>
+      `${personalized ? "feed" : "catalog"}|${deliveryAddressId || "all-india"}|${query}`,
+    [deliveryAddressId, personalized],
   );
 
   const load = useCallback(
@@ -93,6 +98,9 @@ export function useCatalog(
             ? "/api/feed"
             : "/api/materials";
         const params = filtersToParams(next, cursor);
+        if (preferredEndpoint === "/api/feed" && deliveryAddressId) {
+          params.set("deliveryAddressId", deliveryAddressId);
+        }
         let effectiveEndpoint = preferredEndpoint;
         let res = await fetch(`${preferredEndpoint}?${params}`);
         let payload = res.ok ? await res.json() : null;
@@ -106,7 +114,7 @@ export function useCatalog(
           (!res.ok || !Array.isArray(payload?.items) || payload.items.length === 0)
         ) {
           effectiveEndpoint = "/api/materials";
-          res = await fetch(`/api/materials?${params}`);
+          res = await fetch(`/api/materials?${filtersToParams(next)}`);
           payload = res.ok ? await res.json() : null;
         }
         if (!res.ok || !payload) {
@@ -148,7 +156,7 @@ export function useCatalog(
         }
       }
     },
-    [personalized],
+    [deliveryAddressId, personalized],
   );
 
   // The URL is the single source of truth, watched through Next's own

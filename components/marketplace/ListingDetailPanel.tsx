@@ -31,6 +31,7 @@ import { externalHttpUrl } from "@/lib/external-url";
 import { listingFallbackImage } from "@/lib/listing-images";
 import { listingCapabilities, listingTrustLabel } from "@/lib/listing-mode";
 import type { MaterialListing } from "@/lib/marketplace-types";
+import { deliveryTermLabel } from "@/lib/logistics";
 
 interface ListingReview {
   id: string;
@@ -433,11 +434,12 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
           </div>
 
           {/* At a glance — hairlines, not another box. Four facts, no scroll. */}
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-200 bg-ink-200 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-200 bg-ink-200 sm:grid-cols-5">
             <Glance label="Available" value={`${num(listing.quantity)} ${listing.unit}`} />
             <Glance label="Min order" value={`${num(listing.minOrderQuantity)} ${listing.unit}`} />
             <Glance label="Lead time" value={`${listing.leadTimeDays} days`} />
             <Glance label="Location" value={place} />
+            <Glance label="Delivery" value={deliveryTermLabel(listing.deliveryTerm)} />
           </dl>
 
           {listing.description ? (

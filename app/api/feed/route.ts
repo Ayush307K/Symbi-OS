@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import prisma from "@/lib/prisma";
 import { MARKETPLACE_RANKING_CONFIG } from "@/server/feed/config";
 import {
   rankBuyerFeed,
@@ -12,6 +13,7 @@ import { expireListings } from "@/server/listings/lifecycle";
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(24),
   cursor: z.string().max(500).optional(),
+  deliveryAddressId: z.string().uuid().optional(),
 });
 
 function decodeCursor(cursor?: string): RankedFeedCursor | undefined {
@@ -64,9 +66,45 @@ export async function GET(request: NextRequest) {
       );
     }
     await expireListings();
+    const selectedAddress = parsed.data.deliveryAddressId
+      ? await prisma.address.findFirst({
+          where: { id: parsed.data.deliveryAddressId, userId: auth.userId },
+          select: {
+            id: true,
+            label: true,
+            city: true,
+            state: true,
+            latitude: true,
+            longitude: true,
+          },
+        })
+      : null;
+    if (parsed.data.deliveryAddressId && !selectedAddress) {
+      throw new ApiError(404, "Delivery location was not found.", "DELIVERY_LOCATION_NOT_FOUND");
+    }
+    if (
+      selectedAddress &&
+      (selectedAddress.latitude === null || selectedAddress.longitude === null)
+    ) {
+      throw new ApiError(
+        422,
+        "This delivery location must be geocoded before it can rank listings.",
+        "DELIVERY_LOCATION_UNAVAILABLE",
+      );
+    }
     const result = await rankBuyerFeed(auth.userId, {
       limit: parsed.data.limit,
       cursor: decodeCursor(parsed.data.cursor),
+      deliveryLocation: selectedAddress
+        ? {
+            id: selectedAddress.id,
+            label: selectedAddress.label,
+            city: selectedAddress.city,
+            state: selectedAddress.state,
+            latitude: selectedAddress.latitude!,
+            longitude: selectedAddress.longitude!,
+          }
+        : undefined,
     });
     const payload = {
       ...result,

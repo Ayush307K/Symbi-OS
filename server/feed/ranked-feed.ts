@@ -38,6 +38,15 @@ export interface RankedFeedCursor {
   asOf: number;
 }
 
+export interface FeedDeliveryLocation {
+  id: string;
+  label: string;
+  city: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+}
+
 function lexicalSimilarity(left: string, right: string) {
   const tokenize = (value: string) =>
     new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2));
@@ -248,14 +257,25 @@ async function semanticScores(candidateIds: string[], embedding: number[] | null
 
 export async function rankBuyerFeed(
   buyerId: string,
-  options: { limit?: number; cursor?: RankedFeedCursor } = {},
+  options: {
+    limit?: number;
+    cursor?: RankedFeedCursor;
+    deliveryLocation?: FeedDeliveryLocation;
+  } = {},
 ) {
   const config = MARKETPLACE_RANKING_CONFIG.retrieval;
   const limit = Math.min(
     config.maxPageSize,
     Math.max(1, options.limit ?? config.defaultPageSize),
   );
-  const profile = await buildBuyerDemandProfile(buyerId);
+  const baseProfile = await buildBuyerDemandProfile(buyerId);
+  const profile = options.deliveryLocation
+    ? {
+        ...baseProfile,
+        latitude: options.deliveryLocation.latitude,
+        longitude: options.deliveryLocation.longitude,
+      }
+    : baseProfile;
   const seeds = await semanticSeeds(profile.embedding, profile.preferredCategories);
   const seedMaterialIds = [
     ...profile.seedMaterialIds,
@@ -327,6 +347,10 @@ export async function rankBuyerFeed(
       pincode: true,
       latitude: true,
       longitude: true,
+      geocodingProvider: true,
+      geocodingConfidence: true,
+      geocodingPrecision: true,
+      deliveryTerm: true,
       imageUrl: true,
       priceMode: true,
       pricePerUnit: true,
@@ -520,6 +544,15 @@ export async function rankBuyerFeed(
         country: listing.country,
         pincode: listing.pincode,
         distanceKm,
+        distanceStatus:
+          profile.latitude === null || profile.longitude === null
+            ? "NOT_REQUESTED"
+            : distanceKm === null
+              ? "UNAVAILABLE"
+              : "AVAILABLE",
+        geocodingPrecision: listing.geocodingPrecision,
+        geocodingConfidence: listing.geocodingConfidence,
+        deliveryTerm: listing.deliveryTerm,
         imageUrl: listing.imageUrl,
         priceMode: listing.priceMode,
         price: listing.priceMode === "ON_REQUEST" ? null : listing.pricePerUnit,
@@ -588,6 +621,14 @@ export async function rankBuyerFeed(
       historyEventCount: profile.historyEventCount,
       coldStart: !profile.hasHistory,
       preferredCategories: profile.preferredCategories,
+      deliveryLocation: options.deliveryLocation
+        ? {
+            id: options.deliveryLocation.id,
+            label: options.deliveryLocation.label,
+            city: options.deliveryLocation.city,
+            state: options.deliveryLocation.state,
+          }
+        : null,
     },
   };
 }

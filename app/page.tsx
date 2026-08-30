@@ -5,6 +5,7 @@ import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
 import { CatalogSection } from "@/components/marketplace/CatalogSection";
 import { Hero } from "@/components/marketplace/Hero";
 import { MarketplaceFooter } from "@/components/marketplace/MarketplaceFooter";
+import { useDeliveryLocation } from "@/hooks/useDeliveryLocation";
 
 /**
  * The marketplace, for everyone.
@@ -20,10 +21,16 @@ import { MarketplaceFooter } from "@/components/marketplace/MarketplaceFooter";
  */
 export default function Home() {
   const { user } = useAuth();
+  const isBuyer = user?.role === "BUYER" || user?.role === "BOTH";
+  const deliveryLocation = useDeliveryLocation(Boolean(isBuyer));
 
   return (
     <div className="flex min-h-screen flex-col bg-surface-page text-ink-900">
-      <MarketplaceNav />
+      <MarketplaceNav
+        deliveryLocations={isBuyer ? deliveryLocation.addresses : undefined}
+        selectedDeliveryLocationId={isBuyer ? deliveryLocation.selectedId : undefined}
+        onDeliveryLocationChange={isBuyer ? deliveryLocation.select : undefined}
+      />
 
       <main className="flex-1">
         {!user ? (
@@ -45,7 +52,8 @@ export default function Home() {
 
         <CatalogSection
           isAuthenticated={Boolean(user)}
-          personalized={user?.role === "BUYER" || user?.role === "BOTH"}
+          personalized={isBuyer}
+          deliveryAddressId={deliveryLocation.selectedId}
         />
       </main>
 

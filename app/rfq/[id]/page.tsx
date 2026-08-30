@@ -164,7 +164,7 @@ export default function RfqDetailPage({
                 {matches.length} match{matches.length === 1 ? "" : "es"}, best first
               </h2>
               <p className="text-[12.5px] text-ink-500">
-                Every listing here already clears your quantity, price and distance limits.
+                Each listing clears the hard constraints you supplied. Distance is only claimed when both locations were available.
               </p>
             </div>
             <ul className="space-y-3">
