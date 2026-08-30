@@ -308,7 +308,7 @@ function Demos() {
         <Card>
           <CardBody>
             <Row label="Badge">
-              <Badge tone="brand" icon={<Check />}>Verified seller</Badge>
+              <Badge tone="brand" icon={<Check />}>Verified SymbiOS seller</Badge>
               <Badge tone="neutral">54 listings</Badge>
               <Badge tone="success">In stock</Badge>
               <Badge tone="warning">Low quantity</Badge>

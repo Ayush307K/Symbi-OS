@@ -111,7 +111,7 @@ describe("assistant platform help", () => {
     ["Who can leave a review?", "fulfilled or delivered purchase"],
     ["I forgot my password", "Forgot password"],
     ["Is e-waste prohibited?", "Radioactive, biomedical"],
-    ["What is an imported TradeIndia listing?", "Unverified source"],
+    ["What is an imported TradeIndia listing?", "External source"],
   ])("answers a supported SymbiOS workflow: %s", (query, expected) => {
     const result = answerPlatformHelp(query);
     expect(result?.retrieval.mode).toBe("platform");
@@ -177,6 +177,7 @@ describe("assistant read-only tools", () => {
   it("builds a structured listing preview for table-row rendering", () => {
     expect(
       assistantListingPreview({
+        listingMode: "MANAGED",
         material: { name: "HDPE regrind" },
         seller: { name: "Circular Polymers" },
         city: "Pune",
@@ -192,6 +193,7 @@ describe("assistant read-only tools", () => {
         verified: true,
       }),
     ).toEqual({
+      listingMode: "MANAGED",
       materialName: "HDPE regrind",
       sellerName: "Circular Polymers",
       location: "Pune, Maharashtra",

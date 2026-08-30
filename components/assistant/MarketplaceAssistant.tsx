@@ -1048,7 +1048,7 @@ function ListingCitationTable({
                       <p className="mt-0.5 truncate text-[9.5px] text-ink-500">
                         {meta}
                       </p>
-                      {listing?.verified || citation.isEvalOnly ? (
+                      {listing ? (
                         <p className="mt-1 flex items-center gap-1 text-[9px] font-semibold text-ink-500">
                           {listing?.verified ? (
                             <BadgeCheck
@@ -1056,7 +1056,13 @@ function ListingCitationTable({
                               className="h-3 w-3 text-success-strong"
                             />
                           ) : null}
-                          {listing?.verified ? "Verified seller" : "Demo listing"}
+                          {listing.listingMode === "MANAGED" && listing.verified
+                            ? "Verified SymbiOS seller"
+                            : listing.listingMode === "MANAGED"
+                              ? "Seller unavailable"
+                            : listing.listingMode === "EVAL"
+                              ? "Synthetic demo listing"
+                              : "External source"}
                         </p>
                       ) : null}
                     </div>

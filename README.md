@@ -1,7 +1,7 @@
 # Symbi-OS
 
-Symbi-OS is a modular-monolith B2B marketplace for verified, non-hazardous
-industrial by-products. The Next.js application contains the web UI, thin Route
+Symbi-OS is a modular-monolith B2B marketplace for non-hazardous industrial
+by-product discovery and verified managed transactions. The Next.js application contains the web UI, thin Route
 Handlers, domain services, Prisma persistence, real listing-provider adapters,
 grounded RAG, seller onboarding, bids, and sandbox transactions in one
 deployable unit.
@@ -14,8 +14,26 @@ materials. Only canonical non-hazardous categories are accepted. The same
 policy runs during provider ingestion, seller listing creation, search, RAG
 indexing, bids, and checkout.
 
-Synthetic listings are not returned by production APIs and are not part of the
-default ingestion workflow. A database file must never be committed.
+The current demo catalogue keeps all active records discoverable. Visibility
+does not imply transactability: synthetic records and external sourcing leads
+cannot receive marketplace bids, messages, carts, or orders. A database file
+must never be committed.
+
+### Listing modes and transaction boundary
+
+Every listing has one explicit `listingMode`:
+
+| Mode | Buyer-facing label | Visible | Marketplace actions |
+| --- | --- | --- | --- |
+| `MANAGED` | Verified SymbiOS seller | Yes | Bid/message when the seller is active and approved; cart/checkout only for a positive fixed price |
+| `EXTERNAL_LEAD` | External source | Yes | Original source link only; no internal transaction or messaging |
+| `EVAL` | Synthetic demo listing | Yes in the current demo catalogue | None |
+
+Seller-created listings enter `MANAGED`; provider imports enter
+`EXTERNAL_LEAD`; evaluation fixtures enter `EVAL`. Backend policies also require
+an active seller account, approved seller onboarding, listing verification,
+inventory, and a non-expired listing. UI capability checks mirror those rules
+for honest CTAs, but the backend remains authoritative.
 
 ## Architecture
 
@@ -232,10 +250,13 @@ Documents are embedded with `RETRIEVAL_DOCUMENT` and queries with
 ## RAG corpus evaluation
 
 Synthetic evaluation listings use the same listing, document, chunk, and RAG
-code path as real records. Isolation is explicit and default-deny:
+code path as real records. Evaluation behavior is explicit:
 
-- `MarketplaceListing.isEvalOnly` prevents marketplace, cart, bid, checkout,
-  messaging, matching, statistics, and ranked-feed visibility.
+- `MarketplaceListing.listingMode=EVAL` prevents cart, bid, checkout, and
+  messaging. The current demo policy deliberately keeps these rows visible in
+  catalogue and feed discovery with the `Synthetic demo listing` label.
+- `MarketplaceListing.isEvalOnly` remains the corpus tag used by RAG, edge, and
+  evaluation maintenance jobs; it is not a buyer-action permission flag.
 - `KnowledgeDocument.isEvalOnly` makes normal RAG queries real-only even when
   evaluation chunks are indexed.
 - `User.isEvalOnly` and `PurchaseOrder.isEvalOnly` prevent evaluation buyer

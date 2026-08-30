@@ -315,6 +315,7 @@ export async function rankBuyerFeed(
       materialId: true,
       title: true,
       slug: true,
+      listingMode: true,
       isEvalOnly: true,
       evalScenarioTags: true,
       category: true,
@@ -335,6 +336,7 @@ export async function rankBuyerFeed(
       minOrderQuantity: true,
       lotIncrement: true,
       leadTimeDays: true,
+      verified: true,
       yearsActive: true,
       description: true,
       packaging: true,
@@ -397,6 +399,7 @@ export async function rankBuyerFeed(
           companyId: { in: companyIds },
           accountStatus: "ACTIVE",
           role: { in: ["SELLER", "BOTH"] },
+          sellerOnboarding: { is: { status: "APPROVED" } },
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true, companyId: true },
@@ -437,7 +440,9 @@ export async function rankBuyerFeed(
     const response = responseByListing.get(listing.id);
     const responseRate = response?.total ? (response.replied / response.total) * 100 : 0;
     const verified =
-      listing.sourceType === "seller_submitted" && approvedCompanies.has(listing.seller.id);
+      listing.listingMode === "MANAGED" &&
+      listing.verified &&
+      approvedCompanies.has(listing.seller.id);
     const ordersCompleted = ordersByCompany.get(listing.seller.id) ?? 0;
     const baseSemanticFit =
       similarityById.get(listing.id) ??
@@ -496,6 +501,7 @@ export async function rankBuyerFeed(
         id: listing.id,
         materialId: listing.materialId,
         slug: listing.slug,
+        listingMode: listing.listingMode,
         isEvalOnly: listing.isEvalOnly,
         evalScenarioTags: listing.evalScenarioTags,
         title: listing.title,

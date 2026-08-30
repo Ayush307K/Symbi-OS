@@ -5,10 +5,15 @@ import { Check, MapPin, Package } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MatchScore, bandLabel, scoreBand } from "./MatchScore";
+import { ExternalSourceLink } from "@/components/marketplace/ExternalSourceLink";
+import { listingCapabilities, type ListingMode } from "@/lib/listing-mode";
 
 export interface MatchListing {
   id: string;
   title: string;
+  listingMode: ListingMode;
+  verified: boolean;
+  sellerUserId: string | null;
   seller?: string | null;
   category: string;
   subcategory?: string | null;
@@ -18,6 +23,8 @@ export interface MatchListing {
   pricePerUnit: number | null;
   city?: string | null;
   state?: string | null;
+  sourceName?: string | null;
+  sourceUrl?: string | null;
 }
 
 export interface MatchCardProps {
@@ -53,6 +60,13 @@ export function MatchCard({
 }: MatchCardProps) {
   const band = scoreBand(score);
   const priced = listing.priceMode === "FIXED" && listing.pricePerUnit !== null;
+  const capabilities = listingCapabilities({
+    listingMode: listing.listingMode,
+    verified: listing.verified,
+    sellerUserId: listing.sellerUserId,
+    priceMode: listing.priceMode,
+    price: listing.pricePerUnit,
+  });
   const place = [listing.city, listing.state].filter(Boolean).join(", ");
 
   return (
@@ -123,23 +137,31 @@ export function MatchCard({
         </ul>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {priced ? (
+          {capabilities.canBuy ? (
             <Button
               variant="primary"
               size="sm"
               onClick={() => {
-                window.location.href = `/checkout?listing=${listing.id}&quantity=${quantity}`;
+                window.location.href = `/checkout?listingId=${listing.id}&quantity=${quantity}`;
               }}
             >
               Buy {quantity.toLocaleString("en-IN")} {listing.unit}
             </Button>
           ) : null}
-          <Link
-            href={`/products/${listing.id}`}
-            className="inline-flex h-8 items-center rounded-control border border-ink-300 bg-surface-card px-3 text-[13px] font-semibold text-ink-700 hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
-          >
-            {priced ? "View listing" : "Ask for a quote"}
-          </Link>
+          {listing.listingMode === "EXTERNAL_LEAD" ? (
+            <ExternalSourceLink
+              href={listing.sourceUrl ?? null}
+              sourceName={listing.sourceName}
+              size="sm"
+            />
+          ) : (
+            <Link
+              href={`/products/${listing.id}`}
+              className="inline-flex h-8 items-center rounded-control border border-ink-300 bg-surface-card px-3 text-[13px] font-semibold text-ink-700 hover:bg-surface-sunken focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+            >
+              {capabilities.canBid ? (priced ? "View listing" : "Ask for a quote") : "View details"}
+            </Link>
+          )}
         </div>
       </div>
     </li>

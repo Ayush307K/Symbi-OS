@@ -39,9 +39,9 @@ export function MarketplaceFooter() {
             </span>
           </div>
           <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-500">
-            Verified non-hazardous industrial by-products. Radioactive,
-            biomedical, explosive, asbestos, and e-waste categories are rejected
-            at ingestion, listing, search, and checkout.
+            Verified SymbiOS seller offers and clearly labelled external sourcing
+            leads for non-hazardous industrial by-products. Hazardous categories
+            are rejected at ingestion, listing, search, and checkout.
           </p>
         </div>
 

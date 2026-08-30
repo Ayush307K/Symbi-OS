@@ -20,6 +20,8 @@ export async function GET(
                 id: true,
                 title: true,
                 slug: true,
+                listingMode: true,
+                verified: true,
                 category: true,
                 subcategory: true,
                 quantityAvailable: true,
@@ -29,7 +31,23 @@ export async function GET(
                 city: true,
                 state: true,
                 status: true,
-                seller: { select: { name: true } },
+                sourceName: true,
+                sourceUrl: true,
+                seller: {
+                  select: {
+                    name: true,
+                    users: {
+                      where: {
+                        accountStatus: "ACTIVE",
+                        role: { in: ["SELLER", "BOTH"] },
+                        sellerOnboarding: { is: { status: "APPROVED" } },
+                      },
+                      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                      take: 1,
+                      select: { id: true },
+                    },
+                  },
+                },
               },
             },
           },
@@ -58,6 +76,8 @@ export async function GET(
         explanations: JSON.parse(match.explanationJson),
         listing: {
           ...match.listing,
+          seller: match.listing.seller.name,
+          sellerUserId: match.listing.seller.users[0]?.id ?? null,
           pricePerUnit:
             match.listing.priceMode === "FIXED"
               ? match.listing.pricePerUnit

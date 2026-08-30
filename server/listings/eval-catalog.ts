@@ -74,6 +74,7 @@ export async function seedEvaluationCatalog(options: {
           id: listingId,
           title: listing.title,
           slug: `eval-${listing.key}`,
+          listingMode: "EVAL",
           sourceType: "synthetic",
           sourceName: "Symbi-OS ISRI-grounded evaluation fixture",
           externalId: `eval:${listing.key}`,
@@ -115,6 +116,7 @@ export async function seedEvaluationCatalog(options: {
         },
         update: {
           title: listing.title,
+          listingMode: "EVAL",
           sourceType: "synthetic",
           sourceName: "Symbi-OS ISRI-grounded evaluation fixture",
           isEvalOnly: true,

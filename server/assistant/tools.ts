@@ -5,7 +5,10 @@ import type {
   AssistantRetrieval,
 } from "@/lib/assistant-types";
 import { SAFE_CATEGORIES } from "@/lib/listing-constants";
-import { publicListingWhere } from "@/server/listings/policy";
+import {
+  managedListingWhere,
+  publicListingWhere,
+} from "@/server/listings/policy";
 import type { PlatformHelpAnswer } from "@/server/assistant/platform-help";
 import { assistantListingPreview } from "@/server/assistant/listing-preview";
 import type { RagConversationTurn } from "@/server/rag/query";
@@ -259,14 +262,7 @@ const searchListings: ToolRegistration<typeof searchSchema> = {
             ? { quantityAvailable: { gte: input.minQuantity } }
             : {},
           input.verifiedOnly
-            ? {
-                sourceType: "seller_submitted",
-                seller: {
-                  users: {
-                    some: { sellerOnboarding: { is: { status: "APPROVED" } } },
-                  },
-                },
-              }
+            ? managedListingWhere
             : {},
         ],
       },

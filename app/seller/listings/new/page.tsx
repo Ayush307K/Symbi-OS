@@ -482,7 +482,7 @@ export default function NewSellerListingPage() {
             description={
               ["SUBMITTED", "UNDER_REVIEW"].includes(onboardingStatus)
                 ? "Your onboarding is submitted and awaiting review. Listing creation unlocks once it is approved."
-                : "Complete seller onboarding and verification before creating a listing. Buyers only see listings from verified sellers."
+                : "Complete seller onboarding and verification before creating a managed SymbiOS listing. External sourcing leads remain clearly labelled and cannot transact here."
             }
             action={
               <Button

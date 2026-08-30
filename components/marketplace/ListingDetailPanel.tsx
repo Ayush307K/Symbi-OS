@@ -29,6 +29,7 @@ import { ExternalSourceLink } from "@/components/marketplace/ExternalSourceLink"
 import { cn } from "@/lib/cn";
 import { externalHttpUrl } from "@/lib/external-url";
 import { listingFallbackImage } from "@/lib/listing-images";
+import { listingCapabilities, listingTrustLabel } from "@/lib/listing-mode";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
 interface ListingReview {
@@ -331,6 +332,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
   const price = money(listing.price);
   const sourceUrl = externalHttpUrl(listing.sourceUrl);
+  const capabilities = listingCapabilities(listing);
+  const trustLabel = listingTrustLabel(listing.listingMode);
   const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
   const stats = data?.sellerStats;
 
@@ -388,29 +391,37 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
               <span className="text-[12px] font-medium uppercase tracking-wide text-ink-500">
                 {listing.category}
               </span>
-              {listing.isEvalOnly ? (
+              {listing.listingMode === "EVAL" ? (
                 <Badge
                   tone="neutral"
                   icon={<Info />}
                   title="Synthetic evaluation listing. It is not a live seller offer."
                 >
-                  Demo listing
+                  {trustLabel}
                 </Badge>
-              ) : listing.verified ? (
+              ) : listing.listingMode === "MANAGED" && capabilities.canMessage ? (
                 <Badge tone="brand" icon={<BadgeCheck />}>
-                  Verified seller
+                  {trustLabel}
                 </Badge>
-              ) : (
+              ) : listing.listingMode === "EXTERNAL_LEAD" ? (
                 <Badge
                   tone="neutral"
                   icon={<Info />}
                   title={
                     listing.sourceName
-                      ? `Imported from ${listing.sourceName}. The seller has not completed verification.`
-                      : "The seller has not completed verification."
+                      ? `Sourced from ${listing.sourceName}. This supplier is not connected for SymbiOS transactions.`
+                      : "This supplier is not connected for SymbiOS transactions."
                   }
                 >
-                  Unverified source
+                  {trustLabel}
+                </Badge>
+              ) : (
+                <Badge
+                  tone="neutral"
+                  icon={<Info />}
+                  title="This SymbiOS seller offer is temporarily unavailable while its seller eligibility is reviewed."
+                >
+                  Seller unavailable
                 </Badge>
               )}
             </div>
@@ -526,14 +537,27 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             </div>
 
             <div className="mt-4 flex flex-col gap-2">
-              {listing.isEvalOnly ? (
+              {listing.listingMode === "EVAL" ? (
                 <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] leading-relaxed text-ink-600">
                   Synthetic evaluation listing. It remains visible for demo and
                   retrieval testing, but cannot be purchased, bid on, or messaged.
                 </div>
+              ) : listing.listingMode === "EXTERNAL_LEAD" ? (
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] leading-relaxed text-ink-600">
+                    This is an external sourcing lead, not a SymbiOS seller offer.
+                    Confirm price, stock and terms with the source.
+                  </div>
+                  <ExternalSourceLink
+                    href={sourceUrl}
+                    sourceName={listing.sourceName}
+                    variant="primary"
+                    fullWidth
+                  />
+                </div>
               ) : (
                 <>
-                  {price ? (
+                  {capabilities.canBuy ? (
                     <Button
                       variant="primary"
                       fullWidth
@@ -544,34 +568,35 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                       Buy now
                     </Button>
                   ) : null}
-                  <Button
-                    variant={price ? "secondary" : "primary"}
-                    fullWidth
-                    leadingIcon={<Gavel className="h-4 w-4" />}
-                    onClick={() => {
-                      // Seed with the list price where there is one, so a buyer
-                      // negotiating from a stated price starts at it rather than
-                      // from an empty field.
-                      setBidPrice(price && listing.price ? String(listing.price) : "");
-                      setIsBidOpen(true);
-                    }}
-                    disabled={Boolean(quantityError)}
-                    title={quantityError ?? undefined}
-                  >
-                    Place a bid
-                  </Button>
-                  <div className="grid grid-cols-2 gap-2">
+                  {capabilities.canBid ? (
                     <Button
-                      variant="ghost"
-                      leadingIcon={<ShoppingCart className="h-4 w-4" />}
-                      loading={pending === "cart"}
-                      onClick={addToCart}
+                      variant={price ? "secondary" : "primary"}
+                      fullWidth
+                      leadingIcon={<Gavel className="h-4 w-4" />}
+                      onClick={() => {
+                        setBidPrice(price && listing.price ? String(listing.price) : "");
+                        setIsBidOpen(true);
+                      }}
                       disabled={Boolean(quantityError)}
                       title={quantityError ?? undefined}
                     >
-                      Cart
+                      Place a bid
                     </Button>
-                    {listing.sellerUserId ? (
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    {capabilities.canAddToCart ? (
+                      <Button
+                        variant="ghost"
+                        leadingIcon={<ShoppingCart className="h-4 w-4" />}
+                        loading={pending === "cart"}
+                        onClick={addToCart}
+                        disabled={Boolean(quantityError)}
+                        title={quantityError ?? undefined}
+                      >
+                        Cart
+                      </Button>
+                    ) : null}
+                    {capabilities.canMessage ? (
                       <Button
                         variant="ghost"
                         leadingIcon={<MessageSquare className="h-4 w-4" />}
@@ -580,16 +605,13 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                       >
                         Message
                       </Button>
-                    ) : (
-                      <ExternalSourceLink
-                        href={sourceUrl}
-                        sourceName={listing.sourceName}
-                        variant="ghost"
-                        label="View source"
-                        fullWidth
-                      />
-                    )}
+                    ) : null}
                   </div>
+                  {!capabilities.canBid && !capabilities.canMessage ? (
+                    <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] text-ink-600">
+                      This managed listing is temporarily unavailable for marketplace actions.
+                    </div>
+                  ) : null}
                 </>
               )}
               <Button

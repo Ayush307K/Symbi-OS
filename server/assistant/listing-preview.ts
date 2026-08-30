@@ -1,6 +1,7 @@
 import type { AssistantListingPreview } from "@/lib/assistant-types";
 
 interface ListingPreviewSource {
+  listingMode: "MANAGED" | "EXTERNAL_LEAD" | "EVAL";
   material: { name: string };
   seller: { name: string };
   city: string;
@@ -22,6 +23,7 @@ export function assistantListingPreview(
 ): AssistantListingPreview {
   const location = [listing.city, listing.state].filter(Boolean).join(", ");
   return {
+    listingMode: listing.listingMode,
     materialName: listing.material.name,
     sellerName: listing.seller.name,
     location,
@@ -32,6 +34,6 @@ export function assistantListingPreview(
     currency: listing.currency,
     minOrderQuantity: listing.minOrderQuantity,
     imageUrl: listing.imageUrl.trim() || null,
-    verified: listing.sourceType === "seller_submitted" && listing.verified,
+    verified: listing.listingMode === "MANAGED" && listing.verified,
   };
 }

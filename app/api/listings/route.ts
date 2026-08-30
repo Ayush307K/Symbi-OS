@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
           id,
           title,
           slug: `${slugify(title)}-${id.slice(-10)}`,
+          listingMode: "MANAGED",
           sourceType: "seller_submitted",
           sourceName: "Symbi-OS seller submission",
           externalId: `seller:${id}`,

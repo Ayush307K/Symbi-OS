@@ -3,6 +3,7 @@ import { GOLDEN_SET } from "@/eval/golden-set";
 import { EVAL_LISTINGS } from "@/eval/fixtures/listings";
 import {
   publicListingWhere,
+  managedListingWhere,
   transactableListingWhere,
 } from "@/server/listings/policy";
 import { isTradeIndiaScrapProduct } from "@/server/listings/providers";
@@ -13,7 +14,18 @@ afterEach(() => vi.unstubAllEnvs());
 describe("evaluation corpus definition", () => {
   it("shows synthetic listings without making them transactable", () => {
     expect(publicListingWhere).not.toHaveProperty("isEvalOnly");
-    expect(transactableListingWhere).toMatchObject({ isEvalOnly: false });
+    expect(publicListingWhere).not.toHaveProperty("listingMode");
+    expect(managedListingWhere).toMatchObject({
+      listingMode: "MANAGED",
+      isEvalOnly: false,
+      verified: true,
+    });
+    expect(transactableListingWhere).toMatchObject({
+      listingMode: "MANAGED",
+      isEvalOnly: false,
+      verified: true,
+      priceMode: "FIXED",
+    });
     expect(EVAL_LISTINGS).toHaveLength(28);
     expect(EVAL_LISTINGS.some((listing) => listing.category === ("Glass" as never))).toBe(
       false,

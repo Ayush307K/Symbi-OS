@@ -6,6 +6,7 @@ function mapListing(listing: any) {
   return {
     id: listing.id,
     materialId: listing.material.id,
+    listingMode: listing.listingMode,
     isEvalOnly: listing.isEvalOnly,
     evalScenarioTags: listing.evalScenarioTags,
     title: listing.title,
@@ -91,6 +92,7 @@ export async function GET(
             companyId: listing.sellerCompanyId,
             accountStatus: "ACTIVE",
             role: { in: ["SELLER", "BOTH"] },
+            sellerOnboarding: { is: { status: "APPROVED" } },
           },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: { id: true },
@@ -168,7 +170,8 @@ export async function GET(
             )
           : 0,
         verified:
-          listing.sourceType === "seller_submitted" &&
+          listing.listingMode === "MANAGED" &&
+          listing.verified &&
           Boolean(sellerOnboarding),
         ordersCompleted: fulfilledOrders,
       },

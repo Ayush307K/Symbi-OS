@@ -1,4 +1,5 @@
 export interface AssistantListingPreview {
+  listingMode: "MANAGED" | "EXTERNAL_LEAD" | "EVAL";
   materialName: string;
   sellerName: string;
   location: string;

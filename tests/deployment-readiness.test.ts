@@ -8,6 +8,7 @@ const readyState: ProductionSchemaState = {
   vectorExtension: true,
   userEvalOnly: true,
   listingEvalOnly: true,
+  listingMode: true,
   listingScenarioTags: true,
   listingClusterId: true,
   orderEvalOnly: true,

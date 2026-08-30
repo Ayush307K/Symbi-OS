@@ -11,6 +11,7 @@ import ListingImage from "@/components/ListingImage";
 import { ExternalSourceLink } from "@/components/marketplace/ExternalSourceLink";
 import { cn } from "@/lib/cn";
 import { listingFallbackImage } from "@/lib/listing-images";
+import { listingCapabilities, listingTrustLabel } from "@/lib/listing-mode";
 import type { MaterialListing } from "@/lib/marketplace-types";
 
 /**
@@ -53,6 +54,8 @@ export function ListingCard({
   const price = formatMoney(listing.price);
   const quantity = formatQuantity(listing.quantity);
   const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
+  const capabilities = listingCapabilities(listing);
+  const trustLabel = listingTrustLabel(listing.listingMode);
 
   return (
     <Card
@@ -75,35 +78,44 @@ export function ListingCard({
         {/* Verification is stated either way. A listing carried in from a public
             provider feed is real and attributed, but its seller has not been
             verified — saying nothing would let it read as verified by default. */}
-        {listing.isEvalOnly ? (
+        {listing.listingMode === "EVAL" ? (
           <Badge
             tone="neutral"
             icon={<Info />}
             title="Synthetic evaluation listing. It is visible for demo and retrieval testing, but is not a live seller offer."
             className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
           >
-            Demo listing
+            {trustLabel}
           </Badge>
-        ) : listing.verified ? (
+        ) : listing.listingMode === "MANAGED" && capabilities.canMessage ? (
           <Badge
             tone="brand"
             icon={<BadgeCheck />}
             className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
           >
-            Verified seller
+            {trustLabel}
           </Badge>
-        ) : (
+        ) : listing.listingMode === "EXTERNAL_LEAD" ? (
           <Badge
             tone="neutral"
             icon={<Info />}
             title={
               listing.sourceName
-                ? `Imported from ${listing.sourceName}. The seller has not completed verification.`
-                : "The seller has not completed verification."
+                ? `Sourced from ${listing.sourceName}. This supplier is not connected for SymbiOS transactions.`
+                : "This supplier is not connected for SymbiOS transactions."
             }
             className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
           >
-            Unverified source
+            {trustLabel}
+          </Badge>
+        ) : (
+          <Badge
+            tone="neutral"
+            icon={<Info />}
+            title="This SymbiOS seller offer is temporarily unavailable while its seller eligibility is reviewed."
+            className="absolute left-3 top-3 bg-surface-card/95 backdrop-blur-[2px]"
+          >
+            Seller unavailable
           </Badge>
         )}
 
@@ -193,11 +205,19 @@ export function ListingCard({
             so these lead to the surface that collects it rather than firing an
             action from here. */}
         <div className="mt-auto flex flex-col gap-1.5 pt-1">
-          {listing.isEvalOnly ? (
+          {listing.listingMode === "EVAL" ? (
             <Button variant="secondary" size="sm" fullWidth disabled>
               Evaluation only
             </Button>
-          ) : price ? (
+          ) : listing.listingMode === "EXTERNAL_LEAD" ? (
+            <ExternalSourceLink
+              href={listing.sourceUrl}
+              sourceName={listing.sourceName}
+              variant="primary"
+              size="sm"
+              fullWidth
+            />
+          ) : capabilities.canBuy ? (
             <>
               <Button
                 variant="primary"
@@ -219,7 +239,7 @@ export function ListingCard({
                 Place a bid instead →
               </Link>
             </>
-          ) : listing.sellerUserId ? (
+          ) : capabilities.canMessage ? (
             <Button
               variant="primary"
               size="sm"
@@ -231,13 +251,9 @@ export function ListingCard({
               Ask quote
             </Button>
           ) : (
-            <ExternalSourceLink
-              href={listing.sourceUrl}
-              sourceName={listing.sourceName}
-              variant="primary"
-              size="sm"
-              fullWidth
-            />
+            <Button variant="secondary" size="sm" fullWidth disabled>
+              Seller unavailable
+            </Button>
           )}
         </div>
       </div>

@@ -10,7 +10,10 @@ import {
   parseJson,
   requireUser,
 } from "@/server/http";
-import { transactableListingWhere } from "@/server/listings/policy";
+import {
+  listingHasExpired,
+  transactableListingWhere,
+} from "@/server/listings/policy";
 import { calculateFees } from "@/server/fees";
 import {
   invoiceNumber,
@@ -316,6 +319,9 @@ async function directCheckout(input: {
       }
       if (listing.sellerCompanyId === input.buyerCompanyId) {
         throw new ApiError(409, "You cannot buy your own listing.", "SELF_PURCHASE");
+      }
+      if (listingHasExpired(listing.expiresAt)) {
+        throw new ApiError(409, `${listing.title} has expired.`, "LISTING_EXPIRED");
       }
       if (
         item.quantity > listing.quantityAvailable ||

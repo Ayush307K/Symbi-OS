@@ -1,3 +1,5 @@
+import type { ListingMode } from "@/lib/listing-mode";
+
 /**
  * Shapes returned by GET /api/materials. These mirror the API response exactly
  * — they are not a view model. If the API changes, change it there first.
@@ -5,6 +7,7 @@
 export interface MaterialListing {
   id: string;
   materialId: string;
+  listingMode: ListingMode;
   isEvalOnly: boolean;
   evalScenarioTags: string[];
   title: string;
@@ -22,6 +25,7 @@ export interface MaterialListing {
   state: string;
   country: string;
   imageUrl: string;
+  priceMode: string;
   price: number | null;
   quantity: number | null;
   unit: string;

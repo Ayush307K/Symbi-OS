@@ -22,7 +22,7 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Sign in"
-      subtitle="Trade secondary raw materials with verified counterparties."
+      subtitle="Transact with verified counterparties and discover clearly labelled external sources."
       footer={
         <>
           No account yet?{" "}

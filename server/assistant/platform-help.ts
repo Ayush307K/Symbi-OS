@@ -479,10 +479,10 @@ const PLATFORM_HELP_TOPICS: PlatformHelpTopic[] = [
   {
     id: "external-listings",
     patterns: [
-      /\b(imported listing|external listing|source listing|view source|unverified source|tradeindia|recycleinme|seller not (?:on|in) (?:the )?platform)\b/,
+      /\b(imported listing|external listing|external source|source listing|view source|unverified source|tradeindia|recycleinme|seller not (?:on|in) (?:the )?platform)\b/,
     ],
     answer:
-      "Imported listings are labelled Unverified source and are not platform-verified supply. Use View source when the supplier has not joined SymbiOS. Reconfirm price, stock, specifications, freight and terms before transacting.",
+      "Imported listings are labelled External source. They are sourcing leads, not SymbiOS seller offers, so bids, messages, carts, and checkout stay disabled. Use View source and reconfirm price, stock, specifications, freight, and terms with the original provider.",
     citations: [
       guideCitation(
         "Browse sourced and seller-created listings",

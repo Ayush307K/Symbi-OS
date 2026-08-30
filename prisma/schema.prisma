@@ -8,6 +8,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum ListingMode {
+  MANAGED
+  EXTERNAL_LEAD
+  EVAL
+}
+
 model User {
   id               String    @id @default(uuid())
   email            String    @unique
@@ -176,6 +182,7 @@ model MarketplaceListing {
   id                   String                      @id
   title                String
   slug                 String                      @unique
+  listingMode          ListingMode                 @default(EXTERNAL_LEAD)
   sourceType           String                      @default("synthetic")
   isEvalOnly           Boolean                     @default(false)
   evalScenarioTags     String[]                    @default([])
@@ -256,6 +263,7 @@ model MarketplaceListing {
   @@index([state])
   @@index([state, city, pincode])
   @@index([country])
+  @@index([listingMode, status])
   @@index([sourceType])
   @@index([isEvalOnly, status])
   @@index([evalClusterId])

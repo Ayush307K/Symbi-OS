@@ -10,13 +10,13 @@ const POINTS = [
   },
   {
     icon: Store,
-    title: "Verified sellers",
-    body: "GST and company identity are checked before a listing can be published.",
+    title: "Clear source labels",
+    body: "Managed sellers, external sourcing leads, and synthetic demo records are identified before you act.",
   },
   {
     icon: PackageCheck,
-    title: "Real inventory",
-    body: "Live quantities and locations from Indian suppliers, not synthetic catalogue filler.",
+    title: "Protected transactions",
+    body: "Only verified, connected sellers can receive bids, messages, carts, or orders inside SymbiOS.",
   },
 ];
 

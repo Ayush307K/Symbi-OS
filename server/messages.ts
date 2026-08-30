@@ -48,20 +48,28 @@ export async function requireThreadParticipant(
  * without owning a SymbiOS account. A buyer-only or disabled user is not a
  * substitute for a seller: neither can legitimately receive seller enquiries.
  */
-export async function findActiveSellerUserId(
+export async function findEligibleSellerUser(
   companyId: string,
   db: ExtendedPrismaClient = prisma,
 ) {
-  const seller = await db.user.findFirst({
+  return db.user.findFirst({
     where: {
       companyId,
       accountStatus: "ACTIVE",
       role: { in: ["SELLER", "BOTH"] },
+      sellerOnboarding: { is: { status: "APPROVED" } },
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true },
+    select: { id: true, email: true },
   });
-  return seller?.id ?? null;
+}
+
+/** Backwards-compatible ID-only resolver for message and order workflows. */
+export async function findActiveSellerUserId(
+  companyId: string,
+  db: ExtendedPrismaClient = prisma,
+) {
+  return (await findEligibleSellerUser(companyId, db))?.id ?? null;
 }
 
 /**
@@ -82,6 +90,8 @@ export async function createListingMessageThread(
     where: { id: input.listingId, ...publicListingWhere },
     select: {
       id: true,
+      listingMode: true,
+      verified: true,
       sellerCompanyId: true,
       sourceName: true,
       sourceUrl: true,
@@ -95,6 +105,20 @@ export async function createListingMessageThread(
       409,
       "Use an existing buyer thread for your own listing.",
       "SELF_THREAD",
+    );
+  }
+
+  if (listing.listingMode !== "MANAGED" || !listing.verified) {
+    throw new ApiError(
+      409,
+      listing.listingMode === "EVAL"
+        ? "Synthetic demo listings cannot receive messages."
+        : "This external supplier is not connected to SymbiOS messaging. Use the original source listing to contact them.",
+      "SELLER_NOT_ON_PLATFORM",
+      {
+        sourceName: listing.sourceName,
+        sourceUrl: listing.sourceUrl,
+      },
     );
   }
 

@@ -118,6 +118,14 @@ describe.skipIf(!databaseReachable)("buyer/seller messaging integration", () => 
         },
       ],
     });
+    await prisma.sellerOnboarding.create({
+      data: {
+        userId: sellerId,
+        status: "APPROVED",
+        currentStep: "COMPLETE",
+        verifiedAt: new Date(),
+      },
+    });
     await prisma.wasteMaterial.create({
       data: {
         id: materialId,
@@ -156,7 +164,9 @@ describe.skipIf(!databaseReachable)("buyer/seller messaging integration", () => 
           id: platformListingId,
           slug: `message-platform-listing-${suffix}`,
           title: `Platform HDPE Listing ${suffix}`,
+          listingMode: "MANAGED",
           sourceType: "seller_submitted",
+          verified: true,
           sellerCompanyId,
           city: "Pune",
         },
@@ -165,6 +175,7 @@ describe.skipIf(!databaseReachable)("buyer/seller messaging integration", () => 
           id: externalListingId,
           slug: `message-external-listing-${suffix}`,
           title: `External HDPE Listing ${suffix}`,
+          listingMode: "EXTERNAL_LEAD",
           sourceType: "tradeindia",
           sourceName: "TradeIndia",
           sourceUrl: `https://example.com/listings/${suffix}`,

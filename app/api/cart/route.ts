@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { parsePositiveInt, requireAuth } from "@/lib/marketplace";
 import {
   publicListingWhere,
+  listingHasExpired,
   transactableListingWhere,
 } from "@/server/listings/policy";
 import { assertTrustedOrigin } from "@/server/http";
@@ -45,6 +46,9 @@ export async function POST(request: NextRequest) {
   });
   if (!listing) {
     return NextResponse.json({ error: "Listing is unavailable." }, { status: 404 });
+  }
+  if (listingHasExpired(listing.expiresAt)) {
+    return NextResponse.json({ error: "Listing has expired." }, { status: 409 });
   }
 
   if (
@@ -90,6 +94,7 @@ export async function PATCH(request: NextRequest) {
   });
   if (
     !listing ||
+    listingHasExpired(listing.expiresAt) ||
     quantity < listing.minOrderQuantity ||
     quantity > listing.quantityAvailable ||
     (quantity - listing.minOrderQuantity) % listing.lotIncrement !== 0

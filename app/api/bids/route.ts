@@ -10,7 +10,11 @@ import {
   parseJson,
   requireUser,
 } from "@/server/http";
-import { transactableListingWhere } from "@/server/listings/policy";
+import {
+  listingHasExpired,
+  managedListingWhere,
+} from "@/server/listings/policy";
+import { findEligibleSellerUser } from "@/server/messages";
 import { enforceRateLimit } from "@/server/rate-limit";
 import { releaseExpiredReservations } from "@/server/inventory";
 
@@ -57,13 +61,13 @@ export async function POST(request: NextRequest) {
     }
 
     const listing = await prisma.marketplaceListing.findFirst({
-      where: { id: body.listingId, ...transactableListingWhere },
+      where: { id: body.listingId, ...managedListingWhere },
       include: { material: true, seller: true },
     });
     if (!listing) {
       throw new ApiError(404, "Listing is unavailable.", "LISTING_UNAVAILABLE");
     }
-    if (listing.expiresAt && listing.expiresAt <= new Date()) {
+    if (listingHasExpired(listing.expiresAt)) {
       throw new ApiError(409, "Listing has expired.", "LISTING_EXPIRED");
     }
     if (body.quantity > listing.quantityAvailable) {
@@ -93,9 +97,14 @@ export async function POST(request: NextRequest) {
     if (listing.sellerCompanyId === auth.companyId) {
       throw new ApiError(409, "You cannot bid on your own listing.", "SELF_BID");
     }
-    const seller = await prisma.user.findFirst({
-      where: { companyId: listing.sellerCompanyId },
-    });
+    const seller = await findEligibleSellerUser(listing.sellerCompanyId);
+    if (!seller) {
+      throw new ApiError(
+        409,
+        "This listing does not have an eligible seller to receive the bid.",
+        "SELLER_NOT_CONNECTED",
+      );
+    }
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const bid = await prisma.$transaction(async (tx) => {
       const created = await tx.bid.create({
@@ -114,7 +123,7 @@ export async function POST(request: NextRequest) {
           bidderUserId: auth.userId,
           bidderEmail: auth.email,
           bidderCompany: auth.companyName,
-          sellerUserId: seller?.id ?? null,
+          sellerUserId: seller.id,
           producerId: listing.sellerCompanyId,
           expiresAt,
         },
@@ -145,22 +154,20 @@ export async function POST(request: NextRequest) {
       });
       return created;
     });
-    if (seller) {
-      await notify(
-        seller.id,
-        "BID_CREATED",
-        "New offer received",
-        `${auth.companyName} offered ₹${body.pricePerUnit.toLocaleString("en-IN")} per ${listing.unit} for ${body.quantity} ${listing.unit}.`,
-        "/seller",
-      );
-      void notifySellerOfNewBid({
-        sellerEmail: seller.email,
-        materialName: listing.material.name,
-        bidderCompany: auth.companyName,
-        quantity: body.quantity,
-        pricePerUnit: body.pricePerUnit,
-      });
-    }
+    await notify(
+      seller.id,
+      "BID_CREATED",
+      "New offer received",
+      `${auth.companyName} offered ₹${body.pricePerUnit.toLocaleString("en-IN")} per ${listing.unit} for ${body.quantity} ${listing.unit}.`,
+      "/seller",
+    );
+    void notifySellerOfNewBid({
+      sellerEmail: seller.email,
+      materialName: listing.material.name,
+      bidderCompany: auth.companyName,
+      quantity: body.quantity,
+      pricePerUnit: body.pricePerUnit,
+    });
     return NextResponse.json({ success: true, bid }, { status: 201 });
   } catch (error) {
     return apiError(error);

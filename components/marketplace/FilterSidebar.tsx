@@ -185,7 +185,7 @@ function Controls({
           onChange={() => onApply({ ...filters, verified: !filters.verified })}
           className="h-3.5 w-3.5 shrink-0 accent-copper-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
         />
-        Verified sellers only
+        Verified SymbiOS sellers only
       </label>
 
       <div className="flex flex-col gap-2 border-t border-ink-200 pt-4">

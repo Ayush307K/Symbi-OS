@@ -6,7 +6,11 @@ import prisma from "@/lib/prisma";
 import { LISTING_UNITS, SAFE_CATEGORIES } from "@/lib/listing-constants";
 import { apiError, ApiError } from "@/server/http";
 import { expireListings } from "@/server/listings/lifecycle";
-import { catalogOrderBy, publicListingWhere } from "@/server/listings/policy";
+import {
+  catalogOrderBy,
+  managedListingWhere,
+  publicListingWhere,
+} from "@/server/listings/policy";
 
 const querySchema = z.object({
   q: z.string().trim().max(160).optional(),
@@ -167,9 +171,11 @@ export async function GET(request: NextRequest) {
           : {},
         filters.pincode ? { pincode: filters.pincode } : {},
         filters.unit ? { unit: filters.unit } : {},
-        filters.verified
-          ? { verified: filters.verified === "true" }
-          : {},
+        filters.verified === "true"
+          ? managedListingWhere
+          : filters.verified === "false"
+            ? { NOT: managedListingWhere }
+            : {},
         filters.hasDocuments
           ? filters.hasDocuments === "true"
             ? {
@@ -266,13 +272,15 @@ export async function GET(request: NextRequest) {
     const orderBy = catalogOrderBy(filters.sort);
     const cursorId = decodeCursor(filters.cursor);
 
-    const rows = await prisma.marketplaceListing.findMany({
+    const [rows, total] = await Promise.all([
+      prisma.marketplaceListing.findMany({
       where,
       select: {
         id: true,
         materialId: true,
         title: true,
         slug: true,
+        listingMode: true,
         isEvalOnly: true,
         evalScenarioTags: true,
         category: true,
@@ -329,8 +337,12 @@ export async function GET(request: NextRequest) {
       orderBy,
       cursor: cursorId ? { id: cursorId } : undefined,
       skip: cursorId ? 1 : 0,
-      take: filters.limit + 1,
-    });
+        take: filters.limit + 1,
+      }),
+      // Exact radius filtering is completed in application code after a
+      // bounding-box query, so a SQL count would overstate that result set.
+      hasDistance ? Promise.resolve(null) : prisma.marketplaceListing.count({ where }),
+    ]);
     const distanceFiltered = hasDistance
       ? rows.filter(
           (row) =>
@@ -353,6 +365,7 @@ export async function GET(request: NextRequest) {
             companyId: { in: companyIds },
             accountStatus: "ACTIVE",
             role: { in: ["SELLER", "BOTH"] },
+            sellerOnboarding: { is: { status: "APPROVED" } },
           },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: { id: true, companyId: true },
@@ -435,6 +448,7 @@ export async function GET(request: NextRequest) {
       id: row.id,
       materialId: row.materialId,
       slug: row.slug,
+      listingMode: row.listingMode,
       isEvalOnly: row.isEvalOnly,
       evalScenarioTags: row.evalScenarioTags,
       title: row.title,
@@ -482,7 +496,8 @@ export async function GET(request: NextRequest) {
           )
         : 0,
       verified:
-        row.sourceType === "seller_submitted" &&
+        row.listingMode === "MANAGED" &&
+        row.verified &&
         approvedSellerCompanies.has(row.seller.id),
       tradeAssurance: false,
       yearsActive: row.yearsActive,
@@ -513,6 +528,7 @@ export async function GET(request: NextRequest) {
             ? encodeCursor(items[items.length - 1].id)
             : null,
         limit: filters.limit,
+        total,
       },
       appliedFilters: filters,
     };

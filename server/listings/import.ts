@@ -102,6 +102,7 @@ async function upsertListing(
         id: listingId,
         title: row.title,
         slug: `${slugify(row.title)}-${listingId.slice(-8)}`,
+        listingMode: "EXTERNAL_LEAD",
         sourceType: provider.sourceType,
         isEvalOnly: false,
         sourceName: row.sourceName,
@@ -150,6 +151,7 @@ async function upsertListing(
       },
       update: {
         title: row.title,
+        listingMode: "EXTERNAL_LEAD",
         sourceType: provider.sourceType,
         isEvalOnly: false,
         sourceName: row.sourceName,

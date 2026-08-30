@@ -3,7 +3,10 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { apiError, ApiError, requireUser } from "@/server/http";
 import { calculateFees } from "@/server/fees";
-import { transactableListingWhere } from "@/server/listings/policy";
+import {
+  listingHasExpired,
+  transactableListingWhere,
+} from "@/server/listings/policy";
 
 const schema = z.object({
   listingId: z.string().min(1),
@@ -51,6 +54,7 @@ export async function GET(request: NextRequest) {
         state: true,
         imageUrl: true,
         verified: true,
+        expiresAt: true,
         seller: { select: { name: true } },
       },
     });
@@ -61,6 +65,9 @@ export async function GET(request: NextRequest) {
     // Stated rather than thrown: the buyer should see why a quantity is not
     // acceptable while they can still change it, not after pressing pay.
     const blockers: string[] = [];
+    if (listingHasExpired(listing.expiresAt)) {
+      blockers.push("This listing has expired.");
+    }
     if (listing.priceMode !== "FIXED" || listing.pricePerUnit <= 0) {
       blockers.push("This seller quotes on request. Send an inquiry or place a bid instead.");
     }

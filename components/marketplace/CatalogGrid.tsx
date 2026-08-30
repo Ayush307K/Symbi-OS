@@ -93,7 +93,7 @@ export function CatalogGrid({
       <EmptyState
         icon={<PackageSearch />}
         title="The catalogue is empty"
-        description="No listings have been published yet. Once sellers publish verified non-hazardous material, it appears here."
+        description="No managed seller offers, external sourcing leads, or demo records are currently available."
       />
     );
   }

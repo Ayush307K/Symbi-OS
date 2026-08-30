@@ -29,7 +29,7 @@ export function Hero({ onSearch, listingCount, isAuthenticated }: HeroProps) {
     <section className="border-b border-ink-200 bg-surface-card">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
         <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-copper-700">
-          Verified industrial by-products · India
+          Industrial by-product discovery · India
         </p>
 
         <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-[1.1] tracking-tight text-ink-900 sm:text-5xl">
@@ -37,10 +37,9 @@ export function Hero({ onSearch, listingCount, isAuthenticated }: HeroProps) {
         </h1>
 
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-600">
-          Symbi-OS matches verified sellers of non-hazardous industrial
-          by-products with the buyers who need them — with real quantities, real
-          locations, and a safety policy that rejects hazardous material at every
-          step.
+          Explore verified SymbiOS seller offers and clearly labelled external
+          sourcing leads. Marketplace transactions are available only when an
+          approved seller is connected, and hazardous material is rejected.
         </p>
 
         <form
@@ -70,8 +69,8 @@ export function Hero({ onSearch, listingCount, isAuthenticated }: HeroProps) {
               <h2 className="text-[15px] font-semibold text-ink-900">I&rsquo;m selling</h2>
             </div>
             <p className="mt-2 text-[13px] leading-relaxed text-ink-600">
-              List a by-product with quantity, grade, and location. Verification
-              gates publishing, so buyers can trust what they see.
+              List a by-product with quantity, grade, and location. Seller
+              verification and moderation gate managed marketplace offers.
             </p>
             <div className="mt-4">
               <Button
@@ -94,8 +93,8 @@ export function Hero({ onSearch, listingCount, isAuthenticated }: HeroProps) {
             </div>
             <p className="mt-2 text-[13px] leading-relaxed text-ink-600">
               Filter {listingCount > 0 ? `${listingCount} live listings` : "the catalogue"} by
-              material, quantity, price, and distance. Send an inquiry without
-              leaving the page.
+              material, quantity, price, and distance. Transact with connected
+              sellers or follow a clearly labelled external source.
             </p>
             <div className="mt-4">
               <Button
@@ -125,7 +124,7 @@ export function Hero({ onSearch, listingCount, isAuthenticated }: HeroProps) {
             >
               Create an account
             </Link>{" "}
-            to save listings, send inquiries, and place bids.
+            to save listings and contact eligible SymbiOS sellers.
           </p>
         ) : null}
       </div>

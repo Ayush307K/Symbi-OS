@@ -37,6 +37,13 @@ export function catalogOrderBy(
  */
 export const fixedPriceOnly = { priceMode: "FIXED" } as const;
 
+export function listingHasExpired(
+  expiresAt: Date | null | undefined,
+  now = new Date(),
+) {
+  return Boolean(expiresAt && expiresAt <= now);
+}
+
 /**
  * The temporary all-corpus catalogue policy requested for the demo.
  *
@@ -50,8 +57,31 @@ export const publicListingWhere = {
   material: { toxicityLevel: { in: ["none", "low"] } },
 } satisfies Prisma.MarketplaceListingWhereInput;
 
-/** Evaluation fixtures are visible for the demo but can never be purchased. */
-export const transactableListingWhere = {
+/**
+ * A managed listing must terminate at an actual person who can receive and
+ * fulfil a marketplace action. Company attribution alone is insufficient:
+ * imported sources also have Company rows, despite having no seller account.
+ */
+export const managedListingWhere = {
   ...publicListingWhere,
+  listingMode: "MANAGED",
   isEvalOnly: false,
+  verified: true,
+  quantityAvailable: { gt: 0 },
+  seller: {
+    users: {
+      some: {
+        accountStatus: "ACTIVE",
+        role: { in: ["SELLER", "BOTH"] },
+        sellerOnboarding: { is: { status: "APPROVED" } },
+      },
+    },
+  },
+} satisfies Prisma.MarketplaceListingWhereInput;
+
+/** Fixed-price subset used by cart and direct checkout. */
+export const transactableListingWhere = {
+  ...managedListingWhere,
+  priceMode: "FIXED",
+  pricePerUnit: { gt: 0 },
 } satisfies Prisma.MarketplaceListingWhereInput;
