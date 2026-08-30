@@ -9,6 +9,7 @@ import {
 } from "@/server/listings/assets";
 import {
   listingDraftSchema,
+  listingUpdateSchema,
   submissionErrors,
 } from "@/server/listings/lifecycle";
 import {
@@ -175,5 +176,24 @@ describe("listing validation", () => {
         status: "ACTIVE",
       }).success,
     ).toBe(false);
+  });
+
+  it("preserves draft refinements when validating a versioned update", () => {
+    expect(
+      listingUpdateSchema.safeParse({
+        title: "Updated HDPE listing",
+        priceMode: "FIXED",
+        pricePerUnit: 0,
+        version: 2,
+      }).success,
+    ).toBe(false);
+    expect(
+      listingUpdateSchema.safeParse({
+        title: "Updated HDPE listing",
+        priceMode: "FIXED",
+        pricePerUnit: 42_000,
+        version: 2,
+      }).success,
+    ).toBe(true);
   });
 });

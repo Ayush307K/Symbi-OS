@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import prisma from "@/lib/prisma";
 import {
   apiError,
@@ -10,7 +9,7 @@ import {
 } from "@/server/http";
 import {
   ensureCanonicalMaterial,
-  listingDraftSchema,
+  listingUpdateSchema,
   listingSnapshot,
   listingUpdateData,
   recordListingEvent,
@@ -54,9 +53,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await parseJson(
       request,
-      listingDraftSchema.extend({
-        version: z.coerce.number().int().positive(),
-      }),
+      listingUpdateSchema,
     );
     const listing = await requireOwnedListing(id, auth);
     if (!["DRAFT", "REJECTED", "PAUSED", "ACTIVE"].includes(listing.status)) {

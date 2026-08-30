@@ -437,10 +437,28 @@ function ListingList({
                   >
                     Close
                   </button>
+                  <Link
+                    href={`/seller/listings/new?id=${item.id}`}
+                    className="flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-xs font-semibold"
+                  >
+                    Edit
+                  </Link>
+                  <button
+                    onClick={() => act(item, "ARCHIVE")}
+                    className="min-h-10 rounded-md border border-red-300 px-3 text-xs font-semibold text-danger-strong"
+                  >
+                    Archive
+                  </button>
                 </>
               )}
               {item.status === "PAUSED" && (
                 <>
+                  <Link
+                    href={`/seller/listings/new?id=${item.id}`}
+                    className="flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-xs font-semibold"
+                  >
+                    Edit
+                  </Link>
                   <button
                     onClick={() => act(item, "RESUME")}
                     className="min-h-10 rounded-md bg-brand px-3 text-xs font-semibold text-white"

@@ -27,7 +27,7 @@ const transitions: Record<
   RESUME: { from: ["PAUSED"], to: "ACTIVE" },
   CLOSE: { from: ["ACTIVE", "PAUSED", "RESERVED"], to: "SOLD" },
   ARCHIVE: {
-    from: ["DRAFT", "REJECTED", "EXPIRED", "SOLD", "PAUSED"],
+    from: ["DRAFT", "REJECTED", "EXPIRED", "SOLD", "PAUSED", "ACTIVE"],
     to: "ARCHIVED",
   },
   RENEW: { from: ["EXPIRED"], to: "PENDING_MODERATION" },

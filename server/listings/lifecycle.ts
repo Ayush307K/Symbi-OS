@@ -79,6 +79,18 @@ export const listingDraftSchema = z
 
 export type ListingDraftInput = z.infer<typeof listingDraftSchema>;
 
+/**
+ * A listing edit is the draft contract plus the optimistic-lock version.
+ *
+ * `listingDraftSchema` has a `superRefine`, so Zod deliberately refuses a
+ * normal `.extend()` at runtime. `safeExtend()` preserves that refinement;
+ * keeping the schema here also makes create and update validation impossible
+ * to drift apart.
+ */
+export const listingUpdateSchema = listingDraftSchema.safeExtend({
+  version: z.coerce.number().int().positive(),
+});
+
 function parsedDate(value: string | null | undefined) {
   return value ? new Date(value) : value === null ? null : undefined;
 }
