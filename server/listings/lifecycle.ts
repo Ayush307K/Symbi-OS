@@ -10,6 +10,7 @@ import {
   LISTING_UNITS,
   SAFE_CATEGORIES,
 } from "@/lib/listing-constants";
+import { DELIVERY_TERMS } from "@/lib/logistics";
 import { ApiError } from "@/server/http";
 import { assertSafeMaterial } from "@/server/safety";
 
@@ -46,6 +47,7 @@ export const listingDraftSchema = z
     packaging: z.string().trim().max(500).optional(),
     handlingRequirements: z.string().trim().max(1000).optional(),
     paymentTerms: z.string().trim().max(500).optional(),
+    deliveryTerm: z.enum(DELIVERY_TERMS).optional(),
     availableFrom: dateString.nullable().optional(),
     availableUntil: dateString.nullable().optional(),
     pincode: z.string().regex(/^[1-9][0-9]{5}$/).nullable().optional(),
@@ -130,6 +132,9 @@ export function listingUpdateData(
       : {}),
     ...(input.paymentTerms !== undefined
       ? { paymentTerms: input.paymentTerms }
+      : {}),
+    ...(input.deliveryTerm !== undefined
+      ? { deliveryTerm: input.deliveryTerm }
       : {}),
     ...(input.availableFrom !== undefined
       ? { availableFrom: parsedDate(input.availableFrom) }
@@ -239,7 +244,11 @@ export function listingSnapshot(listing: Record<string, unknown>) {
     "packaging",
     "handlingRequirements",
     "paymentTerms",
+    "deliveryTerm",
     "pincode",
+    "geocodingProvider",
+    "geocodingConfidence",
+    "geocodingPrecision",
     "availableFrom",
     "availableUntil",
     "status",
@@ -284,6 +293,10 @@ export function submissionErrors(listing: {
   packaging: string;
   handlingRequirements: string;
   pincode: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  geocodingConfidence?: number | null;
+  deliveryTerm?: string | null;
   availableFrom: Date | null;
   availableUntil: Date | null;
   safetyDeclaration: boolean;
@@ -335,6 +348,18 @@ export function submissionErrors(listing: {
     fields.availableUntil = "End date must be after the availability date.";
   }
   if (!listing.pincode) fields.pincode = "Add a dispatch pincode.";
+  if (listing.latitude == null || listing.longitude == null) {
+    fields.pincode = "Add a dispatch location that can be geocoded.";
+  }
+  if (
+    listing.geocodingConfidence != null &&
+    listing.geocodingConfidence < 0.55
+  ) {
+    fields.pincode = "Confirm a more precise dispatch location.";
+  }
+  if (!(DELIVERY_TERMS as readonly string[]).includes(listing.deliveryTerm || "")) {
+    fields.deliveryTerm = "Choose who arranges and pays for freight.";
+  }
   if (!listing.packaging.trim()) fields.packaging = "Describe the packaging.";
   if (!listing.handlingRequirements.trim()) {
     fields.handlingRequirements = "Describe safe handling requirements.";

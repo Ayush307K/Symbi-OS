@@ -14,6 +14,13 @@ enum ListingMode {
   EVAL
 }
 
+enum DeliveryTerm {
+  EX_WORKS
+  FOB
+  DELIVERED
+  FREIGHT_QUOTE_REQUIRED
+}
+
 model User {
   id               String    @id @default(uuid())
   email            String    @unique
@@ -54,6 +61,7 @@ model User {
   supportTickets         SupportTicket[]         @relation("SupportTicketRequester")
   assignedSupportTickets SupportTicket[]         @relation("SupportTicketAssignee")
   supportTicketEvents    SupportTicketEvent[]
+  freightQuotes          FreightQuote[]
   company                Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
@@ -222,6 +230,11 @@ model MarketplaceListing {
   pincode              String?
   latitude             Float?
   longitude            Float?
+  geocodingProvider    String?
+  geocodingConfidence  Float?
+  geocodingPrecision   String?
+  geocodedAt           DateTime?
+  deliveryTerm         DeliveryTerm?
   availableFrom        DateTime?
   availableUntil       DateTime?
   safetyDeclaration    Boolean                     @default(false)
@@ -256,6 +269,7 @@ model MarketplaceListing {
   events             ListingEvent[]
   matches            ListingMatch[]
   reservations       InventoryReservation[]
+  freightQuotes      FreightQuote[]
   safetyReviewReason String?
 
   @@index([category])
@@ -375,35 +389,40 @@ model ListingEvent {
 }
 
 model Address {
-  id                 String   @id @default(uuid())
-  userId             String
-  label              String   @default("Office")
-  contactName        String
-  phone              String
-  country            String   @default("India")
-  state              String
-  city               String
-  district           String?
-  area               String?
-  locality           String?
-  landmark           String?
-  buildingName       String?
-  floor              String?
-  unitNumber         String?
-  street             String
-  pincode            String
-  latitude           Float?
-  longitude          Float?
-  isDefaultShipping  Boolean  @default(false)
-  isDefaultBilling   Boolean  @default(false)
-  addressType        String   @default("SHIPPING")
-  verificationStatus String   @default("UNVERIFIED")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  userId              String
+  label               String    @default("Office")
+  contactName         String
+  phone               String
+  country             String    @default("India")
+  state               String
+  city                String
+  district            String?
+  area                String?
+  locality            String?
+  landmark            String?
+  buildingName        String?
+  floor               String?
+  unitNumber          String?
+  street              String
+  pincode             String
+  latitude            Float?
+  longitude           Float?
+  geocodingProvider   String?
+  geocodingConfidence Float?
+  geocodingPrecision  String?
+  geocodedAt          DateTime?
+  isDefaultShipping   Boolean   @default(false)
+  isDefaultBilling    Boolean   @default(false)
+  addressType         String    @default("SHIPPING")
+  verificationStatus  String    @default("UNVERIFIED")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   shippingOrders PurchaseOrder[] @relation("ShippingAddress")
   billingOrders  PurchaseOrder[] @relation("BillingAddress")
+  freightQuotes  FreightQuote[]
 
   @@index([userId])
   @@index([pincode])
@@ -478,10 +497,63 @@ model PurchaseOrder {
   invoice         Invoice?
   creditNote      CreditNote?
   messageThreads  MessageThread[]
+  freightQuotes   FreightQuote[]
+  shipment        Shipment?
 
   @@index([buyerUserId])
   @@index([isEvalOnly, createdAt])
   @@index([status])
+}
+
+model FreightQuote {
+  id                String       @id @default(uuid())
+  buyerUserId       String
+  listingId         String
+  shippingAddressId String
+  orderId           String?
+  quantity          Int
+  unit              String
+  deliveryTerm      DeliveryTerm
+  distanceKm        Float?
+  amount            Decimal      @db.Decimal(14, 2)
+  currency          String       @default("INR")
+  source            String
+  status            String       @default("QUOTED")
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  buyer           User               @relation(fields: [buyerUserId], references: [id], onDelete: Cascade)
+  listing         MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  shippingAddress Address            @relation(fields: [shippingAddressId], references: [id], onDelete: Cascade)
+  order           PurchaseOrder?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([buyerUserId, status, expiresAt])
+  @@index([listingId, shippingAddressId, quantity])
+  @@index([orderId])
+}
+
+model Shipment {
+  id                       String    @id @default(uuid())
+  orderId                  String    @unique
+  sellerCompanyId          String
+  carrierName              String
+  serviceLevel             String?
+  trackingNumber           String?
+  vehicleNumber            String?
+  proofOfDispatchReference String
+  dispatchedAt             DateTime
+  estimatedDeliveryAt      DateTime
+  deliveredAt              DateTime?
+  status                   String    @default("DISPATCHED")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([sellerCompanyId, status])
+  @@index([trackingNumber])
 }
 
 model PurchaseOrderItem {

@@ -21,6 +21,7 @@ import {
   recordSafetyEvent,
 } from "@/server/safety";
 import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
+import { geocodeData, geocodeLocation } from "@/server/geocoding";
 
 export async function GET(
   _request: NextRequest,
@@ -85,6 +86,22 @@ export async function PATCH(
       );
     }
 
+    const locationChanged =
+      body.pincode !== undefined ||
+      body.latitude !== undefined ||
+      body.longitude !== undefined;
+    const geocode = locationChanged
+      ? await geocodeLocation({
+          addressLine: listing.area,
+          city: listing.city,
+          state: listing.state,
+          country: listing.country,
+          pincode: body.pincode ?? listing.pincode,
+          latitude: body.latitude ?? listing.latitude,
+          longitude: body.longitude ?? listing.longitude,
+        })
+      : null;
+
     const updated = await prisma.$transaction(async (tx) => {
       let materialId = listing.materialId;
       const category = body.category ?? listing.category;
@@ -116,6 +133,9 @@ export async function PATCH(
         where: { id: listing.id, version: body.version },
         data: {
           ...listingUpdateData(body),
+          ...(locationChanged ? geocodeData(geocode) : {}),
+          ...(geocode?.normalizedCity ? { city: geocode.normalizedCity } : {}),
+          ...(geocode?.normalizedState ? { state: geocode.normalizedState } : {}),
           safetyReviewReason:
             safety.outcome === "MANUAL_REVIEW" ? safety.ruleCode : null,
           materialId,

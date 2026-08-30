@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { isValidIndianPincode, requireAuth, serviceabilityForPincode } from "@/lib/marketplace";
 import { assertTrustedOrigin } from "@/server/http";
+import { geocodeData, geocodeLocation, isCoordinatePair } from "@/server/geocoding";
 
 export async function GET() {
   const guard = await requireAuth();
@@ -36,6 +37,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: serviceability.message }, { status: 400 });
   }
 
+  const suppliedLatitude = body.latitude == null ? null : Number(body.latitude);
+  const suppliedLongitude = body.longitude == null ? null : Number(body.longitude);
+  const suppliedOneCoordinate =
+    (suppliedLatitude !== null || suppliedLongitude !== null) &&
+    !isCoordinatePair(suppliedLatitude, suppliedLongitude);
+  if (suppliedOneCoordinate) {
+    return NextResponse.json(
+      { error: "Provide both valid latitude and longitude values, or neither." },
+      { status: 400 },
+    );
+  }
+  const geocode = await geocodeLocation({
+    addressLine: String(body.street).trim(),
+    city: String(body.city || serviceability.city).trim(),
+    state: String(body.state || serviceability.state).trim(),
+    country: "India",
+    pincode,
+    latitude: suppliedLatitude,
+    longitude: suppliedLongitude,
+  });
+  if (!geocode) {
+    return NextResponse.json(
+      {
+        error:
+          "We could not validate this delivery location. Check the city and pincode or provide GPS coordinates.",
+        code: "ADDRESS_GEOCODING_FAILED",
+      },
+      { status: 422 },
+    );
+  }
+
   const makeDefaultShipping = Boolean(body.isDefaultShipping);
   const makeDefaultBilling = Boolean(body.isDefaultBilling);
   if (makeDefaultShipping) {
@@ -58,8 +90,8 @@ export async function POST(request: NextRequest) {
       contactName: String(body.contactName).trim(),
       phone: String(body.phone).trim(),
       country: "India",
-      state: String(body.state || serviceability.state).trim(),
-      city: String(body.city || serviceability.city).trim(),
+      state: geocode.normalizedState || String(body.state || serviceability.state).trim(),
+      city: geocode.normalizedCity || String(body.city || serviceability.city).trim(),
       district: body.district ? String(body.district).trim() : null,
       area: body.area ? String(body.area).trim() : null,
       locality: body.locality ? String(body.locality).trim() : null,
@@ -69,12 +101,12 @@ export async function POST(request: NextRequest) {
       unitNumber: body.unitNumber ? String(body.unitNumber).trim() : null,
       street: String(body.street).trim(),
       pincode,
-      latitude: body.latitude == null ? null : Number(body.latitude),
-      longitude: body.longitude == null ? null : Number(body.longitude),
+      ...geocodeData(geocode),
       isDefaultShipping: makeDefaultShipping,
       isDefaultBilling: makeDefaultBilling,
       addressType: String(body.addressType || "SHIPPING"),
-      verificationStatus: body.latitude && body.longitude ? "GPS_VERIFIED" : "PINCODE_VERIFIED",
+      verificationStatus:
+        geocode.precision === "MANUAL" ? "GPS_VERIFIED" : "GEOCODED",
     },
   });
 

@@ -26,6 +26,7 @@
     "rag:eval:run": "tsx scripts/run-rag-golden-eval.ts",
     "feed:backfill-embeddings": "tsx scripts/backfill-listing-embeddings.ts",
     "feed:refresh-edges": "tsx scripts/refresh-material-edges.ts",
+    "location:backfill": "tsx scripts/backfill-geocoding.ts",
     "onboarding:cleanup-documents": "tsx scripts/cleanup-expired-onboarding-documents.ts",
     "postinstall": "prisma generate",
     "check:env": "tsx scripts/check-env.ts",

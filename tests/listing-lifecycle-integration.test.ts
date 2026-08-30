@@ -210,6 +210,7 @@ describe.skipIf(!databaseReachable)("seller listing lifecycle integration", () =
           packaging: "Sealed one-ton bulk bags",
           handlingRequirements: "Keep dry and load with a forklift.",
           paymentTerms: "Sandbox settlement after confirmation",
+          deliveryTerm: "EX_WORKS",
           pincode: "411001",
           availableFrom: from.toISOString(),
           availableUntil: until.toISOString(),

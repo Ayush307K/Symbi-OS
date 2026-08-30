@@ -19,6 +19,7 @@ import {
   recordSafetyEvent,
 } from "@/server/safety";
 import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
+import { geocodeData, geocodeLocation } from "@/server/geocoding";
 
 export async function GET() {
   try {
@@ -105,6 +106,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const geocode = await geocodeLocation({
+      addressLine: warehouse.addressLine,
+      city: warehouse.city,
+      state: warehouse.state,
+      country: "India",
+      pincode: body.pincode || warehouse.pincode,
+      latitude: body.latitude,
+      longitude: body.longitude,
+    });
+
     const listing = await prisma.$transaction(async (tx) => {
       const material = await ensureCanonicalMaterial(tx, {
         category,
@@ -135,12 +146,12 @@ export async function POST(request: NextRequest) {
           category,
           subcategory,
           area: warehouse.addressLine || "Draft dispatch location",
-          city: warehouse.city || "Unspecified",
-          state: warehouse.state || "Unspecified",
+          city: geocode?.normalizedCity || warehouse.city || "Unspecified",
+          state: geocode?.normalizedState || warehouse.state || "Unspecified",
           country: "India",
           pincode: body.pincode || warehouse.pincode || null,
-          latitude: body.latitude ?? null,
-          longitude: body.longitude ?? null,
+          ...geocodeData(geocode),
+          deliveryTerm: body.deliveryTerm ?? null,
           imageUrl: "",
           // Defaulting to FIXED would create a ₹0 fixed-price row whenever a
           // seller starts a draft before entering a price. Absent a positive

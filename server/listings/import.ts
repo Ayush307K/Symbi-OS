@@ -12,6 +12,7 @@ import {
   REAL_CORPUS_TARGETS,
   type TargetCategory,
 } from "@/server/listings/corpus-targets";
+import { geocodeData, geocodeLocation } from "@/server/geocoding";
 
 export function canonicalCategory(text: string) {
   const value = text.toLowerCase();
@@ -55,6 +56,11 @@ async function upsertListing(
   );
   const materialId = stableId("provider_material", row.externalId);
   const listingId = stableId("provider_listing", row.externalId);
+  const geocode = await geocodeLocation({
+    city: row.city,
+    state: row.state,
+    country: row.country,
+  });
   await prisma.$transaction(async (tx) => {
     await tx.company.upsert({
       where: { id: companyId },
@@ -62,15 +68,17 @@ async function upsertListing(
         id: companyId,
         name: `${row.companyName} (${companyId.slice(-6)})`,
         industry: category,
-        location: `${row.city}, ${row.state}, India`,
+        location: `${geocode?.normalizedCity || row.city}, ${geocode?.normalizedState || row.state}, India`,
         carbonRating: "Unrated",
-        latitude: 0,
-        longitude: 0,
+        latitude: geocode?.latitude ?? 0,
+        longitude: geocode?.longitude ?? 0,
         capacity: row.quantity,
       },
       update: {
         industry: category,
-        location: `${row.city}, ${row.state}, India`,
+        location: `${geocode?.normalizedCity || row.city}, ${geocode?.normalizedState || row.state}, India`,
+        latitude: geocode?.latitude ?? 0,
+        longitude: geocode?.longitude ?? 0,
         capacity: row.quantity,
       },
     });
@@ -115,9 +123,10 @@ async function upsertListing(
         category,
         subcategory: row.subcategory || category,
         area: row.city,
-        city: row.city,
-        state: row.state,
+        city: geocode?.normalizedCity || row.city,
+        state: geocode?.normalizedState || row.state,
         country: "India",
+        ...geocodeData(geocode),
         imageUrl: row.imageUrl,
         pricePerUnit: row.price,
         // A source that publishes no price is not selling at zero — it is
@@ -160,8 +169,9 @@ async function upsertListing(
         rawLocationText: `${row.city}, ${row.state}, India`,
         category,
         subcategory: row.subcategory || category,
-        city: row.city,
-        state: row.state,
+        city: geocode?.normalizedCity || row.city,
+        state: geocode?.normalizedState || row.state,
+        ...geocodeData(geocode),
         imageUrl: row.imageUrl,
         pricePerUnit: row.price,
         // A source that publishes no price is not selling at zero — it is

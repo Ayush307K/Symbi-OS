@@ -20,6 +20,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SAFE_CATEGORIES } from "@/lib/listing-constants";
+import {
+  DELIVERY_TERM_DETAILS,
+  DELIVERY_TERMS,
+  type DeliveryTerm,
+} from "@/lib/logistics";
 
 type Draft = {
   title: string;
@@ -36,6 +41,7 @@ type Draft = {
   packaging: string;
   handlingRequirements: string;
   paymentTerms: string;
+  deliveryTerm: DeliveryTerm | "";
   pincode: string;
   latitude: string;
   longitude: string;
@@ -97,6 +103,7 @@ const initialDraft: Draft = {
   packaging: "",
   handlingRequirements: "",
   paymentTerms: "Payment through the Symbi-OS transaction workflow",
+  deliveryTerm: "",
   pincode: "",
   latitude: "",
   longitude: "",
@@ -142,6 +149,9 @@ function fieldErrors(draft: Draft, photos: number) {
   if (!draft.packaging.trim()) errors.packaging = "Describe the packaging.";
   if (!draft.handlingRequirements.trim()) {
     errors.handlingRequirements = "Describe safe handling.";
+  }
+  if (!draft.deliveryTerm) {
+    errors.deliveryTerm = "Choose who arranges and pays for freight.";
   }
   if (!/^[1-9][0-9]{5}$/.test(draft.pincode)) {
     errors.pincode = "Enter a valid six-digit pincode.";
@@ -198,6 +208,7 @@ function draftFromListing(record: ListingRecord): Draft {
     packaging: value("packaging"),
     handlingRequirements: value("handlingRequirements"),
     paymentTerms: value("paymentTerms"),
+    deliveryTerm: (record.deliveryTerm as Draft["deliveryTerm"]) || "",
     pincode: value("pincode"),
     latitude: value("latitude"),
     longitude: value("longitude"),
@@ -692,6 +703,30 @@ export default function NewSellerListingPage() {
 
           <Section title="Dispatch and handling">
             <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Delivery terms" error={errors.deliveryTerm} wide>
+                <select
+                  value={draft.deliveryTerm}
+                  onChange={(event) =>
+                    setField(
+                      "deliveryTerm",
+                      event.target.value as Draft["deliveryTerm"],
+                    )
+                  }
+                  className={inputClass(errors.deliveryTerm)}
+                >
+                  <option value="">Choose freight responsibility</option>
+                  {DELIVERY_TERMS.map((term) => (
+                    <option key={term} value={term}>
+                      {DELIVERY_TERM_DETAILS[term].label}
+                    </option>
+                  ))}
+                </select>
+                {draft.deliveryTerm ? (
+                  <p className="mt-1 text-xs text-ink-500">
+                    {DELIVERY_TERM_DETAILS[draft.deliveryTerm].responsibility}
+                  </p>
+                ) : null}
+              </Field>
               <Field label="Dispatch pincode" error={errors.pincode}>
                 <input
                   inputMode="numeric"
@@ -1002,6 +1037,11 @@ export default function NewSellerListingPage() {
                   </p>
                   <p className="mt-2 line-clamp-4 text-sm text-ink-600">
                     {draft.description || "Description preview"}
+                  </p>
+                  <p className="mt-2 text-xs text-ink-500">
+                    {draft.deliveryTerm
+                      ? DELIVERY_TERM_DETAILS[draft.deliveryTerm].shortLabel
+                      : "Delivery terms not selected"}
                   </p>
                 </div>
               </div>
