@@ -37,7 +37,11 @@ export async function POST(
       include: { items: true },
     });
     if (!order) throw new ApiError(404, "Order not found.", "ORDER_NOT_FOUND");
-    if (order.paymentStatus !== "PAID") {
+    if (
+      !["PAID", "SETTLED", "PARTIALLY_REFUNDED"].includes(
+        order.paymentStatus,
+      )
+    ) {
       throw new ApiError(409, "Payment is not confirmed.", "PAYMENT_NOT_CONFIRMED");
     }
     const expectedStatus =

@@ -5,6 +5,10 @@ import { MarketplaceNav } from "@/components/marketplace/MarketplaceNav";
 import { useToast } from "@/components/ui/Toast";
 import { CounterOfferDialog } from "@/components/marketplace/CounterOfferDialog";
 import { PromptDialog } from "@/components/ui/PromptDialog";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import Link from "next/link";
 import {
   Bell,
@@ -236,6 +240,110 @@ function Empty({ label }: { label: string }) {
   );
 }
 
+const disputeReasons = [
+  ["ITEM_NOT_AS_DESCRIBED", "Item not as described"],
+  ["QUALITY_ISSUE", "Quality issue"],
+  ["QUANTITY_SHORTFALL", "Quantity shortfall"],
+  ["DELIVERY_ISSUE", "Delivery issue"],
+  ["DOCUMENTATION_ISSUE", "Documentation issue"],
+  ["PAYMENT_ISSUE", "Payment issue"],
+  ["OTHER", "Other"],
+] as const;
+
+function OpenDisputeDialog({
+  order,
+  submitting,
+  onClose,
+  onSubmit,
+}: {
+  order: any | null;
+  submitting: boolean;
+  onClose: () => void;
+  onSubmit: (value: {
+    reasonCode: string;
+    note: string;
+    evidence: string[];
+  }) => void;
+}) {
+  const [reasonCode, setReasonCode] = useState("");
+  const [note, setNote] = useState("");
+  const [evidence, setEvidence] = useState("");
+
+  useEffect(() => {
+    if (!order) return;
+    setReasonCode("");
+    setNote("");
+    setEvidence("");
+  }, [order]);
+
+  const references = evidence
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  const valid = Boolean(reasonCode && note.trim().length >= 5);
+
+  return (
+    <Modal
+      open={Boolean(order)}
+      onClose={onClose}
+      title="Open a dispute"
+      description={order?.orderNumber}
+      size="sm"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={submitting}
+            disabled={!valid}
+            onClick={() =>
+              valid &&
+              onSubmit({
+                reasonCode,
+                note: note.trim(),
+                evidence: references,
+              })
+            }
+          >
+            Open dispute
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Select
+          label="Reason"
+          required
+          value={reasonCode}
+          onChange={(event) => setReasonCode(event.target.value)}
+        >
+          <option value="">Choose the main issue</option>
+          {disputeReasons.map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </Select>
+        <Textarea
+          label="What went wrong"
+          required
+          rows={4}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Describe what happened, what you expected, and the resolution you want."
+        />
+        <Textarea
+          label="Evidence references"
+          rows={3}
+          value={evidence}
+          onChange={(event) => setEvidence(event.target.value)}
+          placeholder={"One per line, up to 5 — e.g. LR number, report name, message date"}
+          hint="The order invoice and listing documents are included automatically."
+        />
+      </div>
+    </Modal>
+  );
+}
+
 function OrderList({
   orders,
   onChanged,
@@ -266,13 +374,12 @@ function OrderList({
       setBusy(null);
     }
   }
-  const [pendingNote, setPendingNote] = useState<
-    { order: any; kind: "CANCEL" | "OPEN_DISPUTE" } | null
-  >(null);
+  const [pendingNote, setPendingNote] = useState<{ order: any } | null>(null);
+  const [pendingDispute, setPendingDispute] = useState<any | null>(null);
 
   async function cancel(order: any, note?: string) {
     if (note === undefined) {
-      setPendingNote({ order, kind: "CANCEL" });
+      setPendingNote({ order });
       return;
     }
     setBusy(order.id);
@@ -295,9 +402,13 @@ function OrderList({
       setBusy(null);
     }
   }
-  async function orderAction(order: any, action: string, note?: string) {
-    if (action === "OPEN_DISPUTE" && note === undefined) {
-      setPendingNote({ order, kind: "OPEN_DISPUTE" });
+  async function orderAction(
+    order: any,
+    action: string,
+    dispute?: { reasonCode: string; note: string; evidence: string[] },
+  ) {
+    if (action === "OPEN_DISPUTE" && !dispute) {
+      setPendingDispute(order);
       return;
     }
     setBusy(order.id);
@@ -307,8 +418,9 @@ function OrderList({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
-          reasonCode: action === "OPEN_DISPUTE" ? "OTHER" : undefined,
-          note,
+          reasonCode: dispute?.reasonCode,
+          note: dispute?.note,
+          evidence: dispute?.evidence,
         }),
       });
       const payload = await response.json();
@@ -353,7 +465,10 @@ function OrderList({
                 Download sandbox invoice PDF
               </a>
             )}
-            {order.invoice && order.paymentStatus === "REFUNDED" && (
+            {order.invoice &&
+              ["REFUNDED", "PARTIALLY_REFUNDED"].includes(
+                order.paymentStatus,
+              ) && (
               <a
                 href={`/api/orders/${order.id}/invoice?document=credit-note`}
                 className="ml-2 mt-3 inline-flex min-h-10 items-center rounded-md border border-ink-300 px-3 text-sm font-semibold"
@@ -398,16 +513,11 @@ function OrderList({
     </Panel>
       <PromptDialog
         open={Boolean(pendingNote)}
-        title={pendingNote?.kind === "CANCEL" ? "Cancel this order" : "Open a dispute"}
+        title="Cancel this order"
         description={pendingNote?.order?.orderNumber}
-        label={pendingNote?.kind === "CANCEL" ? "Cancellation note" : "What went wrong"}
-        placeholder={
-          pendingNote?.kind === "CANCEL"
-            ? "Why you are cancelling. The seller sees this."
-            : "Describe the problem so an operator can act on it."
-        }
-        required={pendingNote?.kind === "OPEN_DISPUTE"}
-        confirmLabel={pendingNote?.kind === "CANCEL" ? "Cancel order" : "Open dispute"}
+        label="Cancellation note"
+        placeholder="Why you are cancelling. The seller sees this."
+        confirmLabel="Cancel order"
         tone="danger"
         submitting={busy === pendingNote?.order?.id}
         onClose={() => setPendingNote(null)}
@@ -415,8 +525,17 @@ function OrderList({
           const target = pendingNote;
           setPendingNote(null);
           if (!target) return;
-          if (target.kind === "CANCEL") void cancel(target.order, note);
-          else void orderAction(target.order, "OPEN_DISPUTE", note);
+          void cancel(target.order, note);
+        }}
+      />
+      <OpenDisputeDialog
+        order={pendingDispute}
+        submitting={busy === pendingDispute?.id}
+        onClose={() => setPendingDispute(null)}
+        onSubmit={(value) => {
+          const target = pendingDispute;
+          setPendingDispute(null);
+          if (target) void orderAction(target, "OPEN_DISPUTE", value);
         }}
       />
 

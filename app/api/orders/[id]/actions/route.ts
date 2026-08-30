@@ -18,14 +18,22 @@ const schema = z
       "ADDRESS_ISSUE",
       "PAYMENT_ISSUE",
       "MUTUAL_AGREEMENT",
+      "ITEM_NOT_AS_DESCRIBED",
+      "QUALITY_ISSUE",
+      "QUANTITY_SHORTFALL",
+      "DELIVERY_ISSUE",
+      "DOCUMENTATION_ISSUE",
       "OTHER",
     ]).optional(),
     note: z.string().trim().max(500).optional(),
+    evidence: z.array(z.string().trim().min(2).max(500)).max(5).optional(),
   })
   .strict()
   .refine(
-    (value) => value.action !== "CANCEL" || Boolean(value.reasonCode),
-    { path: ["reasonCode"], message: "Cancellation reason is required." },
+    (value) =>
+      !["CANCEL", "OPEN_DISPUTE"].includes(value.action) ||
+      Boolean(value.reasonCode),
+    { path: ["reasonCode"], message: "A reason is required." },
   );
 
 export async function POST(
@@ -83,7 +91,14 @@ export async function POST(
             type: "BUYER_CONFIRMED_DELIVERY",
             fromStatus: `${order.status}/${order.fulfillmentStatus}`,
             toStatus: "CLOSED/DELIVERED",
-            snapshotJson: JSON.stringify({ note: body.note }),
+            snapshotJson: JSON.stringify({
+              schemaVersion: "dispute-open-v1",
+              note: body.note,
+              evidence: body.evidence ?? [],
+              previousPaymentStatus: order.paymentStatus,
+              previousOrderStatus: order.status,
+              previousFulfillmentStatus: order.fulfillmentStatus,
+            }),
           },
         });
         return tx.purchaseOrder.findUniqueOrThrow({

@@ -69,6 +69,18 @@ export async function GET(
       feeVersion: string;
       taxNote: string;
     };
+    const creditSnapshot = wantsCreditNote && creditNote
+      ? (JSON.parse(creditNote.snapshotJson) as {
+          refundAmount?: number;
+          resolutionAction?: string;
+        })
+      : null;
+    const creditAmount =
+      typeof creditSnapshot?.refundAmount === "number"
+        ? creditSnapshot.refundAmount
+        : snapshot.totalAmount;
+    const isPartialCredit =
+      wantsCreditNote && creditAmount < snapshot.totalAmount;
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([595, 842]);
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -132,19 +144,21 @@ export async function GET(
         font: regular,
       });
       page.drawText(
-        `${item.quantity} ${safeText(item.unit)} x ${snapshot.currency} ${item.pricePerUnit.toFixed(2)} = ${snapshot.currency} ${wantsCreditNote ? "-" : ""}${item.lineTotal.toFixed(2)}`,
+        `${item.quantity} ${safeText(item.unit)} x ${snapshot.currency} ${item.pricePerUnit.toFixed(2)} = ${snapshot.currency} ${wantsCreditNote && !isPartialCredit ? "-" : ""}${item.lineTotal.toFixed(2)}`,
         { x: 280, y, size: 9, font: regular },
       );
       y -= 18;
     }
     y -= 12;
-    const totals = [
-      ["Subtotal", snapshot.subtotal],
-      ["Buyer platform fee", snapshot.buyerFeeAmount],
-      ["Shipping", snapshot.shippingAmount],
-      ["Tax", snapshot.taxAmount],
-      ["Total", snapshot.totalAmount],
-    ] as const;
+    const totals: ReadonlyArray<readonly [string, number]> = isPartialCredit
+      ? [["Partial refund", creditAmount]]
+      : [
+          ["Subtotal", snapshot.subtotal],
+          ["Buyer platform fee", snapshot.buyerFeeAmount],
+          ["Shipping", snapshot.shippingAmount],
+          ["Tax", snapshot.taxAmount],
+          ["Total", snapshot.totalAmount],
+        ];
     for (const [label, value] of totals) {
       page.drawText(label, { x: 330, y, size: 10, font: bold });
       page.drawText(
