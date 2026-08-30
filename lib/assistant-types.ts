@@ -7,6 +7,7 @@ export interface AssistantListingPreview {
   unit: string;
   priceMode: string;
   pricePerUnit: number;
+  priceBasisUnit: string | null;
   currency: string;
   minOrderQuantity: number;
   imageUrl: string | null;

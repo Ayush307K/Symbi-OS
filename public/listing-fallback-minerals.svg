@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="t d">
+  <title id="t">Minerals category illustration</title><desc id="d">Illustrative mineral aggregate, not a seller photograph</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#dce5e2"/><stop offset="1" stop-color="#879590"/></linearGradient></defs>
+  <rect width="800" height="520" fill="url(#g)"/><g fill="#59645f" stroke="#37413d" stroke-width="7"><path d="m90 385 105-170 120 170z"/><path d="m250 385 150-245 160 245z"/><path d="m470 385 115-185 135 185z"/></g><g fill="#cbd3cf"><circle cx="250" cy="330" r="18"/><circle cx="350" cy="275" r="25"/><circle cx="520" cy="330" r="21"/><circle cx="430" cy="355" r="14"/></g>
+  <text x="400" y="465" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" fill="#29332f">MINERALS · CATEGORY ILLUSTRATION</text>
+</svg>

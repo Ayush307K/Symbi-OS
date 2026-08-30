@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="t d">
+  <title id="t">Glass category illustration</title><desc id="d">Illustrative glass cullet, not a seller photograph</desc>
+  <defs><linearGradient id="g"><stop stop-color="#dff4f2"/><stop offset="1" stop-color="#75b8b1"/></linearGradient></defs><rect width="800" height="520" fill="url(#g)"/>
+  <g fill="#eafffb" fill-opacity=".72" stroke="#277f78" stroke-width="6"><path d="m105 340 80-190 115 130-55 130z"/><path d="m280 390 80-250 135 90-45 180z"/><path d="m465 390 100-235 125 145-65 110z"/><path d="m215 405 65-135 100 140z"/></g>
+  <text x="400" y="465" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" fill="#165d58">GLASS CULLET · CATEGORY ILLUSTRATION</text>
+</svg>

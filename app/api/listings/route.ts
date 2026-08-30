@@ -14,10 +14,7 @@ import {
   recordListingEvent,
   slugify,
 } from "@/server/listings/lifecycle";
-import {
-  classifyMaterialSafety,
-  recordSafetyEvent,
-} from "@/server/safety";
+import { classifyMaterialSafety, recordSafetyEvent } from "@/server/safety";
 import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
 import { geocodeData, geocodeLocation } from "@/server/geocoding";
 
@@ -25,7 +22,11 @@ export async function GET() {
   try {
     const auth = await requireUser(["SELLER"]);
     if (!auth.companyId) {
-      throw new ApiError(409, "A company profile is required.", "COMPANY_REQUIRED");
+      throw new ApiError(
+        409,
+        "A company profile is required.",
+        "COMPANY_REQUIRED",
+      );
     }
     const listings = await prisma.marketplaceListing.findMany({
       where: { sellerCompanyId: auth.companyId },
@@ -59,7 +60,11 @@ export async function POST(request: NextRequest) {
     assertTrustedOrigin(request);
     const auth = await requireUser(["SELLER"]);
     if (!auth.companyId) {
-      throw new ApiError(409, "A company profile is required.", "COMPANY_REQUIRED");
+      throw new ApiError(
+        409,
+        "A company profile is required.",
+        "COMPANY_REQUIRED",
+      );
     }
     const body = await parseJson(request, listingDraftSchema);
     const onboarding = await prisma.sellerOnboarding.findUnique({
@@ -157,9 +162,26 @@ export async function POST(request: NextRequest) {
           // seller starts a draft before entering a price. Absent a positive
           // price, the honest default is ON_REQUEST.
           priceMode:
-            body.priceMode ?? ((body.pricePerUnit ?? 0) > 0 ? "FIXED" : "ON_REQUEST"),
+            body.priceMode ??
+            ((body.pricePerUnit ?? 0) > 0 ? "FIXED" : "ON_REQUEST"),
           pricePerUnit: body.pricePerUnit || 0,
           currency: "INR",
+          priceBasisUnit:
+            (body.priceMode ??
+              ((body.pricePerUnit ?? 0) > 0 ? "FIXED" : "ON_REQUEST")) ===
+            "FIXED"
+              ? body.unit || "ton"
+              : null,
+          normalizedPricePerKg:
+            (body.priceMode ??
+              ((body.pricePerUnit ?? 0) > 0 ? "FIXED" : "ON_REQUEST")) !==
+            "FIXED"
+              ? null
+              : (body.unit || "ton") === "kg"
+                ? body.pricePerUnit || 0
+                : (body.unit || "ton") === "ton"
+                  ? (body.pricePerUnit || 0) / 1000
+                  : null,
           unit: body.unit || "ton",
           minOrderQuantity: body.minOrderQuantity || 1,
           lotIncrement: body.lotIncrement || 1,
@@ -186,6 +208,9 @@ export async function POST(request: NextRequest) {
           ownershipDeclaration: body.ownershipDeclaration || false,
           authorityDeclaration: body.authorityDeclaration || false,
           status: "DRAFT",
+          dataQualityStatus: "VALID",
+          dataQualityIssues: [],
+          dataNormalizedAt: new Date(),
           safetyReviewReason:
             safety.outcome === "MANUAL_REVIEW" ? safety.ruleCode : null,
         },

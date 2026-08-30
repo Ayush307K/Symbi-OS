@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
+  Clock3,
   Heart,
   Info,
   LayoutList,
@@ -58,14 +59,18 @@ interface ProductResponse {
   sameSeller: MaterialListing[];
 }
 
-function money(value: number | null) {
+function money(value: number | null, currency = "INR") {
   // ON_REQUEST arrives as null. A zero is never rendered as a price.
   if (value === null || Number.isNaN(value)) return null;
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString("en-IN")}`;
+  }
 }
 
 function num(value: number | null) {
@@ -95,6 +100,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewTitle, setReviewTitle] = useState("");
   const [reviewBody, setReviewBody] = useState("");
+  const [usingFallbackImage, setUsingFallbackImage] = useState(false);
 
   const listing = data?.listing ?? null;
 
@@ -105,14 +111,15 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
     ? null
     : quantityInput.trim() === ""
       ? "Enter a quantity."
-      : !Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0
+      : !Number.isFinite(quantity) ||
+          !Number.isInteger(quantity) ||
+          quantity <= 0
         ? "Enter a whole number greater than zero."
         : quantity < listing.minOrderQuantity
           ? `Minimum order is ${num(listing.minOrderQuantity)} ${listing.unit}.`
           : listing.quantity !== null && quantity > listing.quantity
             ? `Only ${num(listing.quantity)} ${listing.unit} available.`
             : null;
-
 
   useEffect(() => {
     let cancelled = false;
@@ -125,10 +132,14 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         const payload = await res.json();
         if (cancelled) return;
         setData(payload);
-        setQuantityInput(String(Math.max(1, payload.listing?.minOrderQuantity || 1)));
+        setQuantityInput(
+          String(Math.max(1, payload.listing?.minOrderQuantity || 1)),
+        );
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load this listing.");
+          setError(
+            err instanceof Error ? err.message : "Unable to load this listing.",
+          );
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -170,7 +181,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         toast({
           tone: "danger",
           title: "That did not go through",
-          description: err instanceof Error ? err.message : "Something went wrong.",
+          description:
+            err instanceof Error ? err.message : "Something went wrong.",
         });
       } finally {
         setPending(null);
@@ -191,9 +203,13 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         },
       );
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Unable to update saved products.");
+      if (!res.ok)
+        throw new Error(payload.error || "Unable to update saved products.");
       setIsSaved(!isSaved);
-      toast({ tone: "success", title: isSaved ? "Removed from saved" : "Saved for later" });
+      toast({
+        tone: "success",
+        title: isSaved ? "Removed from saved" : "Saved for later",
+      });
     });
 
   const addToCart = () =>
@@ -206,7 +222,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         body: JSON.stringify({ listingId: listing.id, quantity }),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Unable to add item to cart.");
+      if (!res.ok)
+        throw new Error(payload.error || "Unable to add item to cart.");
       toast({ tone: "success", title: "Added to cart" });
     });
 
@@ -264,7 +281,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         }),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Unable to message seller.");
+      if (!res.ok)
+        throw new Error(payload.error || "Unable to message seller.");
       toast({ tone: "success", title: "Message thread created" });
       router.push(`/messages/${payload.threadId}`);
     });
@@ -292,7 +310,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         }),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Unable to publish review.");
+      if (!res.ok)
+        throw new Error(payload.error || "Unable to publish review.");
       setIsReviewOpen(false);
       setReviewTitle("");
       setReviewBody("");
@@ -320,9 +339,16 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
         <EmptyState
           icon={<Info />}
           title="This listing is unavailable"
-          description={error ?? "It may have been sold, paused, or withdrawn by the seller."}
+          description={
+            error ??
+            "It may have been sold, paused, or withdrawn by the seller."
+          }
           action={
-            <Button variant="primary" size="sm" onClick={() => router.push("/")}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => router.push("/")}
+            >
               Back to the catalogue
             </Button>
           }
@@ -331,13 +357,14 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
     );
   }
 
-  const price = money(listing.price);
+  const price = money(listing.price, listing.currency);
   const sourceUrl = externalHttpUrl(listing.sourceUrl);
   const capabilities = listingCapabilities(listing);
   const trustLabel = listingTrustLabel(listing.listingMode);
-  const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
+  const place =
+    [listing.city, listing.state].filter(Boolean).join(", ") ||
+    listing.location;
   const stats = data?.sellerStats;
-
 
   // Everything the API knows, for the overview overlay. Kept out of the page so
   // the buying decision is not buried under a specification table.
@@ -358,17 +385,34 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
     ["Orders completed", num(listing.ordersCompleted)],
     ["Response rate", `${num(listing.responseRate)}%`],
     ["Source", listing.sourceName || "Seller submitted"],
+    ["Freshness", listing.freshnessLabel],
+    [
+      "Last verified",
+      new Date(listing.lastVerifiedAt).toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeZone: "Asia/Kolkata",
+      }),
+    ],
   ];
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6">
       {/* Breadcrumb: where this sits, and the way back. */}
-      <nav aria-label="Breadcrumb" className="mb-5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-500">
-        <Link href="/" className="rounded-sm font-medium hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700">
+      <nav
+        aria-label="Breadcrumb"
+        className="mb-5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-500"
+      >
+        <Link
+          href="/"
+          className="rounded-sm font-medium hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+        >
           Marketplace
         </Link>
         <span aria-hidden="true">·</span>
-        <Link href={`/?category=${encodeURIComponent(listing.category)}`} className="rounded-sm font-medium hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700">
+        <Link
+          href={`/?category=${encodeURIComponent(listing.category)}`}
+          className="rounded-sm font-medium hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+        >
           {listing.category}
         </Link>
         <span aria-hidden="true">·</span>
@@ -378,13 +422,19 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Left rail: the material itself. */}
         <div className="flex min-w-0 flex-col gap-6">
-          <div className="overflow-hidden rounded-card border border-ink-200 bg-surface-card">
+          <div className="relative overflow-hidden rounded-card border border-ink-200 bg-surface-card">
             <ListingImage
               src={listing.imageUrl}
               fallbackSrc={listingFallbackImage(listing)}
+              onFallbackChange={setUsingFallbackImage}
               alt={listing.title}
               className="aspect-[4/3] w-full object-cover"
             />
+            {usingFallbackImage ? (
+              <span className="absolute bottom-3 left-3 rounded-full bg-ink-900/80 px-3 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                Category illustration · no seller photo
+              </span>
+            ) : null}
           </div>
 
           <div className="min-w-0">
@@ -400,7 +450,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                 >
                   {trustLabel}
                 </Badge>
-              ) : listing.listingMode === "MANAGED" && capabilities.canMessage ? (
+              ) : listing.listingMode === "MANAGED" &&
+                capabilities.canMessage ? (
                 <Badge tone="brand" icon={<BadgeCheck />}>
                   {trustLabel}
                 </Badge>
@@ -435,11 +486,20 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
           {/* At a glance — hairlines, not another box. Four facts, no scroll. */}
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-ink-200 bg-ink-200 sm:grid-cols-5">
-            <Glance label="Available" value={`${num(listing.quantity)} ${listing.unit}`} />
-            <Glance label="Min order" value={`${num(listing.minOrderQuantity)} ${listing.unit}`} />
+            <Glance
+              label="Available"
+              value={`${num(listing.quantity)} ${listing.unit}`}
+            />
+            <Glance
+              label="Min order"
+              value={`${num(listing.minOrderQuantity)} ${listing.unit}`}
+            />
             <Glance label="Lead time" value={`${listing.leadTimeDays} days`} />
             <Glance label="Location" value={place} />
-            <Glance label="Delivery" value={deliveryTermLabel(listing.deliveryTerm)} />
+            <Glance
+              label="Delivery"
+              value={deliveryTermLabel(listing.deliveryTerm)}
+            />
           </dl>
 
           {listing.description ? (
@@ -470,11 +530,16 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                   Reviews
                   {stats?.reviewAverage ? (
                     <span className="ml-2 font-normal text-ink-500">
-                      {stats.reviewAverage.toFixed(1)} average · {stats.reviewCount}
+                      {stats.reviewAverage.toFixed(1)} average ·{" "}
+                      {stats.reviewCount}
                     </span>
                   ) : null}
                 </h2>
-                <Button variant="ghost" size="sm" onClick={() => setIsReviewOpen(true)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsReviewOpen(true)}
+                >
                   Write a review
                 </Button>
               </div>
@@ -491,7 +556,9 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                       ) : null}
                     </div>
                     {review.title ? (
-                      <p className="mt-1.5 text-sm font-medium text-ink-900">{review.title}</p>
+                      <p className="mt-1.5 text-sm font-medium text-ink-900">
+                        {review.title}
+                      </p>
                     ) : null}
                     <p className="prose-numerals mt-1 text-[13px] leading-relaxed text-ink-600">
                       {review.body}
@@ -516,7 +583,9 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
               {price ?? "Ask quote"}
             </p>
             <p className="mt-1.5 text-[13px] text-ink-500">
-              {price ? `per ${listing.unit}` : "Seller has not published a price"}
+              {price
+                ? `per ${listing.priceBasisUnit || listing.unit}`
+                : "Seller has not published a price"}
             </p>
 
             <div className="mt-5">
@@ -542,13 +611,14 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
               {listing.listingMode === "EVAL" ? (
                 <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] leading-relaxed text-ink-600">
                   Synthetic evaluation listing. It remains visible for demo and
-                  retrieval testing, but cannot be purchased, bid on, or messaged.
+                  retrieval testing, but cannot be purchased, bid on, or
+                  messaged.
                 </div>
               ) : listing.listingMode === "EXTERNAL_LEAD" ? (
                 <div className="flex flex-col gap-2">
                   <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] leading-relaxed text-ink-600">
-                    This is an external sourcing lead, not a SymbiOS seller offer.
-                    Confirm price, stock and terms with the source.
+                    This is an external sourcing lead, not a SymbiOS seller
+                    offer. Confirm price, stock and terms with the source.
                   </div>
                   <ExternalSourceLink
                     href={sourceUrl}
@@ -576,7 +646,9 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                       fullWidth
                       leadingIcon={<Gavel className="h-4 w-4" />}
                       onClick={() => {
-                        setBidPrice(price && listing.price ? String(listing.price) : "");
+                        setBidPrice(
+                          price && listing.price ? String(listing.price) : "",
+                        );
                         setIsBidOpen(true);
                       }}
                       disabled={Boolean(quantityError)}
@@ -611,7 +683,8 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                   </div>
                   {!capabilities.canBid && !capabilities.canMessage ? (
                     <div className="rounded-control border border-ink-200 bg-surface-sunken px-3 py-3 text-[13px] text-ink-600">
-                      This managed listing is temporarily unavailable for marketplace actions.
+                      This managed listing is temporarily unavailable for
+                      marketplace actions.
                     </div>
                   ) : null}
                 </>
@@ -621,7 +694,12 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
                 fullWidth
                 aria-pressed={isSaved}
                 leadingIcon={
-                  <Heart className={cn("h-4 w-4", isSaved && "fill-copper-700 text-copper-700")} />
+                  <Heart
+                    className={cn(
+                      "h-4 w-4",
+                      isSaved && "fill-copper-700 text-copper-700",
+                    )}
+                  />
                 }
                 loading={pending === "save"}
                 onClick={saveListing}
@@ -632,14 +710,29 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
 
             <dl className="mt-5 flex flex-col gap-2 border-t border-ink-200 pt-4 text-[13px] text-ink-500">
               <Meta icon={MapPin} text={place} />
-              <Meta icon={Package} text={`${num(listing.quantity)} ${listing.unit} available`} />
-              <Meta icon={Truck} text={`Dispatch in ${listing.leadTimeDays} days`} />
+              <Meta
+                icon={Package}
+                text={`${num(listing.quantity)} ${listing.unit} available`}
+              />
+              <Meta
+                icon={Truck}
+                text={`Dispatch in ${listing.leadTimeDays} days`}
+              />
+              <Meta icon={Clock3} text={listing.freshnessLabel} />
             </dl>
 
             {stats ? (
               <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-ink-200 pt-4">
-                <Glance flat label="Seller listings" value={num(stats.activeListings)} />
-                <Glance flat label="Fulfilled" value={num(stats.fulfilledOrders)} />
+                <Glance
+                  flat
+                  label="Seller listings"
+                  value={num(stats.activeListings)}
+                />
+                <Glance
+                  flat
+                  label="Fulfilled"
+                  value={num(stats.fulfilledOrders)}
+                />
               </dl>
             ) : null}
           </div>
@@ -703,7 +796,11 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             value={bidPrice}
             suffix="₹"
             error={bidError ?? undefined}
-            hint={bidError ? undefined : "The seller can accept, counter, or decline."}
+            hint={
+              bidError
+                ? undefined
+                : "The seller can accept, counter, or decline."
+            }
             onChange={(event) => setBidPrice(event.target.value)}
           />
 
@@ -720,7 +817,7 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             <div className="flex items-baseline justify-between border-t border-ink-200 pt-3">
               <span className="text-[13px] text-ink-500">Bid total</span>
               <span className="text-lg font-semibold text-ink-900">
-                {money(quantity * bidValue)}
+                {money(quantity * bidValue, listing.currency)}
               </span>
             </div>
           ) : null}
@@ -772,7 +869,11 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             <Button variant="ghost" onClick={() => setIsReviewOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" loading={pending === "review"} onClick={submitReview}>
+            <Button
+              variant="primary"
+              loading={pending === "review"}
+              onClick={submitReview}
+            >
               Publish review
             </Button>
           </>
@@ -785,7 +886,9 @@ export function ListingDetailPanel({ listingId }: ListingDetailPanelProps) {
             min={1}
             max={5}
             value={reviewRating}
-            onChange={(event) => setReviewRating(Number(event.target.value) || 5)}
+            onChange={(event) =>
+              setReviewRating(Number(event.target.value) || 5)
+            }
           />
           <Input
             label="Title"
@@ -817,14 +920,19 @@ function Glance({
       <dt className="truncate text-[12px] uppercase tracking-wide text-ink-500">
         {label}
       </dt>
-      <dd className="mt-0.5 truncate text-sm font-semibold text-ink-900">{value}</dd>
+      <dd className="mt-0.5 truncate text-sm font-semibold text-ink-900">
+        {value}
+      </dd>
     </div>
   );
 }
 
 function Stars({ rating }: { rating: number }) {
   return (
-    <span className="flex items-center gap-0.5" aria-label={`${rating} out of 5`}>
+    <span
+      className="flex items-center gap-0.5"
+      aria-label={`${rating} out of 5`}
+    >
       {Array.from({ length: 5 }).map((_, index) => (
         <Star
           key={index}

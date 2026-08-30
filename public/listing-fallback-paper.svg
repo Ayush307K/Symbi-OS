@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="t d">
+  <title id="t">Paper and cardboard category illustration</title><desc id="d">Illustrative cardboard bales, not a seller photograph</desc>
+  <defs><linearGradient id="g"><stop stop-color="#f1e5d3"/><stop offset="1" stop-color="#a97b50"/></linearGradient></defs><rect width="800" height="520" fill="url(#g)"/>
+  <g fill="#a86b38" stroke="#684224" stroke-width="8"><rect x="115" y="220" width="260" height="175" rx="12"/><rect x="405" y="165" width="270" height="230" rx="12"/></g><g stroke="#e7c49e" stroke-width="10"><path d="M140 260h210M140 310h210M140 360h210M430 210h220M430 265h220M430 320h220"/><path d="M245 220v175M540 165v230"/></g>
+  <text x="400" y="465" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" fill="#53321d">PAPER &amp; CARDBOARD · CATEGORY ILLUSTRATION</text>
+</svg>

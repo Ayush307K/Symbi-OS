@@ -8,10 +8,12 @@ process.env.DIRECT_URL = TEST_DATABASE_URL;
 process.env.LISTING_EMBEDDING_PROVIDER = "ranked-feed-fixture";
 
 const { default: prisma } = await import("@/lib/prisma");
-const { registerEmbeddingProvider } =
-  await import("@/server/semantic/embedding-provider");
-const { refreshListingEmbedding } =
-  await import("@/server/semantic/listing-embeddings");
+const { registerEmbeddingProvider } = await import(
+  "@/server/semantic/embedding-provider"
+);
+const { refreshListingEmbedding } = await import(
+  "@/server/semantic/listing-embeddings"
+);
 const { rankBuyerFeed } = await import("@/server/feed/ranked-feed");
 
 registerEmbeddingProvider("ranked-feed-fixture", () => ({
@@ -115,6 +117,7 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
         packaging: "Jumbo bags",
         paymentTerms: "On request",
         status: "ACTIVE",
+        lastVerifiedAt: new Date(),
         latitude: 19.076,
         longitude: 72.8777,
       },
@@ -147,6 +150,7 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
         packaging: "Bales",
         paymentTerms: "On request",
         status: "ACTIVE",
+        lastVerifiedAt: new Date(),
         latitude: 18.5204,
         longitude: 73.8567,
       },
@@ -209,7 +213,9 @@ describe.skipIf(!databaseReachable)("ranked buyer feed with pgvector", () => {
         longitude: 73.8567,
       },
     });
-    const mumbaiListing = fromMumbai.items.find((item) => item.id === listingId)!;
+    const mumbaiListing = fromMumbai.items.find(
+      (item) => item.id === listingId,
+    )!;
     const mumbaiViewOfPune = fromMumbai.items.find(
       (item) => item.id === secondListingId,
     )!;

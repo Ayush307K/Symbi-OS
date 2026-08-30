@@ -16,10 +16,7 @@ import {
   requireOwnedListing,
   slugify,
 } from "@/server/listings/lifecycle";
-import {
-  classifyMaterialSafety,
-  recordSafetyEvent,
-} from "@/server/safety";
+import { classifyMaterialSafety, recordSafetyEvent } from "@/server/safety";
 import { tryRefreshListingEmbedding } from "@/server/semantic/listing-embeddings";
 import { geocodeData, geocodeLocation } from "@/server/geocoding";
 
@@ -52,11 +49,11 @@ export async function PATCH(
     assertTrustedOrigin(request);
     const auth = await requireUser(["SELLER"]);
     const { id } = await params;
-    const body = await parseJson(
-      request,
-      listingUpdateSchema,
-    );
+    const body = await parseJson(request, listingUpdateSchema);
     const listing = await requireOwnedListing(id, auth);
+    const nextUnit = body.unit ?? listing.unit;
+    const nextPriceMode = body.priceMode ?? listing.priceMode;
+    const nextPrice = body.pricePerUnit ?? Number(listing.pricePerUnit);
     if (!["DRAFT", "REJECTED", "PAUSED", "ACTIVE"].includes(listing.status)) {
       throw new ApiError(
         409,
@@ -133,9 +130,23 @@ export async function PATCH(
         where: { id: listing.id, version: body.version },
         data: {
           ...listingUpdateData(body),
+          priceBasisUnit: nextPriceMode === "FIXED" ? nextUnit : null,
+          normalizedPricePerKg:
+            nextPriceMode !== "FIXED"
+              ? null
+              : nextUnit === "kg"
+                ? nextPrice
+                : nextUnit === "ton"
+                  ? nextPrice / 1000
+                  : null,
+          dataQualityStatus: "VALID",
+          dataQualityIssues: [],
+          dataNormalizedAt: new Date(),
           ...(locationChanged ? geocodeData(geocode) : {}),
           ...(geocode?.normalizedCity ? { city: geocode.normalizedCity } : {}),
-          ...(geocode?.normalizedState ? { state: geocode.normalizedState } : {}),
+          ...(geocode?.normalizedState
+            ? { state: geocode.normalizedState }
+            : {}),
           safetyReviewReason:
             safety.outcome === "MANUAL_REVIEW" ? safety.ruleCode : null,
           materialId,
@@ -165,11 +176,15 @@ export async function PATCH(
       await recordListingEvent(tx, {
         listingId: listing.id,
         actorUserId: auth.userId,
-        type: requiresReview ? "ACTIVE_LISTING_EDITED" : "LISTING_DRAFT_UPDATED",
+        type: requiresReview
+          ? "ACTIVE_LISTING_EDITED"
+          : "LISTING_DRAFT_UPDATED",
         fromStatus: listing.status,
         toStatus: next.status,
         version: next.version,
-        snapshotJson: listingSnapshot(next as unknown as Record<string, unknown>),
+        snapshotJson: listingSnapshot(
+          next as unknown as Record<string, unknown>,
+        ),
       });
       return next;
     });

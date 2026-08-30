@@ -7,10 +7,15 @@ import { LISTING_UNITS, SAFE_CATEGORIES } from "@/lib/listing-constants";
 import { apiError, ApiError } from "@/server/http";
 import { expireListings } from "@/server/listings/lifecycle";
 import {
+  listingDistanceKm,
+  sortListingsNearest,
+} from "@/server/listings/nearest";
+import {
   catalogOrderBy,
   managedListingWhere,
   publicListingWhere,
 } from "@/server/listings/policy";
+import { listingFreshness } from "@/lib/listing-freshness";
 
 const querySchema = z.object({
   q: z.string().trim().max(160).optional(),
@@ -19,20 +24,27 @@ const querySchema = z.object({
   location: z.string().trim().max(160).optional(),
   state: z.string().trim().max(100).optional(),
   city: z.string().trim().max(100).optional(),
-  pincode: z.string().regex(/^[1-9][0-9]{5}$/).optional(),
+  pincode: z
+    .string()
+    .regex(/^[1-9][0-9]{5}$/)
+    .optional(),
   minQuantity: z.coerce.number().int().min(0).optional(),
   maxQuantity: z.coerce.number().int().min(0).optional(),
   minPrice: z.coerce.number().min(0).optional(),
   maxPrice: z.coerce.number().min(0).optional(),
+  priceUnit: z.enum(LISTING_UNITS).default("kg"),
   unit: z.enum(LISTING_UNITS).optional(),
-  availableOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  availableOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   verified: z.enum(["true", "false"]).optional(),
   hasDocuments: z.enum(["true", "false"]).optional(),
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().positive().max(2000).optional(),
   sort: z
-    .enum(["recent", "price_asc", "price_desc", "quantity_desc"])
+    .enum(["recent", "nearest", "price_asc", "price_desc", "quantity_desc"])
     .default("recent"),
   limit: z.coerce.number().int().min(1).max(50).default(24),
   cursor: z.string().max(500).optional(),
@@ -59,22 +71,73 @@ function radians(value: number) {
   return (value * Math.PI) / 180;
 }
 
-function distanceKm(
-  fromLat: number,
-  fromLng: number,
-  toLat: number,
-  toLng: number,
-) {
-  const earthRadiusKm = 6371;
-  const latDelta = radians(toLat - fromLat);
-  const lngDelta = radians(toLng - fromLng);
-  const a =
-    Math.sin(latDelta / 2) ** 2 +
-    Math.cos(radians(fromLat)) *
-      Math.cos(radians(toLat)) *
-      Math.sin(lngDelta / 2) ** 2;
-  return 2 * earthRadiusKm * Math.asin(Math.sqrt(a));
-}
+const listingSelect = {
+  id: true,
+  materialId: true,
+  title: true,
+  slug: true,
+  listingMode: true,
+  isEvalOnly: true,
+  evalScenarioTags: true,
+  category: true,
+  subcategory: true,
+  area: true,
+  city: true,
+  state: true,
+  country: true,
+  pincode: true,
+  latitude: true,
+  longitude: true,
+  geocodingProvider: true,
+  geocodingConfidence: true,
+  geocodingPrecision: true,
+  deliveryTerm: true,
+  imageUrl: true,
+  priceMode: true,
+  pricePerUnit: true,
+  currency: true,
+  priceBasisUnit: true,
+  normalizedPricePerKg: true,
+  quantityAvailable: true,
+  unit: true,
+  minOrderQuantity: true,
+  lotIncrement: true,
+  leadTimeDays: true,
+  rating: true,
+  responseRate: true,
+  verified: true,
+  tradeAssurance: true,
+  yearsActive: true,
+  ordersCompleted: true,
+  updatedAt: true,
+  lastVerifiedAt: true,
+  description: true,
+  packaging: true,
+  handlingRequirements: true,
+  paymentTerms: true,
+  availableFrom: true,
+  availableUntil: true,
+  sourceType: true,
+  sourceName: true,
+  sourceUrl: true,
+  externalId: true,
+  rawQuantityText: true,
+  rawPriceText: true,
+  rawUnitText: true,
+  rawLocationText: true,
+  material: {
+    select: {
+      name: true,
+      toxicityLevel: true,
+      baseElement: true,
+    },
+  },
+  seller: { select: { id: true, name: true, displayName: true } },
+  assets: {
+    where: { kind: { in: ["CERTIFICATE", "TEST_REPORT"] } },
+    select: { kind: true },
+  },
+} satisfies Prisma.MarketplaceListingSelect;
 
 export async function GET(request: NextRequest) {
   const started = performance.now();
@@ -120,22 +183,34 @@ export async function GET(request: NextRequest) {
         "PRICE_RANGE_INVALID",
       );
     }
-    const hasDistance =
-      filters.lat !== undefined ||
-      filters.lng !== undefined ||
-      filters.radiusKm !== undefined;
+    const hasAnyOriginCoordinate =
+      filters.lat !== undefined || filters.lng !== undefined;
+    const hasOrigin = filters.lat !== undefined && filters.lng !== undefined;
     if (
-      hasDistance &&
-      (filters.lat === undefined ||
-        filters.lng === undefined ||
-        filters.radiusKm === undefined)
+      hasAnyOriginCoordinate &&
+      (filters.lat === undefined || filters.lng === undefined)
     ) {
       throw new ApiError(
         422,
-        "Latitude, longitude, and radius are required together.",
+        "Latitude and longitude are required together.",
         "DISTANCE_FILTER_INCOMPLETE",
       );
     }
+    if (filters.radiusKm !== undefined && !hasOrigin) {
+      throw new ApiError(
+        422,
+        "Latitude and longitude are required with a distance radius.",
+        "DISTANCE_FILTER_INCOMPLETE",
+      );
+    }
+    if (filters.sort === "nearest" && !hasOrigin) {
+      throw new ApiError(
+        422,
+        "Select a geocoded delivery plant before sorting by nearest.",
+        "NEAREST_LOCATION_REQUIRED",
+      );
+    }
+    const hasRadiusFilter = filters.radiusKm !== undefined;
 
     const availableOn = filters.availableOn
       ? new Date(`${filters.availableOn}T23:59:59.999Z`)
@@ -153,7 +228,9 @@ export async function GET(request: NextRequest) {
                 { area: { contains: filters.location, mode: "insensitive" } },
                 { city: { contains: filters.location, mode: "insensitive" } },
                 { state: { contains: filters.location, mode: "insensitive" } },
-                { pincode: { contains: filters.location, mode: "insensitive" } },
+                {
+                  pincode: { contains: filters.location, mode: "insensitive" },
+                },
                 {
                   rawLocationText: {
                     contains: filters.location,
@@ -189,8 +266,7 @@ export async function GET(request: NextRequest) {
                 },
               }
           : {},
-        filters.minQuantity !== undefined ||
-        filters.maxQuantity !== undefined
+        filters.minQuantity !== undefined || filters.maxQuantity !== undefined
           ? {
               quantityAvailable: {
                 gte: filters.minQuantity,
@@ -199,13 +275,33 @@ export async function GET(request: NextRequest) {
             }
           : {},
         filters.minPrice !== undefined || filters.maxPrice !== undefined
-          ? {
-              priceMode: "FIXED",
-              pricePerUnit: {
-                gte: filters.minPrice,
-                lte: filters.maxPrice,
-              },
-            }
+          ? filters.priceUnit === "lot"
+            ? {
+                priceMode: "FIXED",
+                priceBasisUnit: "lot",
+                pricePerUnit: {
+                  gte: filters.minPrice,
+                  lte: filters.maxPrice,
+                },
+              }
+            : {
+                priceMode: "FIXED",
+                priceBasisUnit: { in: ["kg", "ton"] },
+                normalizedPricePerKg: {
+                  gte:
+                    filters.minPrice === undefined
+                      ? undefined
+                      : filters.priceUnit === "ton"
+                        ? filters.minPrice / 1000
+                        : filters.minPrice,
+                  lte:
+                    filters.maxPrice === undefined
+                      ? undefined
+                      : filters.priceUnit === "ton"
+                        ? filters.maxPrice / 1000
+                        : filters.maxPrice,
+                },
+              }
           : {},
         availableOn
           ? {
@@ -249,7 +345,7 @@ export async function GET(request: NextRequest) {
               ],
             }
           : {},
-        hasDistance
+        hasRadiusFilter
           ? {
               latitude: {
                 gte: filters.lat! - filters.radiusKm! / 111,
@@ -269,99 +365,96 @@ export async function GET(request: NextRequest) {
           : {},
       ],
     };
-    const orderBy = catalogOrderBy(filters.sort);
     const cursorId = decodeCursor(filters.cursor);
 
-    const [rows, total] = await Promise.all([
-      prisma.marketplaceListing.findMany({
-      where,
-      select: {
-        id: true,
-        materialId: true,
-        title: true,
-        slug: true,
-        listingMode: true,
-        isEvalOnly: true,
-        evalScenarioTags: true,
-        category: true,
-        subcategory: true,
-        area: true,
-        city: true,
-        state: true,
-        country: true,
-        pincode: true,
-        latitude: true,
-        longitude: true,
-        geocodingProvider: true,
-        geocodingConfidence: true,
-        geocodingPrecision: true,
-        deliveryTerm: true,
-        imageUrl: true,
-        priceMode: true,
-        pricePerUnit: true,
-        currency: true,
-        quantityAvailable: true,
-        unit: true,
-        minOrderQuantity: true,
-        lotIncrement: true,
-        leadTimeDays: true,
-        rating: true,
-        responseRate: true,
-        verified: true,
-        tradeAssurance: true,
-        yearsActive: true,
-        ordersCompleted: true,
-        updatedAt: true,
-        lastVerifiedAt: true,
-        description: true,
-        packaging: true,
-        handlingRequirements: true,
-        paymentTerms: true,
-        availableFrom: true,
-        availableUntil: true,
-        sourceType: true,
-        sourceName: true,
-        sourceUrl: true,
-        externalId: true,
-        rawQuantityText: true,
-        rawLocationText: true,
-        material: {
-          select: {
-            name: true,
-            toxicityLevel: true,
-            baseElement: true,
-          },
-        },
-        seller: { select: { id: true, name: true } },
-        assets: {
-          where: { kind: { in: ["CERTIFICATE", "TEST_REPORT"] } },
-          select: { kind: true },
-        },
-      },
-      orderBy,
-      cursor: cursorId ? { id: cursorId } : undefined,
-      skip: cursorId ? 1 : 0,
-        take: filters.limit + 1,
-      }),
-      // Exact radius filtering is completed in application code after a
-      // bounding-box query, so a SQL count would overstate that result set.
-      hasDistance ? Promise.resolve(null) : prisma.marketplaceListing.count({ where }),
-    ]);
-    const distanceFiltered = hasDistance
-      ? rows.filter(
-          (row) =>
-            row.latitude !== null &&
-            row.longitude !== null &&
-            distanceKm(
-              filters.lat!,
-              filters.lng!,
-              row.latitude,
-              row.longitude,
-            ) <= filters.radiusKm!,
-        )
-      : rows;
-    const hasMore = distanceFiltered.length > filters.limit;
-    const pageRows = distanceFiltered.slice(0, filters.limit);
+    const { pageRows, hasMore, total } = await (async () => {
+      if (filters.sort === "nearest") {
+        // Prisma cannot order by a Haversine expression. Fetch only the small
+        // coordinate projection first, rank it in memory, then hydrate one
+        // page. This avoids loading descriptions/assets for the full catalogue
+        // and is deterministic under the existing id cursor.
+        const candidates = await prisma.marketplaceListing.findMany({
+          where,
+          select: { id: true, latitude: true, longitude: true },
+        });
+        const origin = {
+          latitude: filters.lat!,
+          longitude: filters.lng!,
+        };
+        const exactCandidates = hasRadiusFilter
+          ? candidates.filter((candidate) => {
+              const distance = listingDistanceKm(candidate, origin);
+              return distance !== null && distance <= filters.radiusKm!;
+            })
+          : candidates;
+        const orderedCandidates = sortListingsNearest(exactCandidates, origin);
+        const cursorIndex = cursorId
+          ? orderedCandidates.findIndex(
+              (candidate) => candidate.id === cursorId,
+            )
+          : -1;
+        if (cursorId && cursorIndex < 0) {
+          throw new ApiError(
+            400,
+            "Invalid pagination cursor.",
+            "CURSOR_INVALID",
+          );
+        }
+        const pageCandidateIds = orderedCandidates
+          .slice(cursorIndex + 1, cursorIndex + 1 + filters.limit + 1)
+          .map((candidate) => candidate.id);
+        const hydratedRows = pageCandidateIds.length
+          ? await prisma.marketplaceListing.findMany({
+              where: { id: { in: pageCandidateIds } },
+              select: listingSelect,
+            })
+          : [];
+        const hydratedById = new Map(
+          hydratedRows.map((row) => [row.id, row] as const),
+        );
+        const orderedRows = pageCandidateIds.flatMap((id) => {
+          const row = hydratedById.get(id);
+          return row ? [row] : [];
+        });
+        return {
+          pageRows: orderedRows.slice(0, filters.limit),
+          hasMore: orderedRows.length > filters.limit,
+          total: orderedCandidates.length,
+        };
+      }
+
+      const [rows, total] = await Promise.all([
+        prisma.marketplaceListing.findMany({
+          where,
+          select: listingSelect,
+          orderBy: catalogOrderBy(filters.sort, filters.priceUnit),
+          cursor: cursorId ? { id: cursorId } : undefined,
+          skip: cursorId ? 1 : 0,
+          take: filters.limit + 1,
+        }),
+        // Exact radius filtering is completed in application code after a
+        // bounding-box query, so a SQL count would overstate that result set.
+        hasRadiusFilter
+          ? Promise.resolve(null)
+          : prisma.marketplaceListing.count({ where }),
+      ]);
+      const distanceFiltered = hasRadiusFilter
+        ? rows.filter(
+            (row) =>
+              row.latitude !== null &&
+              row.longitude !== null &&
+              listingDistanceKm(row, {
+                latitude: filters.lat!,
+                longitude: filters.lng!,
+              })! <= filters.radiusKm!,
+          )
+        : rows;
+      return {
+        pageRows: distanceFiltered.slice(0, filters.limit),
+        hasMore: distanceFiltered.length > filters.limit,
+        total,
+      };
+    })();
     const companyIds = [...new Set(pageRows.map((row) => row.seller.id))];
     const sellerUsers = companyIds.length
       ? await prisma.user.findMany({
@@ -448,84 +541,99 @@ export async function GET(request: NextRequest) {
         .map((item) => item.user.companyId)
         .filter((id): id is string => Boolean(id)),
     );
-    const items = pageRows.map((row) => ({
-      id: row.id,
-      materialId: row.materialId,
-      slug: row.slug,
-      listingMode: row.listingMode,
-      isEvalOnly: row.isEvalOnly,
-      evalScenarioTags: row.evalScenarioTags,
-      title: row.title,
-      name: row.material.name,
-      toxicity: row.material.toxicityLevel,
-      baseElement: row.material.baseElement,
-      category: row.category,
-      subcategory: row.subcategory,
-      producer: row.seller.name,
-      producerId: row.seller.id,
-      sellerUserId: sellerUserByCompany.get(row.seller.id) ?? null,
-      location: `${row.area}, ${row.city}`,
-      area: row.area,
-      city: row.city,
-      state: row.state,
-      country: row.country,
-      pincode: row.pincode,
-      distanceKm:
-        hasDistance && row.latitude !== null && row.longitude !== null
+    const items = pageRows.map((row) => {
+      const freshness = listingFreshness(row.lastVerifiedAt ?? row.updatedAt);
+      return {
+        id: row.id,
+        materialId: row.materialId,
+        slug: row.slug,
+        listingMode: row.listingMode,
+        isEvalOnly: row.isEvalOnly,
+        evalScenarioTags: row.evalScenarioTags,
+        title: row.title,
+        name: row.material.name,
+        toxicity: row.material.toxicityLevel,
+        baseElement: row.material.baseElement,
+        category: row.category,
+        subcategory: row.subcategory,
+        producer: row.seller.displayName || row.seller.name,
+        producerId: row.seller.id,
+        sellerUserId: sellerUserByCompany.get(row.seller.id) ?? null,
+        location: `${row.area}, ${row.city}`,
+        area: row.area,
+        city: row.city,
+        state: row.state,
+        country: row.country,
+        pincode: row.pincode,
+        distanceKm:
+          hasOrigin && row.latitude !== null && row.longitude !== null
+            ? Math.round(
+                listingDistanceKm(row, {
+                  latitude: filters.lat!,
+                  longitude: filters.lng!,
+                })! * 10,
+              ) / 10
+            : null,
+        distanceStatus: hasOrigin
+          ? row.latitude !== null && row.longitude !== null
+            ? "AVAILABLE"
+            : "UNAVAILABLE"
+          : "NOT_REQUESTED",
+        geocodingPrecision: row.geocodingPrecision,
+        geocodingConfidence: row.geocodingConfidence,
+        deliveryTerm: row.deliveryTerm,
+        imageUrl: row.imageUrl,
+        priceMode: row.priceMode,
+        price: row.priceMode === "ON_REQUEST" ? null : row.pricePerUnit,
+        currency: row.currency,
+        priceBasisUnit: row.priceBasisUnit,
+        normalizedPricePerKg:
+          row.normalizedPricePerKg === null
+            ? null
+            : Number(row.normalizedPricePerKg),
+        quantity: row.quantityAvailable,
+        unit: row.unit,
+        minOrderQuantity: row.minOrderQuantity,
+        lotIncrement: row.lotIncrement,
+        leadTimeDays: row.leadTimeDays,
+        rating: reviewByListing.get(row.id)?._avg.rating ?? 0,
+        reviewCount: reviewByListing.get(row.id)?._count._all ?? 0,
+        responseRate: responseByListing.get(row.id)?.total
           ? Math.round(
-              distanceKm(
-                filters.lat!,
-                filters.lng!,
-                row.latitude,
-                row.longitude,
-              ) * 10,
-            ) / 10
-          : null,
-      distanceStatus: hasDistance ? "AVAILABLE" : "NOT_REQUESTED",
-      geocodingPrecision: row.geocodingPrecision,
-      geocodingConfidence: row.geocodingConfidence,
-      deliveryTerm: row.deliveryTerm,
-      imageUrl: row.imageUrl,
-      priceMode: row.priceMode,
-      price: row.priceMode === "ON_REQUEST" ? null : row.pricePerUnit,
-      currency: row.currency,
-      quantity: row.quantityAvailable,
-      unit: row.unit,
-      minOrderQuantity: row.minOrderQuantity,
-      lotIncrement: row.lotIncrement,
-      leadTimeDays: row.leadTimeDays,
-      rating: reviewByListing.get(row.id)?._avg.rating ?? 0,
-      reviewCount: reviewByListing.get(row.id)?._count._all ?? 0,
-      responseRate: responseByListing.get(row.id)?.total
-        ? Math.round(
-            (responseByListing.get(row.id)!.replied /
-              responseByListing.get(row.id)!.total) *
-              100,
-          )
-        : 0,
-      verified:
-        row.listingMode === "MANAGED" &&
-        row.verified &&
-        approvedSellerCompanies.has(row.seller.id),
-      tradeAssurance: false,
-      yearsActive: row.yearsActive,
-      ordersCompleted: ordersByListing.get(row.id) ?? 0,
-      description: row.description.slice(0, 360),
-      packaging: row.packaging,
-      handlingRequirements: row.handlingRequirements,
-      paymentTerms: row.paymentTerms,
-      availableFrom: row.availableFrom,
-      availableUntil: row.availableUntil,
-      hasDocuments: row.assets.length > 0,
-      documentKinds: [...new Set(row.assets.map((asset) => asset.kind))],
-      sourceType: row.sourceType,
-      sourceName: row.sourceName,
-      sourceUrl: row.sourceUrl,
-      externalId: row.externalId,
-      rawQuantityText: row.rawQuantityText,
-      rawLocationText: row.rawLocationText,
-      lastVerifiedAt: row.lastVerifiedAt ?? row.updatedAt,
-    }));
+              (responseByListing.get(row.id)!.replied /
+                responseByListing.get(row.id)!.total) *
+                100,
+            )
+          : 0,
+        verified:
+          row.listingMode === "MANAGED" &&
+          row.verified &&
+          approvedSellerCompanies.has(row.seller.id),
+        tradeAssurance: false,
+        yearsActive: row.yearsActive,
+        ordersCompleted: ordersByListing.get(row.id) ?? 0,
+        description: row.description.slice(0, 360),
+        packaging: row.packaging,
+        handlingRequirements: row.handlingRequirements,
+        paymentTerms: row.paymentTerms,
+        availableFrom: row.availableFrom,
+        availableUntil: row.availableUntil,
+        hasDocuments: row.assets.length > 0,
+        documentKinds: [...new Set(row.assets.map((asset) => asset.kind))],
+        sourceType: row.sourceType,
+        sourceName: row.sourceName,
+        sourceUrl: row.sourceUrl,
+        externalId: row.externalId,
+        rawQuantityText: row.rawQuantityText,
+        rawPriceText: row.rawPriceText,
+        rawUnitText: row.rawUnitText,
+        rawLocationText: row.rawLocationText,
+        lastVerifiedAt: row.lastVerifiedAt ?? row.updatedAt,
+        freshnessStatus: freshness.status,
+        freshnessLabel: freshness.label,
+        freshnessAgeDays: freshness.ageDays,
+      };
+    });
     const elapsedMs = Math.round((performance.now() - started) * 10) / 10;
     const payload = {
       items,

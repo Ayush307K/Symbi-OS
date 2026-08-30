@@ -146,6 +146,9 @@ model OfferEvent {
 model Company {
   id           String   @id
   name         String   @unique
+  /// Clean public label. Imported-source identifiers stay in id/name and are
+  /// never exposed as part of the supplier's display name.
+  displayName  String?
   industry     String
   location     String
   carbonRating String
@@ -199,6 +202,8 @@ model MarketplaceListing {
   sourceUrl            String?
   externalId           String?                     @unique
   rawQuantityText      String?
+  rawPriceText         String?
+  rawUnitText          String?
   rawLocationText      String?
   materialId           String
   sellerCompanyId      String
@@ -212,6 +217,10 @@ model MarketplaceListing {
   pricePerUnit         Decimal                     @db.Decimal(14, 2)
   priceMode            String                      @default("FIXED")
   currency             String                      @default("INR")
+  /// Canonical basis for pricePerUnit. Quantity unit remains in unit.
+  priceBasisUnit       String?
+  /// Cross-source comparison field for kg/ton prices; lot prices stay null.
+  normalizedPricePerKg Decimal?                    @db.Decimal(14, 4)
   unit                 String                      @default("ton")
   minOrderQuantity     Int
   lotIncrement         Int                         @default(1)
@@ -251,6 +260,9 @@ model MarketplaceListing {
   expiresAt            DateTime?
   archivedAt           DateTime?
   lastVerifiedAt       DateTime?
+  dataQualityStatus    String                      @default("VALID")
+  dataQualityIssues    String[]                    @default([])
+  dataNormalizedAt     DateTime?
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
   embedding            Unsupported("vector(768)")?
@@ -288,6 +300,8 @@ model MarketplaceListing {
   @@index([status, isEvalOnly, embeddingUpdatedAt])
   @@index([status, category, updatedAt, id])
   @@index([status, pricePerUnit])
+  @@index([status, priceBasisUnit, normalizedPricePerKg])
+  @@index([dataQualityStatus, status])
   @@index([status, quantityAvailable])
   @@index([status, availableFrom, availableUntil])
 }
@@ -845,6 +859,7 @@ model ListingImportRun {
   recordsSeen     Int       @default(0)
   recordsUpserted Int       @default(0)
   recordsRejected Int       @default(0)
+  recordsQuarantined Int    @default(0)
   errorSummary    String?
   startedAt       DateTime  @default(now())
   finishedAt      DateTime?

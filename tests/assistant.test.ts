@@ -72,9 +72,7 @@ describe("assistant query shaping", () => {
     );
     expect(ASSISTANT_RESOLUTION.continueLabel).toMatch(/^Yes/);
     expect(ASSISTANT_RESOLUTION.finishLabel).toMatch(/^No/);
-    expect(ASSISTANT_RESOLUTION.completedMessage.split(/\s+/)).toHaveLength(
-      11,
-    );
+    expect(ASSISTANT_RESOLUTION.completedMessage.split(/\s+/)).toHaveLength(11);
   });
 });
 
@@ -201,6 +199,7 @@ describe("assistant read-only tools", () => {
       unit: "ton",
       priceMode: "FIXED",
       pricePerUnit: 54,
+      priceBasisUnit: "ton",
       currency: "INR",
       minOrderQuantity: 5,
       imageUrl: "https://example.test/hdpe.jpg",
@@ -358,11 +357,7 @@ describe.skipIf(!databaseReachable)(
 
     it("uses the selected help topic as retrieval context without saving it as a fake user message", async () => {
       const answerer = vi.fn(
-        async (
-          _query: string,
-          _topK: number,
-          _options: RagAnswerOptions,
-        ) => ({
+        async (_query: string, _topK: number, _options: RagAnswerOptions) => ({
           answer: "Grounded PET result [S1]",
           citations: [],
           retrieval: { mode: "hybrid" as const, resultCount: 0 },

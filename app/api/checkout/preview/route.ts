@@ -33,7 +33,11 @@ export async function GET(request: NextRequest) {
       quantity: request.nextUrl.searchParams.get("quantity"),
     });
     if (!parsed.success) {
-      throw new ApiError(422, "A listing and quantity are required.", "PREVIEW_INVALID");
+      throw new ApiError(
+        422,
+        "A listing and quantity are required.",
+        "PREVIEW_INVALID",
+      );
     }
     const { listingId, quantity } = parsed.data;
 
@@ -58,11 +62,15 @@ export async function GET(request: NextRequest) {
         deliveryTerm: true,
         latitude: true,
         longitude: true,
-        seller: { select: { name: true } },
+        seller: { select: { name: true, displayName: true } },
       },
     });
     if (!listing) {
-      throw new ApiError(404, "This listing is no longer available.", "LISTING_UNAVAILABLE");
+      throw new ApiError(
+        404,
+        "This listing is no longer available.",
+        "LISTING_UNAVAILABLE",
+      );
     }
 
     // Stated rather than thrown: the buyer should see why a quantity is not
@@ -72,32 +80,54 @@ export async function GET(request: NextRequest) {
       blockers.push("This listing has expired.");
     }
     if (listing.priceMode !== "FIXED" || listing.pricePerUnit <= 0) {
-      blockers.push("This seller quotes on request. Send an inquiry or place a bid instead.");
+      blockers.push(
+        "This seller quotes on request. Send an inquiry or place a bid instead.",
+      );
     }
     if (!listing.deliveryTerm) {
-      blockers.push("The seller has not stated who arranges and pays for freight.");
+      blockers.push(
+        "The seller has not stated who arranges and pays for freight.",
+      );
     }
     if (
       listing.deliveryTerm === "FREIGHT_QUOTE_REQUIRED" &&
       (listing.latitude === null || listing.longitude === null)
     ) {
-      blockers.push("The dispatch location must be geocoded before freight can be quoted.");
+      blockers.push(
+        "The dispatch location must be geocoded before freight can be quoted.",
+      );
     }
     if (quantity < listing.minOrderQuantity) {
-      blockers.push(`Minimum order is ${listing.minOrderQuantity} ${listing.unit}.`);
+      blockers.push(
+        `Minimum order is ${listing.minOrderQuantity} ${listing.unit}.`,
+      );
     }
     if (quantity > listing.quantityAvailable) {
-      blockers.push(`Only ${listing.quantityAvailable} ${listing.unit} available.`);
+      blockers.push(
+        `Only ${listing.quantityAvailable} ${listing.unit} available.`,
+      );
     }
     if (listing.lotIncrement > 1 && quantity % listing.lotIncrement !== 0) {
-      blockers.push(`Quantity must be a multiple of ${listing.lotIncrement} ${listing.unit}.`);
+      blockers.push(
+        `Quantity must be a multiple of ${listing.lotIncrement} ${listing.unit}.`,
+      );
     }
 
     const fees = blockers.length
       ? null
       : calculateFees(quantity * listing.pricePerUnit);
 
-    return NextResponse.json({ listing, quantity, fees, blockers });
+    return NextResponse.json({
+      listing: {
+        ...listing,
+        seller: {
+          name: listing.seller.displayName || listing.seller.name,
+        },
+      },
+      quantity,
+      fees,
+      blockers,
+    });
   } catch (error) {
     return apiError(error);
   }

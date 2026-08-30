@@ -4,17 +4,16 @@ import { useEffect, useState, type ImgHTMLAttributes } from "react";
 
 const PLACEHOLDER = "/listing-placeholder.svg";
 
-type ListingImageProps = Omit<
-  ImgHTMLAttributes<HTMLImageElement>,
-  "src"
-> & {
+type ListingImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   src?: string | null;
   fallbackSrc?: string;
+  onFallbackChange?: (usingFallback: boolean) => void;
 };
 
 export default function ListingImage({
   src,
   fallbackSrc = PLACEHOLDER,
+  onFallbackChange,
   alt,
   onError,
   ...props
@@ -24,7 +23,8 @@ export default function ListingImage({
 
   useEffect(() => {
     setCurrentSource(initialSource);
-  }, [initialSource]);
+    onFallbackChange?.(!src);
+  }, [initialSource, onFallbackChange, src]);
 
   return (
     <img
@@ -40,8 +40,10 @@ export default function ListingImage({
           setCurrentSource(`${currentSource.slice(0, -5)}.jpg`);
         } else if (currentSource !== fallbackSrc) {
           setCurrentSource(fallbackSrc);
+          onFallbackChange?.(true);
         } else if (currentSource !== PLACEHOLDER) {
           setCurrentSource(PLACEHOLDER);
+          onFallbackChange?.(true);
         }
       }}
     />

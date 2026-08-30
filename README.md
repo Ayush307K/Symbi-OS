@@ -14,26 +14,56 @@ materials. Only canonical non-hazardous categories are accepted. The same
 policy runs during provider ingestion, seller listing creation, search, RAG
 indexing, bids, and checkout.
 
-The current demo catalogue keeps all active records discoverable. Visibility
-does not imply transactability: synthetic records and external sourcing leads
-cannot receive marketplace bids, messages, carts, or orders. A database file
-must never be committed.
+The current demo catalogue keeps every active, safe, data-quality-valid record
+discoverable. Imported rows whose location, encoding, or commercial unit cannot
+be resolved are retained as `QUARANTINED` audit records and never shown as live
+stock. Visibility does not imply transactability: synthetic records and
+external sourcing leads cannot receive marketplace bids, messages, carts, or
+orders. A database file must never be committed.
 
 ### Listing modes and transaction boundary
 
 Every listing has one explicit `listingMode`:
 
-| Mode | Buyer-facing label | Visible | Marketplace actions |
-| --- | --- | --- | --- |
-| `MANAGED` | Verified SymbiOS seller | Yes | Bid/message when the seller is active and approved; cart/checkout only for a positive fixed price |
-| `EXTERNAL_LEAD` | External source | Yes | Original source link only; no internal transaction or messaging |
-| `EVAL` | Synthetic demo listing | Yes in the current demo catalogue | None |
+| Mode            | Buyer-facing label      | Visible                           | Marketplace actions                                                                               |
+| --------------- | ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `MANAGED`       | Verified SymbiOS seller | Yes                               | Bid/message when the seller is active and approved; cart/checkout only for a positive fixed price |
+| `EXTERNAL_LEAD` | External source         | Yes                               | Original source link only; no internal transaction or messaging                                   |
+| `EVAL`          | Synthetic demo listing  | Yes in the current demo catalogue | None                                                                                              |
 
 Seller-created listings enter `MANAGED`; provider imports enter
 `EXTERNAL_LEAD`; evaluation fixtures enter `EVAL`. Backend policies also require
 an active seller account, approved seller onboarding, listing verification,
 inventory, and a non-expired listing. UI capability checks mirror those rules
 for honest CTAs, but the backend remains authoritative.
+
+### Catalogue data quality
+
+Provider ingestion preserves raw supplier values (`rawQuantityText`,
+`rawPriceText`, `rawUnitText`, and `rawLocationText`) and writes normalized
+fields separately:
+
+- known Indian city/state mismatches are repaired from the canonical city map;
+  unresolved locations are quarantined;
+- quantity unit and price basis are normalized independently to `kg`, `ton`,
+  or `lot`; mass prices also store `normalizedPricePerKg`, while a lot price is
+  never converted without a known mass;
+- common UTF-8 mojibake is repaired before persistence and unresolved encoding
+  artefacts fail data-quality validation;
+- provider hashes remain internal identifiers while `Company.displayName` is
+  the clean buyer-facing supplier name;
+- missing or failed images use category-specific artwork labelled
+  `Category illustration · no seller photo`;
+- every listing shows its last verification age. Imported rows older than
+  `IMPORTED_LISTING_STALE_DAYS` remain stored but leave public discovery until
+  the source reconfirms them.
+
+Run the idempotent audit/backfill after a migration or provider change:
+
+```bash
+npm run catalog:normalize
+npm run catalog:normalize -- --dry-run
+```
 
 ## Architecture
 
@@ -172,7 +202,8 @@ first runs `npm run db:deploy` through `DIRECT_URL`, synchronizes the idempotent
 data, then starts `next build`. This ordering prevents a generated Prisma
 client from reaching production before its required columns or required demo
 data exist. Set `SKIP_CATALOG_SYNC=true` or
-`SKIP_GEOCODING_BACKFILL=true` only as an explicit emergency override. Vercel
+`SKIP_GEOCODING_BACKFILL=true` or `SKIP_CATALOG_NORMALIZATION=true` only as an
+explicit emergency override. Vercel
 must define both connection strings:
 
 - `DATABASE_URL`: pooled runtime connection.
@@ -320,6 +351,7 @@ The configured API may return an array or an object containing `items`, `data`,
   "quantity": 25,
   "unit": "ton",
   "price": 42000,
+  "priceUnit": "ton",
   "currency": "INR",
   "url": "https://provider.example/listings/123",
   "imageUrl": "https://provider.example/images/123.jpg"
@@ -328,7 +360,8 @@ The configured API may return an array or an object containing `items`, `data`,
 
 Rows outside India, with unsupported categories, missing provenance, or
 containing prohibited material terms are rejected and counted in
-`ListingImportRun`.
+`ListingImportRun`. In-scope rows with unresolved locations or ambiguous fixed
+price bases are retained as quarantined records and counted separately.
 
 ## Location and logistics
 
@@ -360,12 +393,12 @@ both endpoints are available and otherwise says `Distance unavailable`.
 
 Every managed listing must state one delivery term before submission:
 
-| Term | Commercial meaning | Checkout freight treatment |
-| --- | --- | --- |
-| `EX_WORKS` | Seller makes material ready at origin; buyer arranges freight | `BUYER_ARRANGED`, no SymbiOS freight charge |
-| `FOB` | Seller loads at the named origin; buyer arranges onward freight | `BUYER_ARRANGED`, no SymbiOS freight charge |
-| `DELIVERED` | Seller arranges delivery and freight is included in price | `INCLUDED_IN_PRICE`, no separate freight charge |
-| `FREIGHT_QUOTE_REQUIRED` | Freight is priced separately | Persisted 24-hour sandbox quote required before payment |
+| Term                     | Commercial meaning                                              | Checkout freight treatment                              |
+| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------- |
+| `EX_WORKS`               | Seller makes material ready at origin; buyer arranges freight   | `BUYER_ARRANGED`, no SymbiOS freight charge             |
+| `FOB`                    | Seller loads at the named origin; buyer arranges onward freight | `BUYER_ARRANGED`, no SymbiOS freight charge             |
+| `DELIVERED`              | Seller arranges delivery and freight is included in price       | `INCLUDED_IN_PRICE`, no separate freight charge         |
+| `FREIGHT_QUOTE_REQUIRED` | Freight is priced separately                                    | Persisted 24-hour sandbox quote required before payment |
 
 `POST /api/freight/quotes` creates the authoritative freight decision for one
 listing, quantity, buyer, and delivery address. v0 uses a clearly labelled,
@@ -567,10 +600,10 @@ another provider can be registered without changing listing or feed code.
 
 `vercel.json` registers two authenticated daily jobs, in UTC:
 
-| Time  | Route                          | Responsibility                                                                                                                                                             |
-| ----- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 00:00 | `/api/cron/sync-listings`      | Fetch configured real providers, idempotently update existing offers, add unseen offers/sellers, and archive imported offers not verified for the configured grace period. |
-| 03:00 | `/api/cron/refresh-embeddings` | Refresh missing or stale listing vectors, then incrementally update the real-corpus RAG index.                                                                             |
+| Time  | Route                          | Responsibility                                                                                                                                                                               |
+| ----- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 00:00 | `/api/cron/sync-listings`      | Fetch configured real providers, normalize and validate each row, idempotently update existing offers, add unseen offers/sellers, quarantine invalid rows, and archive unreconfirmed offers. |
+| 03:00 | `/api/cron/refresh-embeddings` | Refresh missing or stale listing vectors, then incrementally update the real-corpus RAG index.                                                                                               |
 
 The three-hour gap lets ingestion finish before semantic maintenance starts.
 Both routes fail closed without `Authorization: Bearer $CRON_SECRET`, use

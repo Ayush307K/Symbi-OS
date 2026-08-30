@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { normalizeImportedText } from "@/server/listings/data-quality";
 
 export interface ProviderListing {
   externalId: string;
@@ -12,9 +13,12 @@ export interface ProviderListing {
   country: string;
   quantity: number;
   rawQuantity: string;
+  rawPrice?: string;
   price: number;
   currency: string;
+  /** Supplier's quantity unit; kept separate from the price basis. */
   unit: string;
+  priceUnit?: string;
   sourceName: string;
   sourceUrl: string;
   imageUrl: string;
@@ -28,14 +32,7 @@ export interface ListingProvider {
 }
 
 function decode(value: unknown) {
-  return String(value ?? "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeImportedText(value).replace(/\s+/g, " ").trim();
 }
 
 function stripContacts(value: unknown) {
@@ -176,9 +173,11 @@ export class JsonApiListingProvider implements ListingProvider {
         country: decode(row.country || "India"),
         quantity: Math.max(1, Math.round(number(row.quantity, 1))),
         rawQuantity: decode(row.rawQuantity || row.quantity || "1 lot"),
+        rawPrice: decode(row.rawPrice || row.price),
         price: number(row.price),
         currency: decode(row.currency || "INR"),
         unit: decode(row.unit || "lot"),
+        priceUnit: decode(row.priceUnit || row.unit || "lot"),
         sourceName: decode(row.sourceName || this.name),
         sourceUrl,
         imageUrl: decode(row.imageUrl),
@@ -280,9 +279,11 @@ export class RecycleInMeProvider implements ListingProvider {
         country: "India",
         quantity: Math.max(1, Math.round(number(rawQuantity, 1))),
         rawQuantity,
+        rawPrice: decode(row.price),
         price: number(row.price),
         currency: "INR",
         unit: decode(row.unit || "lot"),
+        priceUnit: decode(row.unit || "lot"),
         sourceName: this.name,
         sourceUrl: `${this.baseUrl}/rim-${decode(row.username)}/selloffer-${id}`,
         imageUrl: `${this.baseUrl}/storage/userimg/thumb200/${id}.webp`,
@@ -362,8 +363,12 @@ export class TradeIndiaProvider implements ListingProvider {
           valueFor(/^Price(?: Range)?$/i) ||
           decode(row.price_range) ||
           decode(row.price);
+        const priceUnit = valueFor(/Unit of Price/i) || decode(row.unit);
         const unit =
-          valueFor(/Unit of (?:Measure|Price)/i) || decode(row.unit) || "lot";
+          valueFor(/Unit of Measure/i) ||
+          priceUnit ||
+          decode(row.unit) ||
+          "lot";
         const rawQuantity = valueFor(/Minimum Order Quantity/i) || "1 lot";
         const currency = /USD|\$/.test(rawPrice)
           ? "USD"
@@ -398,9 +403,11 @@ export class TradeIndiaProvider implements ListingProvider {
           country: "India",
           quantity: Math.max(1, Math.round(number(rawQuantity, 1))),
           rawQuantity,
+          rawPrice,
           price: number(rawPrice),
           currency,
           unit,
+          priceUnit: priceUnit || unit,
           sourceName: this.name,
           sourceUrl: new URL(decode(row.prod_url), this.baseUrl).toString(),
           imageUrl: decode(row.product_image),

@@ -65,10 +65,10 @@ export async function rebuildKnowledgeIndex(
       `Category: ${listing.category}; subcategory: ${listing.subcategory}`,
       `Safety classification: ${listing.material.toxicityLevel}`,
       `Description: ${listing.description}`,
-      `Seller: ${listing.seller.name}`,
+      `Seller: ${listing.seller.displayName || listing.seller.name}`,
       `Location: ${listing.city}, ${listing.state}, ${listing.country}`,
       `Quantity: ${listing.quantityAvailable} ${listing.unit}`,
-      `Price: ${listing.pricePerUnit} ${listing.currency} per ${listing.unit}`,
+      `Price: ${listing.pricePerUnit} ${listing.currency} per ${listing.priceBasisUnit || listing.unit}`,
       `Minimum order: ${listing.minOrderQuantity} ${listing.unit}`,
       `Source: ${listing.sourceName ?? listing.sourceType}`,
       ...listing.material.regulations.map(

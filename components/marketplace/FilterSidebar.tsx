@@ -26,7 +26,11 @@ export interface FilterSidebarProps {
  * Below `lg` the same controls move into a dialog — a 230px rail would leave
  * the grid unusable on a phone, and this is an Android-first buyer flow.
  */
-export function FilterSidebar({ filters, categories, onApply }: FilterSidebarProps) {
+export function FilterSidebar({
+  filters,
+  categories,
+  onApply,
+}: FilterSidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const activeCount = countActiveFilters(filters);
 
@@ -34,7 +38,11 @@ export function FilterSidebar({ filters, categories, onApply }: FilterSidebarPro
     <>
       <aside className="hidden w-[230px] shrink-0 lg:block">
         <div className="sticky top-[132px] max-h-[calc(100vh-148px)] overflow-y-auto pr-1 scrollbar-thin">
-          <Controls filters={filters} categories={categories} onApply={onApply} />
+          <Controls
+            filters={filters}
+            categories={categories}
+            onApply={onApply}
+          />
         </div>
       </aside>
 
@@ -91,7 +99,10 @@ function Controls({
   const [draft, setDraft] = useState(filters);
   useEffect(() => setDraft(filters), [filters]);
 
-  function set<K extends keyof CatalogFilters>(key: K, value: CatalogFilters[K]) {
+  function set<K extends keyof CatalogFilters>(
+    key: K,
+    value: CatalogFilters[K],
+  ) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
@@ -126,6 +137,24 @@ function Controls({
       </Group>
 
       <Group title="Price per unit">
+        <label className="mb-2 block text-[12px] font-medium text-ink-600">
+          Compare prices as
+          <select
+            aria-label="Price comparison unit"
+            value={draft.priceUnit}
+            onChange={(event) =>
+              set(
+                "priceUnit",
+                event.target.value as CatalogFilters["priceUnit"],
+              )
+            }
+            className="mt-1 h-9 w-full rounded-control border border-ink-200 bg-surface-card px-2.5 text-[13px] text-ink-800 outline-none focus:border-copper-700 focus:ring-2 focus:ring-copper-100"
+          >
+            <option value="kg">₹ per kg</option>
+            <option value="ton">₹ per ton</option>
+            <option value="lot">₹ per lot</option>
+          </select>
+        </label>
         <div className="grid grid-cols-2 gap-2">
           <Input
             aria-label="Minimum price"
@@ -189,7 +218,12 @@ function Controls({
       </label>
 
       <div className="flex flex-col gap-2 border-t border-ink-200 pt-4">
-        <Button variant="primary" size="sm" fullWidth onClick={() => onApply(draft)}>
+        <Button
+          variant="primary"
+          size="sm"
+          fullWidth
+          onClick={() => onApply(draft)}
+        >
           Apply filters
         </Button>
         {countActiveFilters(filters) > 0 ? (
@@ -207,7 +241,13 @@ function Controls({
   );
 }
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section>
       <h3 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-ink-900">

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { publicListingWhere } from "@/server/listings/policy";
+import { listingFreshness } from "@/lib/listing-freshness";
 
 function mapListing(listing: any) {
+  const verifiedAt = listing.lastVerifiedAt ?? listing.updatedAt;
+  const freshness = listingFreshness(verifiedAt);
   return {
     id: listing.id,
     materialId: listing.material.id,
@@ -16,7 +19,7 @@ function mapListing(listing: any) {
     materialDescription: listing.material.description,
     category: listing.category,
     subcategory: listing.subcategory,
-    producer: listing.seller.name,
+    producer: listing.seller.displayName || listing.seller.name,
     producerId: listing.seller.id,
     sellerUserId: null,
     sellerIndustry: listing.seller.industry,
@@ -38,6 +41,11 @@ function mapListing(listing: any) {
     price: listing.priceMode === "ON_REQUEST" ? null : listing.pricePerUnit,
     priceMode: listing.priceMode,
     currency: listing.currency,
+    priceBasisUnit: listing.priceBasisUnit,
+    normalizedPricePerKg:
+      listing.normalizedPricePerKg === null
+        ? null
+        : Number(listing.normalizedPricePerKg),
     quantity: listing.quantityAvailable,
     unit: listing.unit,
     minOrderQuantity: listing.minOrderQuantity,
@@ -56,16 +64,21 @@ function mapListing(listing: any) {
     sourceUrl: listing.sourceUrl,
     externalId: listing.externalId,
     rawQuantityText: listing.rawQuantityText,
+    rawPriceText: listing.rawPriceText,
+    rawUnitText: listing.rawUnitText,
     rawLocationText: listing.rawLocationText,
     createdAt: listing.createdAt,
     updatedAt: listing.updatedAt,
-    lastVerifiedAt: listing.lastVerifiedAt ?? listing.updatedAt,
+    lastVerifiedAt: verifiedAt,
+    freshnessStatus: freshness.status,
+    freshnessLabel: freshness.label,
+    freshnessAgeDays: freshness.ageDays,
   };
 }
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -88,76 +101,91 @@ export async function GET(
     });
 
     if (!listing) {
-      return NextResponse.json({ error: "Listing not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Listing not found." },
+        { status: 404 },
+      );
     }
 
-    const [sellerUser, sellerListingCount, categoryListingCount, fulfilledOrders, related, sameSeller, sellerOnboarding, messageThreads] =
-      await Promise.all([
-        prisma.user.findFirst({
-          where: {
-            companyId: listing.sellerCompanyId,
-            accountStatus: "ACTIVE",
-            role: { in: ["SELLER", "BOTH"] },
-            sellerOnboarding: { is: { status: "APPROVED" } },
+    const [
+      sellerUser,
+      sellerListingCount,
+      categoryListingCount,
+      fulfilledOrders,
+      related,
+      sameSeller,
+      sellerOnboarding,
+      messageThreads,
+    ] = await Promise.all([
+      prisma.user.findFirst({
+        where: {
+          companyId: listing.sellerCompanyId,
+          accountStatus: "ACTIVE",
+          role: { in: ["SELLER", "BOTH"] },
+          sellerOnboarding: { is: { status: "APPROVED" } },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      }),
+      prisma.marketplaceListing.count({
+        where: {
+          sellerCompanyId: listing.sellerCompanyId,
+          ...publicListingWhere,
+        },
+      }),
+      prisma.marketplaceListing.count({
+        where: { ...publicListingWhere, category: listing.category },
+      }),
+      prisma.purchaseOrderItem.count({
+        where: {
+          sellerCompanyId: listing.sellerCompanyId,
+          status: { in: ["FULFILLED", "DELIVERED"] },
+          order: {
+            fulfillmentStatus: { in: ["FULFILLED", "DELIVERED"] },
           },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: { id: true },
-        }),
-        prisma.marketplaceListing.count({
-          where: { sellerCompanyId: listing.sellerCompanyId, ...publicListingWhere },
-        }),
-        prisma.marketplaceListing.count({
-          where: { ...publicListingWhere, category: listing.category },
-        }),
-        prisma.purchaseOrderItem.count({
-          where: {
-            sellerCompanyId: listing.sellerCompanyId,
-            status: { in: ["FULFILLED", "DELIVERED"] },
-            order: {
-              fulfillmentStatus: { in: ["FULFILLED", "DELIVERED"] },
-            },
-          },
-        }),
-        prisma.marketplaceListing.findMany({
-          where: {
-            id: { not: listing.id },
-            ...publicListingWhere,
-            category: listing.category,
-          },
-          include: { material: true, seller: true },
-          orderBy: [{ rating: "desc" }, { updatedAt: "desc" }],
-          take: 8,
-        }),
-        prisma.marketplaceListing.findMany({
-          where: {
-            id: { not: listing.id },
-            sellerCompanyId: listing.sellerCompanyId,
-            ...publicListingWhere,
-          },
-          include: { material: true, seller: true },
-          orderBy: [{ updatedAt: "desc" }],
-          take: 8,
-        }),
-        prisma.sellerOnboarding.findFirst({
-          where: {
-            status: "APPROVED",
-            user: { companyId: listing.sellerCompanyId },
-          },
-          select: { verifiedAt: true },
-        }),
-        prisma.messageThread.findMany({
-          where: { listingId: listing.id },
-          select: {
-            buyerUserId: true,
-            messages: { select: { senderUserId: true } },
-          },
-        }),
-      ]);
+        },
+      }),
+      prisma.marketplaceListing.findMany({
+        where: {
+          id: { not: listing.id },
+          ...publicListingWhere,
+          category: listing.category,
+        },
+        include: { material: true, seller: true },
+        orderBy: [{ rating: "desc" }, { updatedAt: "desc" }],
+        take: 8,
+      }),
+      prisma.marketplaceListing.findMany({
+        where: {
+          id: { not: listing.id },
+          sellerCompanyId: listing.sellerCompanyId,
+          ...publicListingWhere,
+        },
+        include: { material: true, seller: true },
+        orderBy: [{ updatedAt: "desc" }],
+        take: 8,
+      }),
+      prisma.sellerOnboarding.findFirst({
+        where: {
+          status: "APPROVED",
+          user: { companyId: listing.sellerCompanyId },
+        },
+        select: { verifiedAt: true },
+      }),
+      prisma.messageThread.findMany({
+        where: { listingId: listing.id },
+        select: {
+          buyerUserId: true,
+          messages: { select: { senderUserId: true } },
+        },
+      }),
+    ]);
 
     const reviewAverage =
       listing.reviews.length === 0
         ? null
-        : listing.reviews.reduce((sum, review) => sum + review.rating, 0) / listing.reviews.length;
+        : listing.reviews.reduce((sum, review) => sum + review.rating, 0) /
+          listing.reviews.length;
 
     return NextResponse.json({
       listing: {

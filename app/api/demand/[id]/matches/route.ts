@@ -36,6 +36,7 @@ export async function GET(
                 seller: {
                   select: {
                     name: true,
+                    displayName: true,
                     users: {
                       where: {
                         accountStatus: "ACTIVE",
@@ -76,7 +77,7 @@ export async function GET(
         explanations: JSON.parse(match.explanationJson),
         listing: {
           ...match.listing,
-          seller: match.listing.seller.name,
+          seller: match.listing.seller.displayName || match.listing.seller.name,
           sellerUserId: match.listing.seller.users[0]?.id ?? null,
           pricePerUnit:
             match.listing.priceMode === "FIXED"

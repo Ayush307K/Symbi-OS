@@ -34,6 +34,9 @@ export interface MaterialListing {
   imageUrl: string;
   priceMode: string;
   price: number | null;
+  currency: string;
+  priceBasisUnit: string | null;
+  normalizedPricePerKg: number | null;
   quantity: number | null;
   unit: string;
   minOrderQuantity: number;
@@ -52,7 +55,13 @@ export interface MaterialListing {
   sourceUrl: string | null;
   externalId: string | null;
   rawQuantityText: string | null;
+  rawPriceText: string | null;
+  rawUnitText: string | null;
   rawLocationText: string | null;
+  lastVerifiedAt: string;
+  freshnessStatus: "FRESH" | "AGING" | "STALE" | "UNVERIFIED";
+  freshnessLabel: string;
+  freshnessAgeDays: number | null;
 }
 
 export interface CatalogPageInfo {
@@ -73,6 +82,7 @@ export interface CatalogFilters {
   location: string;
   minPrice: string;
   maxPrice: string;
+  priceUnit: "kg" | "ton" | "lot";
   minQuantity: string;
   maxQuantity: string;
   verified: boolean;
@@ -83,10 +93,12 @@ export interface CatalogFilters {
   radiusKm: string;
 }
 
-export type CatalogSort = "recent" | "price_asc" | "price_desc" | "quantity_desc";
+export type CatalogSort =
+  "recent" | "nearest" | "price_asc" | "price_desc" | "quantity_desc";
 
 export const SORT_OPTIONS: Array<{ value: CatalogSort; label: string }> = [
   { value: "recent", label: "Most recent" },
+  { value: "nearest", label: "Nearest" },
   { value: "price_asc", label: "Price: low to high" },
   { value: "price_desc", label: "Price: high to low" },
   { value: "quantity_desc", label: "Largest quantity" },
@@ -98,6 +110,7 @@ export const EMPTY_FILTERS: CatalogFilters = {
   location: "",
   minPrice: "",
   maxPrice: "",
+  priceUnit: "kg",
   minQuantity: "",
   maxQuantity: "",
   verified: false,
@@ -118,14 +131,20 @@ export function filtersToParams(
   if (filters.location) params.set("location", filters.location);
   if (filters.minPrice) params.set("minPrice", filters.minPrice);
   if (filters.maxPrice) params.set("maxPrice", filters.maxPrice);
+  if (filters.priceUnit !== "kg") params.set("priceUnit", filters.priceUnit);
   if (filters.minQuantity) params.set("minQuantity", filters.minQuantity);
   if (filters.maxQuantity) params.set("maxQuantity", filters.maxQuantity);
   if (filters.verified) params.set("verified", "true");
-  if (filters.sort && filters.sort !== "recent") params.set("sort", filters.sort);
-  if (filters.lat !== null && filters.lng !== null && filters.radiusKm) {
+  if (filters.sort && filters.sort !== "recent")
+    params.set("sort", filters.sort);
+  if (
+    filters.lat !== null &&
+    filters.lng !== null &&
+    (filters.radiusKm || filters.sort === "nearest")
+  ) {
     params.set("lat", String(filters.lat));
     params.set("lng", String(filters.lng));
-    params.set("radiusKm", filters.radiusKm);
+    if (filters.radiusKm) params.set("radiusKm", filters.radiusKm);
   }
   if (cursor) params.set("cursor", cursor);
   return params;
@@ -161,6 +180,10 @@ export function filtersFromSearchParams(search: string): CatalogFilters {
     location: params.get("location")?.trim() ?? "",
     minPrice: params.get("minPrice") ?? "",
     maxPrice: params.get("maxPrice") ?? "",
+    priceUnit:
+      params.get("priceUnit") === "ton" || params.get("priceUnit") === "lot"
+        ? (params.get("priceUnit") as "ton" | "lot")
+        : "kg",
     minQuantity: params.get("minQuantity") ?? "",
     maxQuantity: params.get("maxQuantity") ?? "",
     verified: params.get("verified") === "true",

@@ -14,6 +14,7 @@ import {
   sellerReliabilityScore,
 } from "@/server/feed/scoring";
 import { publicListingWhere } from "@/server/listings/policy";
+import { listingFreshness } from "@/lib/listing-freshness";
 import { vectorLiteral } from "@/server/semantic/listing-embeddings";
 
 interface SemanticSeedRow {
@@ -49,7 +50,12 @@ export interface FeedDeliveryLocation {
 
 function lexicalSimilarity(left: string, right: string) {
   const tokenize = (value: string) =>
-    new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2));
+    new Set(
+      value
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length > 2),
+    );
   const a = tokenize(left);
   const b = tokenize(right);
   if (a.size === 0 || b.size === 0) return 0;
@@ -65,10 +71,7 @@ async function preferredCategorySeeds(
   if (!preferredCategories.length || limit <= 0) return [];
   return prisma.marketplaceListing.findMany({
     where: {
-      AND: [
-        publicListingWhere,
-        { category: { in: [...preferredCategories] } },
-      ],
+      AND: [publicListingWhere, { category: { in: [...preferredCategories] } }],
     },
     select: { id: true, materialId: true },
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -242,7 +245,10 @@ async function expandMaterials(seedMaterialIds: string[]) {
   );
 }
 
-async function semanticScores(candidateIds: string[], embedding: number[] | null) {
+async function semanticScores(
+  candidateIds: string[],
+  embedding: number[] | null,
+) {
   if (!embedding || candidateIds.length === 0) return new Map<string, number>();
   const rows = await prisma.$queryRaw<SimilarityRow[]>(
     Prisma.sql`SELECT
@@ -276,7 +282,10 @@ export async function rankBuyerFeed(
         longitude: options.deliveryLocation.longitude,
       }
     : baseProfile;
-  const seeds = await semanticSeeds(profile.embedding, profile.preferredCategories);
+  const seeds = await semanticSeeds(
+    profile.embedding,
+    profile.preferredCategories,
+  );
   const seedMaterialIds = [
     ...profile.seedMaterialIds,
     ...seeds.map((seed) => seed.material_id),
@@ -287,7 +296,10 @@ export async function rankBuyerFeed(
   );
 
   const semanticSeedIds = seeds.map((item) => item.id);
-  const graphCandidateBudget = Math.max(0, config.maxCandidates - semanticSeedIds.length);
+  const graphCandidateBudget = Math.max(
+    0,
+    config.maxCandidates - semanticSeedIds.length,
+  );
   const graphListingRows = graphCandidateBudget
     ? await prisma.marketplaceListing.findMany({
         where: {
@@ -304,13 +316,18 @@ export async function rankBuyerFeed(
     graphListingRows.map((row) => row.id),
     config.maxCandidates,
   );
-  const catalogueTailBudget = Math.max(0, config.maxCandidates - rankedCandidateIds.length);
+  const catalogueTailBudget = Math.max(
+    0,
+    config.maxCandidates - rankedCandidateIds.length,
+  );
   const catalogueTail = catalogueTailBudget
     ? await prisma.marketplaceListing.findMany({
         where: {
           AND: [
             publicListingWhere,
-            rankedCandidateIds.length ? { id: { notIn: rankedCandidateIds } } : {},
+            rankedCandidateIds.length
+              ? { id: { notIn: rankedCandidateIds } }
+              : {},
           ],
         },
         select: { id: true },
@@ -355,6 +372,8 @@ export async function rankBuyerFeed(
       priceMode: true,
       pricePerUnit: true,
       currency: true,
+      priceBasisUnit: true,
+      normalizedPricePerKg: true,
       quantityAvailable: true,
       unit: true,
       minOrderQuantity: true,
@@ -373,13 +392,15 @@ export async function rankBuyerFeed(
       sourceUrl: true,
       externalId: true,
       rawQuantityText: true,
+      rawPriceText: true,
+      rawUnitText: true,
       rawLocationText: true,
       lastVerifiedAt: true,
       updatedAt: true,
       material: {
         select: { name: true, toxicityLevel: true, baseElement: true },
       },
-      seller: { select: { id: true, name: true } },
+      seller: { select: { id: true, name: true, displayName: true } },
       assets: {
         where: { kind: { in: ["CERTIFICATE", "TEST_REPORT"] } },
         select: { kind: true },
@@ -388,49 +409,57 @@ export async function rankBuyerFeed(
   });
   const listingIds = listings.map((listing) => listing.id);
   const companyIds = [...new Set(listings.map((listing) => listing.seller.id))];
-  const [similarityById, reviews, fulfilledOrders, threads, onboardings, sellerUsers] =
-    await Promise.all([
-      semanticScores(listingIds, profile.embedding),
-      prisma.review.groupBy({
-        by: ["listingId"],
-        where: { listingId: { in: listingIds }, status: "PUBLISHED" },
-        _avg: { rating: true },
-        _count: { _all: true },
-      }),
-      prisma.purchaseOrderItem.groupBy({
-        by: ["sellerCompanyId"],
-        where: {
-          sellerCompanyId: { in: companyIds },
-          status: { in: ["FULFILLED", "DELIVERED"] },
-          order: { fulfillmentStatus: { in: ["FULFILLED", "DELIVERED"] } },
-        },
-        _count: { _all: true },
-      }),
-      prisma.messageThread.findMany({
-        where: { listingId: { in: listingIds } },
-        select: {
-          listingId: true,
-          buyerUserId: true,
-          messages: { select: { senderUserId: true } },
-        },
-      }),
-      prisma.sellerOnboarding.findMany({
-        where: { status: "APPROVED", user: { companyId: { in: companyIds } } },
-        select: { user: { select: { companyId: true } } },
-      }),
-      prisma.user.findMany({
-        where: {
-          companyId: { in: companyIds },
-          accountStatus: "ACTIVE",
-          role: { in: ["SELLER", "BOTH"] },
-          sellerOnboarding: { is: { status: "APPROVED" } },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, companyId: true },
-      }),
-    ]);
+  const [
+    similarityById,
+    reviews,
+    fulfilledOrders,
+    threads,
+    onboardings,
+    sellerUsers,
+  ] = await Promise.all([
+    semanticScores(listingIds, profile.embedding),
+    prisma.review.groupBy({
+      by: ["listingId"],
+      where: { listingId: { in: listingIds }, status: "PUBLISHED" },
+      _avg: { rating: true },
+      _count: { _all: true },
+    }),
+    prisma.purchaseOrderItem.groupBy({
+      by: ["sellerCompanyId"],
+      where: {
+        sellerCompanyId: { in: companyIds },
+        status: { in: ["FULFILLED", "DELIVERED"] },
+        order: { fulfillmentStatus: { in: ["FULFILLED", "DELIVERED"] } },
+      },
+      _count: { _all: true },
+    }),
+    prisma.messageThread.findMany({
+      where: { listingId: { in: listingIds } },
+      select: {
+        listingId: true,
+        buyerUserId: true,
+        messages: { select: { senderUserId: true } },
+      },
+    }),
+    prisma.sellerOnboarding.findMany({
+      where: { status: "APPROVED", user: { companyId: { in: companyIds } } },
+      select: { user: { select: { companyId: true } } },
+    }),
+    prisma.user.findMany({
+      where: {
+        companyId: { in: companyIds },
+        accountStatus: "ACTIVE",
+        role: { in: ["SELLER", "BOTH"] },
+        sellerOnboarding: { is: { status: "APPROVED" } },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, companyId: true },
+    }),
+  ]);
 
-  const reviewByListing = new Map(reviews.map((item) => [item.listingId, item]));
+  const reviewByListing = new Map(
+    reviews.map((item) => [item.listingId, item]),
+  );
   const ordersByCompany = new Map(
     fulfilledOrders.map((item) => [item.sellerCompanyId, item._count._all]),
   );
@@ -445,12 +474,22 @@ export async function rankBuyerFeed(
       sellerUserByCompany.set(user.companyId, user.id);
     }
   }
-  const responseByListing = new Map<string, { total: number; replied: number }>();
+  const responseByListing = new Map<
+    string,
+    { total: number; replied: number }
+  >();
   for (const thread of threads) {
     if (!thread.listingId) continue;
-    const current = responseByListing.get(thread.listingId) ?? { total: 0, replied: 0 };
+    const current = responseByListing.get(thread.listingId) ?? {
+      total: 0,
+      replied: 0,
+    };
     current.total += 1;
-    if (thread.messages.some((message) => message.senderUserId !== thread.buyerUserId)) {
+    if (
+      thread.messages.some(
+        (message) => message.senderUserId !== thread.buyerUserId,
+      )
+    ) {
       current.replied += 1;
     }
     responseByListing.set(thread.listingId, current);
@@ -460,9 +499,14 @@ export async function rankBuyerFeed(
   // ordering deterministic even when the scoring loop crosses a millisecond.
   const scoringNow = new Date(options.cursor?.asOf ?? Date.now());
   const scored = listings.map((listing) => {
+    const freshness = listingFreshness(
+      listing.lastVerifiedAt ?? listing.updatedAt,
+    );
     const review = reviewByListing.get(listing.id);
     const response = responseByListing.get(listing.id);
-    const responseRate = response?.total ? (response.replied / response.total) * 100 : 0;
+    const responseRate = response?.total
+      ? (response.replied / response.total) * 100
+      : 0;
     const verified =
       listing.listingMode === "MANAGED" &&
       listing.verified &&
@@ -534,7 +578,7 @@ export async function rankBuyerFeed(
         baseElement: listing.material.baseElement,
         category: listing.category,
         subcategory: listing.subcategory,
-        producer: listing.seller.name,
+        producer: listing.seller.displayName || listing.seller.name,
         producerId: listing.seller.id,
         sellerUserId: sellerUserByCompany.get(listing.seller.id) ?? null,
         location: `${listing.area}, ${listing.city}`,
@@ -557,6 +601,11 @@ export async function rankBuyerFeed(
         priceMode: listing.priceMode,
         price: listing.priceMode === "ON_REQUEST" ? null : listing.pricePerUnit,
         currency: listing.currency,
+        priceBasisUnit: listing.priceBasisUnit,
+        normalizedPricePerKg:
+          listing.normalizedPricePerKg === null
+            ? null
+            : Number(listing.normalizedPricePerKg),
         quantity: listing.quantityAvailable,
         unit: listing.unit,
         minOrderQuantity: listing.minOrderQuantity,
@@ -582,8 +631,13 @@ export async function rankBuyerFeed(
         sourceUrl: listing.sourceUrl,
         externalId: listing.externalId,
         rawQuantityText: listing.rawQuantityText,
+        rawPriceText: listing.rawPriceText,
+        rawUnitText: listing.rawUnitText,
         rawLocationText: listing.rawLocationText,
         lastVerifiedAt: listing.lastVerifiedAt ?? listing.updatedAt,
+        freshnessStatus: freshness.status,
+        freshnessLabel: freshness.label,
+        freshnessAgeDays: freshness.ageDays,
         relevanceScore: Math.round(relevance * 1_000) / 10,
         relevanceKind: "relevance" as const,
       },
@@ -591,13 +645,16 @@ export async function rankBuyerFeed(
   });
 
   scored.sort(
-    (left, right) => right.relevance - left.relevance || left.item.id.localeCompare(right.item.id),
+    (left, right) =>
+      right.relevance - left.relevance ||
+      left.item.id.localeCompare(right.item.id),
   );
   const afterCursor = options.cursor
     ? scored.filter(
         (entry) =>
           entry.relevance < options.cursor!.score ||
-          (entry.relevance === options.cursor!.score && entry.item.id > options.cursor!.id),
+          (entry.relevance === options.cursor!.score &&
+            entry.item.id > options.cursor!.id),
       )
     : scored;
   const page = afterCursor.slice(0, limit + 1);
@@ -610,7 +667,11 @@ export async function rankBuyerFeed(
       hasMore,
       nextCursor:
         hasMore && last
-          ? { score: last.relevance, id: last.item.id, asOf: scoringNow.getTime() }
+          ? {
+              score: last.relevance,
+              id: last.item.id,
+              asOf: scoringNow.getTime(),
+            }
           : null,
       limit,
       total: scored.length,

@@ -261,9 +261,7 @@ const searchListings: ToolRegistration<typeof searchSchema> = {
           input.minQuantity
             ? { quantityAvailable: { gte: input.minQuantity } }
             : {},
-          input.verifiedOnly
-            ? managedListingWhere
-            : {},
+          input.verifiedOnly ? managedListingWhere : {},
         ],
       },
       include: { material: true, seller: true },
@@ -303,16 +301,18 @@ const searchListings: ToolRegistration<typeof searchSchema> = {
       };
     }
 
-    const citations = ranked.map((listing, index): AssistantCitation => ({
-      id: `S${index + 1}`,
-      title: listing.title,
-      url: `/products/${listing.id}`,
-      sourceType: "LISTING",
-      sourceId: listing.id,
-      isEvalOnly: listing.isEvalOnly,
-      excerpt: `${listing.seller.name} · ${listing.city}, ${listing.state} · ${listing.quantityAvailable} ${listing.unit} available`,
-      listing: assistantListingPreview(listing),
-    }));
+    const citations = ranked.map(
+      (listing, index): AssistantCitation => ({
+        id: `S${index + 1}`,
+        title: listing.title,
+        url: `/products/${listing.id}`,
+        sourceType: "LISTING",
+        sourceId: listing.id,
+        isEvalOnly: listing.isEvalOnly,
+        excerpt: `${listing.seller.name} · ${listing.city}, ${listing.state} · ${listing.quantityAvailable} ${listing.unit} available`,
+        listing: assistantListingPreview(listing),
+      }),
+    );
     return {
       answer: `I found ${ranked.length} relevant listing${ranked.length === 1 ? "" : "s"}. Compare price, stock and location below.`,
       citations,
@@ -360,7 +360,7 @@ const getListingDetails: ToolRegistration<typeof listingDetailsSchema> = {
     const price =
       listing.priceMode === "ON_REQUEST"
         ? "Price on request"
-        : `${formatMoney(listing.pricePerUnit, listing.currency)} per ${listing.unit}`;
+        : `${formatMoney(listing.pricePerUnit, listing.currency)} per ${listing.priceBasisUnit || listing.unit}`;
     return {
       answer:
         `${listing.title}\n` +

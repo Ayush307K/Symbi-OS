@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="t d">
+  <title id="t">Textile waste category illustration</title><desc id="d">Illustrative textile rolls and offcuts, not a seller photograph</desc>
+  <defs><linearGradient id="g"><stop stop-color="#eee5f1"/><stop offset="1" stop-color="#8f719a"/></linearGradient></defs><rect width="800" height="520" fill="url(#g)"/>
+  <g stroke="#513d5c" stroke-width="8"><path d="M100 360c90-170 170-160 255 0z" fill="#c66b68"/><path d="M275 380c90-230 190-220 285 0z" fill="#5f91a8"/><path d="M475 370c55-170 120-165 205 0z" fill="#d5a54b"/></g><g fill="none" stroke="#f4eaf6" stroke-width="6"><path d="M150 325c50-70 100-70 155 0M340 320c55-95 110-95 165 0M530 320c40-75 80-75 120 0"/></g>
+  <text x="400" y="465" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" fill="#432e4c">TEXTILE WASTE · CATEGORY ILLUSTRATION</text>
+</svg>

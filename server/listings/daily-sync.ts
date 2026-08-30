@@ -6,6 +6,7 @@ import {
   TradeIndiaProvider,
   type ListingProvider,
 } from "@/server/listings/providers";
+import { configuredImportedListingStaleDays } from "@/lib/listing-freshness";
 
 export interface DailyListingSyncOptions {
   providers?: ListingProvider[];
@@ -60,7 +61,12 @@ export async function syncDailyListings(options: DailyListingSyncOptions = {}) {
     1,
     2_000,
   );
-  const staleAfterDays = boundedInteger(options.staleAfterDays, 14, 1, 365);
+  const staleAfterDays = boundedInteger(
+    options.staleAfterDays,
+    configuredImportedListingStaleDays(),
+    1,
+    365,
+  );
   const cutoff = new Date(Date.now() - staleAfterDays * 24 * 60 * 60 * 1_000);
   const results: Array<{
     provider: string;

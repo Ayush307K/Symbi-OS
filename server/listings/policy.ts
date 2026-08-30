@@ -1,7 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import { SAFE_CATEGORIES } from "@/server/safety";
+import { configuredImportedListingStaleDays } from "@/lib/listing-freshness";
 
-export type CatalogSort = "recent" | "price_asc" | "price_desc" | "quantity_desc";
+const importedStaleDays = configuredImportedListingStaleDays();
+
+export type CatalogSort =
+  | "recent"
+  | "price_asc"
+  | "price_desc"
+  | "quantity_desc";
 
 /**
  * Ordering for the public catalogue.
@@ -17,12 +24,25 @@ export type CatalogSort = "recent" | "price_asc" | "price_desc" | "quantity_desc
  */
 export function catalogOrderBy(
   sort: CatalogSort,
+  priceUnit?: "kg" | "ton" | "lot",
 ): Prisma.MarketplaceListingOrderByWithRelationInput[] {
   switch (sort) {
     case "price_asc":
-      return [{ priceMode: "asc" }, { pricePerUnit: "asc" }, { id: "asc" }];
+      return !priceUnit || priceUnit === "lot"
+        ? [{ priceMode: "asc" }, { pricePerUnit: "asc" }, { id: "asc" }]
+        : [
+            { priceMode: "asc" },
+            { normalizedPricePerKg: { sort: "asc", nulls: "last" } },
+            { id: "asc" },
+          ];
     case "price_desc":
-      return [{ priceMode: "asc" }, { pricePerUnit: "desc" }, { id: "asc" }];
+      return !priceUnit || priceUnit === "lot"
+        ? [{ priceMode: "asc" }, { pricePerUnit: "desc" }, { id: "asc" }]
+        : [
+            { priceMode: "asc" },
+            { normalizedPricePerKg: { sort: "desc", nulls: "last" } },
+            { id: "asc" },
+          ];
     case "quantity_desc":
       return [{ quantityAvailable: "desc" }, { id: "asc" }];
     default:
@@ -53,8 +73,28 @@ export function listingHasExpired(
  */
 export const publicListingWhere = {
   status: { in: ["ACTIVE", "active"] },
+  dataQualityStatus: "VALID",
   category: { in: [...SAFE_CATEGORIES] },
   material: { toxicityLevel: { in: ["none", "low"] } },
+  // Imported leads remain stored for audit after this cutoff, but no longer
+  // appear as current stock until their provider reconfirms them.
+  NOT: {
+    AND: [
+      { sourceType: { in: ["real_api", "real_public_provider"] } },
+      {
+        OR: [
+          { lastVerifiedAt: null },
+          {
+            lastVerifiedAt: {
+              lt: new Date(
+                Date.now() - importedStaleDays * 24 * 60 * 60 * 1000,
+              ),
+            },
+          },
+        ],
+      },
+    ],
+  },
 } satisfies Prisma.MarketplaceListingWhereInput;
 
 /**

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" role="img" aria-labelledby="t d">
+  <title id="t">Agricultural residue category illustration</title><desc id="d">Illustrative straw bales, not a seller photograph</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5e7bf"/><stop offset="1" stop-color="#d59b42"/></linearGradient></defs>
+  <rect width="800" height="520" fill="url(#g)"/><circle cx="650" cy="105" r="62" fill="#fff4c8" opacity=".8"/>
+  <g fill="#9a641f" stroke="#704514" stroke-width="8"><rect x="120" y="245" width="250" height="145" rx="20"/><rect x="390" y="205" width="270" height="185" rx="20"/></g>
+  <g stroke="#edc96e" stroke-width="9" opacity=".9"><path d="M145 270h200M145 305h200M145 340h200M420 240h210M420 280h210M420 320h210"/><path d="M210 245v145M295 245v145M480 205v185M570 205v185"/></g>
+  <text x="400" y="465" text-anchor="middle" font-family="Arial,sans-serif" font-size="26" fill="#5d3b12">AGRICULTURAL RESIDUE · CATEGORY ILLUSTRATION</text>
+</svg>

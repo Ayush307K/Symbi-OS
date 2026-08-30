@@ -78,6 +78,12 @@ if (process.env.VERCEL_ENV === "production") {
     console.log("[VercelBuild] Backfilling missing listing and plant locations.");
     runNpmScript("location:backfill");
   }
+  if (process.env.SKIP_CATALOG_NORMALIZATION === "true") {
+    console.log("[VercelBuild] Catalogue normalization explicitly skipped.");
+  } else {
+    console.log("[VercelBuild] Normalizing and validating catalogue data.");
+    runNpmScript("catalog:normalize");
+  }
 } else {
   console.log(
     `[VercelBuild] Skipping database migrations for ${process.env.VERCEL_ENV || "local"} build.`,

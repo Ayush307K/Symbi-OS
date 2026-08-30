@@ -17,10 +17,12 @@ function listingMaterialId(key: string) {
  * evaluation buyers, orders, carts, or graph signals, so exposing the demo
  * corpus cannot pollute production marketplace behavior.
  */
-export async function seedEvaluationCatalog(options: {
-  referenceDate?: Date;
-  refreshEmbeddings?: boolean;
-} = {}) {
+export async function seedEvaluationCatalog(
+  options: {
+    referenceDate?: Date;
+    refreshEmbeddings?: boolean;
+  } = {},
+) {
   const referenceDate = options.referenceDate ?? DEFAULT_REFERENCE_DATE;
   for (const listing of EVAL_LISTINGS) {
     const companyId = listingCompanyId(listing.key);
@@ -92,6 +94,8 @@ export async function seedEvaluationCatalog(options: {
           pricePerUnit: listing.price,
           priceMode: "FIXED",
           currency: "INR",
+          priceBasisUnit: "ton",
+          normalizedPricePerKg: listing.price / 1000,
           unit: "ton",
           minOrderQuantity: 10,
           lotIncrement: 5,
@@ -111,6 +115,9 @@ export async function seedEvaluationCatalog(options: {
           ownershipDeclaration: true,
           authorityDeclaration: true,
           status: "ACTIVE",
+          dataQualityStatus: "VALID",
+          dataQualityIssues: [],
+          dataNormalizedAt: referenceDate,
           activatedAt: referenceDate,
           lastVerifiedAt: referenceDate,
         },
@@ -128,9 +135,14 @@ export async function seedEvaluationCatalog(options: {
           city: listing.city,
           state: listing.state,
           pricePerUnit: listing.price,
+          priceBasisUnit: "ton",
+          normalizedPricePerKg: listing.price / 1000,
           quantityAvailable: listing.quantity,
           description: listing.description,
           status: "ACTIVE",
+          dataQualityStatus: "VALID",
+          dataQualityIssues: [],
+          dataNormalizedAt: referenceDate,
           archivedAt: null,
           lastVerifiedAt: referenceDate,
         },

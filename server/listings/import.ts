@@ -1,4 +1,3 @@
-import { normalizeListingUnit } from "@/lib/listing-constants";
 import prisma from "@/lib/prisma";
 import { isSafeMaterial } from "@/server/safety";
 import {
@@ -13,6 +12,13 @@ import {
   type TargetCategory,
 } from "@/server/listings/corpus-targets";
 import { geocodeData, geocodeLocation } from "@/server/geocoding";
+import {
+  cleanImportedSellerName,
+  hasEncodingArtifacts,
+  normalizeCommercials,
+  normalizeImportedText,
+  validateImportedLocation,
+} from "@/server/listings/data-quality";
 
 export function canonicalCategory(text: string) {
   const value = text.toLowerCase();
@@ -48,7 +54,12 @@ async function upsertListing(
   refreshEmbedding: boolean,
 ) {
   const category = importableCategory(row);
-  if (!category) return false;
+  if (!category) return "REJECTED" as const;
+
+  const title = normalizeImportedText(row.title);
+  const description = normalizeImportedText(row.description);
+  const subcategory = normalizeImportedText(row.subcategory) || category;
+  const sellerDisplayName = cleanImportedSellerName(row.companyName);
 
   const companyId = stableId(
     "provider_company",
@@ -61,22 +72,46 @@ async function upsertListing(
     state: row.state,
     country: row.country,
   });
+  const location = validateImportedLocation(row, geocode);
+  const commercials = normalizeCommercials({
+    price: row.price,
+    currency: row.currency,
+    rawPrice: row.rawPrice,
+    rawQuantity: row.rawQuantity,
+    quantityUnit: row.unit,
+    priceUnit: row.priceUnit,
+    description,
+  });
+  const qualityIssues = [
+    ...location.issues,
+    ...commercials.issues,
+    ...(hasEncodingArtifacts(title) || hasEncodingArtifacts(description)
+      ? ["ENCODING_ARTIFACT_UNRESOLVED"]
+      : []),
+  ];
+  const valid =
+    location.valid &&
+    commercials.valid &&
+    !qualityIssues.includes("ENCODING_ARTIFACT_UNRESOLVED");
+  const now = new Date();
   await prisma.$transaction(async (tx) => {
     await tx.company.upsert({
       where: { id: companyId },
       create: {
         id: companyId,
         name: `${row.companyName} (${companyId.slice(-6)})`,
+        displayName: sellerDisplayName,
         industry: category,
-        location: `${geocode?.normalizedCity || row.city}, ${geocode?.normalizedState || row.state}, India`,
+        location: `${location.city}, ${location.state}, India`,
         carbonRating: "Unrated",
         latitude: geocode?.latitude ?? 0,
         longitude: geocode?.longitude ?? 0,
         capacity: row.quantity,
       },
       update: {
+        displayName: sellerDisplayName,
         industry: category,
-        location: `${geocode?.normalizedCity || row.city}, ${geocode?.normalizedState || row.state}, India`,
+        location: `${location.city}, ${location.state}, India`,
         latitude: geocode?.latitude ?? 0,
         longitude: geocode?.longitude ?? 0,
         capacity: row.quantity,
@@ -86,17 +121,17 @@ async function upsertListing(
       where: { id: materialId },
       create: {
         id: materialId,
-        name: `${row.title} (${materialId.slice(-6)})`,
+        name: `${title} (${materialId.slice(-6)})`,
         toxicityLevel: "none",
-        baseElement: row.subcategory || category,
+        baseElement: subcategory,
         category,
-        description: row.description,
+        description,
       },
       update: {
         toxicityLevel: "none",
-        baseElement: row.subcategory || category,
+        baseElement: subcategory,
         category,
-        description: row.description,
+        description,
       },
     });
     await tx.materialProducer.upsert({
@@ -108,8 +143,8 @@ async function upsertListing(
       where: { externalId: row.externalId },
       create: {
         id: listingId,
-        title: row.title,
-        slug: `${slugify(row.title)}-${listingId.slice(-8)}`,
+        title,
+        slug: `${slugify(title)}-${listingId.slice(-8)}`,
         listingMode: "EXTERNAL_LEAD",
         sourceType: provider.sourceType,
         isEvalOnly: false,
@@ -117,26 +152,25 @@ async function upsertListing(
         sourceUrl: row.sourceUrl,
         externalId: row.externalId,
         rawQuantityText: row.rawQuantity,
+        rawPriceText: commercials.rawPriceText,
+        rawUnitText: commercials.rawUnitText,
         rawLocationText: `${row.city}, ${row.state}, India`,
         materialId,
         sellerCompanyId: companyId,
         category,
-        subcategory: row.subcategory || category,
-        area: row.city,
-        city: geocode?.normalizedCity || row.city,
-        state: geocode?.normalizedState || row.state,
-        country: "India",
+        subcategory,
+        area: location.city,
+        city: location.city,
+        state: location.state,
+        country: location.country,
         ...geocodeData(geocode),
         imageUrl: row.imageUrl,
-        pricePerUnit: row.price,
-        // A source that publishes no price is not selling at zero — it is
-        // quoting on request. Recording that as FIXED would make an absent
-        // price indistinguishable from a real one of ₹0.
-        priceMode: row.price > 0 ? "FIXED" : "ON_REQUEST",
-        currency: row.currency || "INR",
-        // Free text from the source is mapped onto the canonical enum here;
-        // storing "Tons" makes the listing invisible to every RFQ for "ton".
-        unit: normalizeListingUnit(row.unit) ?? "lot",
+        pricePerUnit: commercials.pricePerUnit,
+        priceMode: commercials.priceMode,
+        currency: commercials.currency,
+        priceBasisUnit: commercials.priceBasisUnit,
+        normalizedPricePerKg: commercials.normalizedPricePerKg,
+        unit: commercials.unit,
         minOrderQuantity: 1,
         quantityAvailable: row.quantity,
         leadTimeDays: 0,
@@ -146,53 +180,60 @@ async function upsertListing(
         tradeAssurance: false,
         yearsActive: 0,
         ordersCompleted: 0,
-        description: row.description,
+        description,
         packaging: "As described by source provider",
         paymentTerms: "Contact source provider",
-        status: "ACTIVE",
+        status: valid ? "ACTIVE" : "QUARANTINED",
         archivedAt: null,
-        lastVerifiedAt: new Date(),
+        lastVerifiedAt: now,
+        dataQualityStatus: valid ? "VALID" : "QUARANTINED",
+        dataQualityIssues: qualityIssues,
+        dataNormalizedAt: now,
         safetyDeclaration: true,
         qualityDeclaration: true,
         ownershipDeclaration: true,
         authorityDeclaration: true,
-        activatedAt: new Date(),
+        activatedAt: valid ? now : null,
       },
       update: {
-        title: row.title,
+        title,
         listingMode: "EXTERNAL_LEAD",
         sourceType: provider.sourceType,
         isEvalOnly: false,
         sourceName: row.sourceName,
         sourceUrl: row.sourceUrl,
         rawQuantityText: row.rawQuantity,
+        rawPriceText: commercials.rawPriceText,
+        rawUnitText: commercials.rawUnitText,
         rawLocationText: `${row.city}, ${row.state}, India`,
         category,
-        subcategory: row.subcategory || category,
-        city: geocode?.normalizedCity || row.city,
-        state: geocode?.normalizedState || row.state,
+        subcategory,
+        area: location.city,
+        city: location.city,
+        state: location.state,
+        country: location.country,
         ...geocodeData(geocode),
         imageUrl: row.imageUrl,
-        pricePerUnit: row.price,
-        // A source that publishes no price is not selling at zero — it is
-        // quoting on request. Recording that as FIXED would make an absent
-        // price indistinguishable from a real one of ₹0.
-        priceMode: row.price > 0 ? "FIXED" : "ON_REQUEST",
-        currency: row.currency || "INR",
-        // Free text from the source is mapped onto the canonical enum here;
-        // storing "Tons" makes the listing invisible to every RFQ for "ton".
-        unit: normalizeListingUnit(row.unit) ?? "lot",
+        pricePerUnit: commercials.pricePerUnit,
+        priceMode: commercials.priceMode,
+        currency: commercials.currency,
+        priceBasisUnit: commercials.priceBasisUnit,
+        normalizedPricePerKg: commercials.normalizedPricePerKg,
+        unit: commercials.unit,
         quantityAvailable: row.quantity,
-        description: row.description,
-        status: "ACTIVE",
+        description,
+        status: valid ? "ACTIVE" : "QUARANTINED",
         archivedAt: null,
-        lastVerifiedAt: new Date(),
-        activatedAt: new Date(),
+        lastVerifiedAt: now,
+        dataQualityStatus: valid ? "VALID" : "QUARANTINED",
+        dataQualityIssues: qualityIssues,
+        dataNormalizedAt: now,
+        activatedAt: valid ? now : null,
       },
     });
   });
-  if (refreshEmbedding) await tryRefreshListingEmbedding(listingId);
-  return true;
+  if (valid && refreshEmbedding) await tryRefreshListingEmbedding(listingId);
+  return valid ? ("UPSERTED" as const) : ("QUARANTINED" as const);
 }
 
 export interface RealListingImportOptions {
@@ -325,6 +366,7 @@ export async function importRealListings(
       categories: targetResult.selection,
       upserted: 0,
       rejected: 0,
+      quarantined: 0,
     };
   }
   const run = await prisma.listingImportRun.create({
@@ -334,12 +376,16 @@ export async function importRealListings(
     const rows = selected;
     let upserted = 0;
     let rejected = 0;
+    let quarantined = 0;
     for (const row of rows) {
-      if (
-        await upsertListing(provider, row, options.refreshEmbeddings !== false)
-      ) {
-        upserted += 1;
-      } else rejected += 1;
+      const outcome = await upsertListing(
+        provider,
+        row,
+        options.refreshEmbeddings !== false,
+      );
+      if (outcome === "UPSERTED") upserted += 1;
+      else if (outcome === "QUARANTINED") quarantined += 1;
+      else rejected += 1;
     }
     await prisma.listingImportRun.update({
       where: { id: run.id },
@@ -348,6 +394,7 @@ export async function importRealListings(
         recordsSeen: rows.length,
         recordsUpserted: upserted,
         recordsRejected: rejected,
+        recordsQuarantined: quarantined,
         finishedAt: new Date(),
       },
     });
@@ -360,6 +407,7 @@ export async function importRealListings(
       categories: targetResult.selection,
       upserted,
       rejected,
+      quarantined,
     };
   } catch (error) {
     await prisma.listingImportRun.update({

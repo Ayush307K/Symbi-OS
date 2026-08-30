@@ -20,7 +20,10 @@ export const demandInputSchema = z
     maxPrice: z.coerce.number().min(0).max(1_000_000_000).optional(),
     state: z.string().trim().max(100).optional(),
     city: z.string().trim().max(100).optional(),
-    pincode: z.string().regex(/^[1-9][0-9]{5}$/).optional(),
+    pincode: z
+      .string()
+      .regex(/^[1-9][0-9]{5}$/)
+      .optional(),
     latitude: z.coerce.number().min(-90).max(90).optional(),
     longitude: z.coerce.number().min(-180).max(180).optional(),
     maxDistanceKm: z.coerce.number().positive().max(2000).optional(),
@@ -129,10 +132,7 @@ async function loadCandidates(input: DemandInput & { category: string }) {
         { quantityAvailable: { gte: input.quantity } },
         { minOrderQuantity: { lte: input.quantity } },
         {
-          OR: [
-            { availableUntil: null },
-            { availableUntil: { gte: now } },
-          ],
+          OR: [{ availableUntil: null }, { availableUntil: { gte: now } }],
         },
         input.availableBy
           ? {
@@ -146,7 +146,7 @@ async function loadCandidates(input: DemandInput & { category: string }) {
     },
     include: {
       material: { select: { name: true, baseElement: true } },
-      seller: { select: { id: true, name: true } },
+      seller: { select: { id: true, name: true, displayName: true } },
       assets: {
         where: { kind: { in: ["CERTIFICATE", "TEST_REPORT"] } },
         select: { kind: true },
@@ -231,10 +231,7 @@ export function scoreCandidate(
       listing.longitude,
     );
     if (distance > input.maxDistanceKm) return null;
-    score += Math.max(
-      2,
-      Math.round(10 * (1 - distance / input.maxDistanceKm)),
-    );
+    score += Math.max(2, Math.round(10 * (1 - distance / input.maxDistanceKm)));
     explanations.push(`${Math.round(distance)} km from requested coordinates`);
   } else if (
     [input.pincode, input.city, input.state]
@@ -269,10 +266,7 @@ export function scoreCandidate(
   };
 }
 
-export async function createDemandMatches(
-  auth: JWTPayload,
-  rawInput: unknown,
-) {
+export async function createDemandMatches(auth: JWTPayload, rawInput: unknown) {
   const parsed = demandInputSchema.safeParse(rawInput);
   if (!parsed.success) {
     throw new ApiError(
@@ -328,7 +322,9 @@ export async function createDemandMatches(
             id: companyId,
             name: auth.companyName,
             industry: "General",
-            location: [input.city, input.state].filter(Boolean).join(", ") || "Unspecified",
+            location:
+              [input.city, input.state].filter(Boolean).join(", ") ||
+              "Unspecified",
             carbonRating: "UNRATED",
             latitude: input.latitude ?? 0,
             longitude: input.longitude ?? 0,
@@ -391,7 +387,7 @@ export async function createDemandMatches(
     matches: ranked.map(({ listing, score, explanations, distanceKm }) => ({
       listingId: listing.id,
       title: listing.title,
-      seller: listing.seller.name,
+      seller: listing.seller.displayName || listing.seller.name,
       category: listing.category,
       subcategory: listing.subcategory,
       quantityAvailable: listing.quantityAvailable,
@@ -399,8 +395,7 @@ export async function createDemandMatches(
       lotIncrement: listing.lotIncrement,
       unit: listing.unit,
       priceMode: listing.priceMode,
-      pricePerUnit:
-        listing.priceMode === "FIXED" ? listing.pricePerUnit : null,
+      pricePerUnit: listing.priceMode === "FIXED" ? listing.pricePerUnit : null,
       city: listing.city,
       state: listing.state,
       score,
@@ -428,9 +423,7 @@ export async function createDemandMatches(
  * Rows are written as well as notified: a notification whose linked page still
  * says "no listing clears your constraints" is worse than silence.
  */
-export async function matchListingToOpenDemands(
-  listingId: string,
-): Promise<
+export async function matchListingToOpenDemands(listingId: string): Promise<
   Array<{
     demandId: string;
     userId: string | null;
@@ -444,7 +437,7 @@ export async function matchListingToOpenDemands(
     where: { AND: [{ id: listingId }, publicListingWhere] },
     include: {
       material: { select: { name: true, baseElement: true } },
-      seller: { select: { id: true, name: true } },
+      seller: { select: { id: true, name: true, displayName: true } },
       assets: {
         where: { kind: { in: ["CERTIFICATE", "TEST_REPORT"] } },
         select: { kind: true },
@@ -466,7 +459,10 @@ export async function matchListingToOpenDemands(
       status: "OPEN",
       category: listing.category,
       unit: listing.unit,
-      quantity: { lte: listing.quantityAvailable, gte: listing.minOrderQuantity },
+      quantity: {
+        lte: listing.quantityAvailable,
+        gte: listing.minOrderQuantity,
+      },
       ...(listing.availableFrom
         ? {
             OR: [
@@ -511,7 +507,9 @@ export async function matchListingToOpenDemands(
     // Upsert, not create: a listing can be edited and re-approved, and the
     // buyer should see the current score rather than a duplicate-key failure.
     await prisma.listingMatch.upsert({
-      where: { demandId_listingId: { demandId: demand.id, listingId: listing.id } },
+      where: {
+        demandId_listingId: { demandId: demand.id, listingId: listing.id },
+      },
       create: {
         demandId: demand.id,
         listingId: listing.id,

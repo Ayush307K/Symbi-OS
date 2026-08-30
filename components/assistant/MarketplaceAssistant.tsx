@@ -56,8 +56,7 @@ const HIDDEN_PATHS = [
   "/reset-password",
 ];
 const GREETING_MESSAGE_ID = "new-conversation-greeting";
-const GREETING_MESSAGE =
-  "Hi! I’m Symbi. What can I help you with today?";
+const GREETING_MESSAGE = "Hi! I’m Symbi. What can I help you with today?";
 type ResolutionState = "prompt" | "complete" | null;
 
 function newConversationGreeting(): AssistantMessageDto {
@@ -139,8 +138,7 @@ export function MarketplaceAssistant() {
   const [draft, setDraft] = useState("");
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [sending, setSending] = useState(false);
-  const [resolutionState, setResolutionState] =
-    useState<ResolutionState>(null);
+  const [resolutionState, setResolutionState] = useState<ResolutionState>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -320,9 +318,7 @@ export function MarketplaceAssistant() {
         current.filter((message) => message.id !== optimisticId),
       );
       setDraft(question);
-      setResolutionState(
-        priorResolutionState === "prompt" ? "prompt" : null,
-      );
+      setResolutionState(priorResolutionState === "prompt" ? "prompt" : null);
       setError(
         sendError instanceof Error
           ? sendError.message
@@ -504,7 +500,11 @@ export function MarketplaceAssistant() {
                     <p className="text-[11px] text-ink-500">
                       This request is complete.
                     </p>
-                    <Button variant="primary" size="sm" onClick={newConversation}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={newConversation}
+                    >
                       Ask another question
                     </Button>
                   </div>
@@ -516,7 +516,10 @@ export function MarketplaceAssistant() {
                       </p>
                     ) : null}
                     <div className="flex items-end gap-2 rounded-card border border-ink-300 bg-surface-card p-2 focus-within:border-copper-700 focus-within:ring-1 focus-within:ring-copper-700/20">
-                      <label htmlFor="symbi-assistant-input" className="sr-only">
+                      <label
+                        htmlFor="symbi-assistant-input"
+                        className="sr-only"
+                      >
                         Ask Symbi a marketplace question
                       </label>
                       <textarea
@@ -956,11 +959,12 @@ function AnswerText({
 function formatListingPrice(citation: AssistantCitation) {
   const listing = citation.listing;
   if (!listing || listing.priceMode === "ON_REQUEST") return "Quote";
-  return new Intl.NumberFormat("en-IN", {
+  const price = new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: listing.currency,
     maximumFractionDigits: 0,
   }).format(listing.pricePerUnit);
+  return `${price}/${listing.priceBasisUnit || listing.unit}`;
 }
 
 function ListingThumbnail({ src }: { src: string | null | undefined }) {
@@ -1019,10 +1023,15 @@ function ListingCitationTable({
             const href = citationHref(citation);
             const listing = citation.listing;
             const meta = listing
-              ? [listing.sellerName, listing.location].filter(Boolean).join(" · ")
+              ? [listing.sellerName, listing.location]
+                  .filter(Boolean)
+                  .join(" · ")
               : citation.excerpt;
             return (
-              <tr key={citation.id} className="align-middle hover:bg-copper-50/50">
+              <tr
+                key={citation.id}
+                className="align-middle hover:bg-copper-50/50"
+              >
                 <td className="min-w-0 px-2.5 py-2.5">
                   <div className="flex min-w-0 items-center gap-2">
                     <ListingThumbnail src={listing?.imageUrl} />
@@ -1060,9 +1069,9 @@ function ListingCitationTable({
                             ? "Verified SymbiOS seller"
                             : listing.listingMode === "MANAGED"
                               ? "Seller unavailable"
-                            : listing.listingMode === "EVAL"
-                              ? "Synthetic demo listing"
-                              : "External source"}
+                              : listing.listingMode === "EVAL"
+                                ? "Synthetic demo listing"
+                                : "External source"}
                         </p>
                       ) : null}
                     </div>
@@ -1075,7 +1084,8 @@ function ListingCitationTable({
                   {listing ? (
                     <>
                       <p className="prose-numerals mt-0.5 text-[9px] text-ink-500">
-                        {listing.quantityAvailable.toLocaleString("en-IN")} {listing.unit}
+                        {listing.quantityAvailable.toLocaleString("en-IN")}{" "}
+                        {listing.unit}
                       </p>
                       <p className="prose-numerals text-[8.5px] text-ink-400">
                         MOQ {listing.minOrderQuantity.toLocaleString("en-IN")}
@@ -1096,7 +1106,10 @@ function ListingCitationTable({
                       aria-label={`View ${citation.title}`}
                       className="inline-flex h-7 w-7 items-center justify-center rounded-full text-copper-700 hover:bg-copper-100"
                     >
-                      <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
+                      <ArrowUpRight
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5"
+                      />
                     </Link>
                   ) : null}
                 </td>

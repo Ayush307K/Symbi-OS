@@ -1,8 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Heart, Info, MapPin, MessageSquare, Package, ShoppingCart, Truck } from "lucide-react";
+import {
+  BadgeCheck,
+  Clock3,
+  Heart,
+  Info,
+  MapPin,
+  MessageSquare,
+  Package,
+  ShoppingCart,
+  Truck,
+} from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -19,13 +30,17 @@ import { deliveryTermLabel } from "@/lib/logistics";
  * The API maps an ON_REQUEST listing to price: null, so null is the signal for
  * "no published price" — not a zero sentinel. Callers render "Ask quote".
  */
-function formatMoney(value: number | null) {
+function formatMoney(value: number | null, currency = "INR") {
   if (value === null || Number.isNaN(value)) return null;
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString("en-IN")}`;
+  }
 }
 
 function formatQuantity(value: number | null) {
@@ -52,9 +67,14 @@ export function ListingCard({
   inquirePending = false,
 }: ListingCardProps) {
   const router = useRouter();
-  const price = formatMoney(listing.price);
+  const [usingFallbackImage, setUsingFallbackImage] = useState(
+    !listing.imageUrl,
+  );
+  const price = formatMoney(listing.price, listing.currency);
   const quantity = formatQuantity(listing.quantity);
-  const place = [listing.city, listing.state].filter(Boolean).join(", ") || listing.location;
+  const place =
+    [listing.city, listing.state].filter(Boolean).join(", ") ||
+    listing.location;
   const capabilities = listingCapabilities(listing);
   const trustLabel = listingTrustLabel(listing.listingMode);
 
@@ -71,10 +91,17 @@ export function ListingCard({
           <ListingImage
             src={listing.imageUrl}
             fallbackSrc={listingFallbackImage(listing)}
+            onFallbackChange={setUsingFallbackImage}
             alt={listing.title}
             className="h-40 w-full object-cover transition-transform duration-[240ms] ease-out group-hover:scale-[1.03]"
           />
         </Link>
+
+        {usingFallbackImage ? (
+          <span className="absolute bottom-2 left-2 rounded-full bg-ink-900/80 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+            Category illustration · no seller photo
+          </span>
+        ) : null}
 
         {/* Verification is stated either way. A listing carried in from a public
             provider feed is real and attributed, but its seller has not been
@@ -125,7 +152,11 @@ export function ListingCard({
           onClick={() => onToggleSave(listing)}
           disabled={savePending}
           aria-pressed={saved}
-          aria-label={saved ? `Remove ${listing.title} from saved` : `Save ${listing.title}`}
+          aria-label={
+            saved
+              ? `Remove ${listing.title} from saved`
+              : `Save ${listing.title}`
+          }
           className={cn(
             "absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full",
             "border border-ink-200 bg-surface-card/95 backdrop-blur-[2px]",
@@ -156,12 +187,14 @@ export function ListingCard({
           <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-ink-900">
             <Link
               href={`/products/${listing.id}`}
-                  className="rounded-sm hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
+              className="rounded-sm hover:text-copper-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-700"
             >
               {listing.title}
             </Link>
           </h3>
-          <p className="mt-1 truncate text-[13px] text-ink-500">{listing.producer}</p>
+          <p className="mt-1 truncate text-[13px] text-ink-500">
+            {listing.producer}
+          </p>
         </div>
 
         <div className="flex items-end justify-between gap-2">
@@ -175,7 +208,9 @@ export function ListingCard({
               {price ?? "Ask quote"}
             </p>
             <p className="mt-1 text-[12px] text-ink-500">
-              {price ? `per ${listing.unit}` : "Seller has not published a price"}
+              {price
+                ? `per ${listing.priceBasisUnit || listing.unit}`
+                : "Seller has not published a price"}
             </p>
           </div>
           {quantity ? (
@@ -199,7 +234,8 @@ export function ListingCard({
             <dt className="sr-only">Location</dt>
             <dd className="truncate">
               {place}
-              {listing.distanceStatus === "AVAILABLE" && typeof listing.distanceKm === "number"
+              {listing.distanceStatus === "AVAILABLE" &&
+              typeof listing.distanceKm === "number"
                 ? ` · ${listing.distanceKm.toLocaleString("en-IN")} km`
                 : listing.distanceStatus === "UNAVAILABLE"
                   ? " · Distance unavailable"
@@ -209,7 +245,14 @@ export function ListingCard({
           <div className="flex items-center gap-1.5">
             <Truck aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
             <dt className="sr-only">Delivery terms</dt>
-            <dd className="truncate">{deliveryTermLabel(listing.deliveryTerm)}</dd>
+            <dd className="truncate">
+              {deliveryTermLabel(listing.deliveryTerm)}
+            </dd>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Clock3 aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <dt className="sr-only">Catalogue freshness</dt>
+            <dd className="truncate">{listing.freshnessLabel}</dd>
           </div>
         </dl>
 
