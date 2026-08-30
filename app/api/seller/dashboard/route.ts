@@ -7,6 +7,11 @@ import {
   onboardingJourney,
 } from "@/server/onboarding";
 import { hasRole } from "@/lib/auth";
+import { sellerOrderItemInclude } from "@/server/orders/seller-order-view";
+import {
+  authenticatedUserDto,
+  safeJson,
+} from "@/server/security/api-response";
 
 export async function GET() {
   const guard = await requireAuth();
@@ -74,10 +79,7 @@ export async function GET() {
         ),
       prisma.purchaseOrderItem.findMany({
         where: { sellerCompanyId: companyId },
-        include: {
-          order: { include: { buyer: true, shippingAddress: true } },
-          listing: true,
-        },
+        include: sellerOrderItemInclude,
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
@@ -109,8 +111,8 @@ export async function GET() {
       ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
       : 0;
 
-  return NextResponse.json({
-    user: guard.auth,
+  return safeJson({
+    user: authenticatedUserDto(guard.auth),
     stats: {
       listings: listings.length,
       activeListings: listings.filter((listing) =>

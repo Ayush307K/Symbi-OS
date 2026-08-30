@@ -1,6 +1,9 @@
-import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/marketplace";
+import {
+  authenticatedUserDto,
+  safeJson,
+} from "@/server/security/api-response";
 
 export async function GET() {
   const guard = await requireAuth();
@@ -68,8 +71,8 @@ export async function GET() {
   );
   const orderTotal = orders.reduce((sum, order) => sum + order.totalAmount, 0);
 
-  return NextResponse.json({
-    user: guard.auth,
+  return safeJson({
+    user: authenticatedUserDto(guard.auth),
     stats: {
       orders: orders.length,
       cartItems: cartItems.length,

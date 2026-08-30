@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/marketplace";
 import { hasRole } from "@/lib/auth";
+import { sellerOrderItemInclude } from "@/server/orders/seller-order-view";
+import { safeJson } from "@/server/security/api-response";
 
 export async function GET() {
   const guard = await requireAuth();
@@ -19,11 +21,8 @@ export async function GET() {
 
   const items = await prisma.purchaseOrderItem.findMany({
     where: { sellerCompanyId: guard.auth.companyId },
-    include: {
-      order: { include: { buyer: true, shippingAddress: true } },
-      listing: true,
-    },
+    include: sellerOrderItemInclude,
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json({ items });
+  return safeJson({ items });
 }

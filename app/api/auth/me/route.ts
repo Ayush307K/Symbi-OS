@@ -35,9 +35,14 @@ export async function GET() {
 
     return NextResponse.json({
       user: {
-        ...user,
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isAdmin: user.isAdmin,
+        companyName: user.companyName,
+        companyId: user.companyId,
+        accountStatus: user.accountStatus,
         emailVerified: Boolean(user.emailVerifiedAt),
-        emailVerifiedAt: undefined,
       },
     });
   } catch (err: unknown) {
