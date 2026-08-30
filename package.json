@@ -12,6 +12,7 @@
     "test": "vitest run",
     "security:scan": "node scripts/check-sensitive-files.mjs",
     "security:scan:history": "node scripts/check-sensitive-files.mjs --history",
+    "security:revoke-sessions": "tsx scripts/revoke-all-sessions.ts",
     "verify": "npm run check:env && npm run security:scan && npm run typecheck && npm test && npm run build && npm audit --omit=dev",
     "db:deploy": "node scripts/ensure-local-db.mjs && prisma migrate deploy",
     "vercel:build": "node scripts/vercel-build.mjs",
