@@ -9,10 +9,17 @@ import {
   listAssistantConversations,
 } from "@/server/assistant";
 import {
+  ASSISTANT_RESOLUTION,
+  ASSISTANT_TOPIC_IDS,
+  ASSISTANT_TOPICS,
+  assistantTopicContext,
+} from "@/lib/assistant-guidance";
+import {
   contextualRetrievalQuery,
   type RagAnswerOptions,
 } from "@/server/rag/query";
 import { answerPlatformHelp } from "@/server/assistant/platform-help";
+import { assistantListingPreview } from "@/server/assistant/listing-preview";
 import { isAccountHelpQuestion } from "@/server/assistant/account-help";
 import { isSupportEscalationQuery } from "@/server/assistant/support";
 import {
@@ -40,6 +47,34 @@ describe("assistant query shaping", () => {
     expect(query).toContain("Show me PET bottle scrap");
     expect(query).toContain("Which is cheapest?");
     expect(query).not.toContain("previous generated answer");
+  });
+
+  it("defines complete, unique guided help topics with actionable replies", () => {
+    expect(ASSISTANT_TOPICS.map((topic) => topic.id)).toEqual(
+      ASSISTANT_TOPIC_IDS,
+    );
+    expect(new Set(ASSISTANT_TOPICS.map((topic) => topic.label)).size).toBe(
+      ASSISTANT_TOPICS.length,
+    );
+    for (const topic of ASSISTANT_TOPICS) {
+      expect(topic.followUp.length).toBeGreaterThan(10);
+      expect(topic.quickReplies).toHaveLength(3);
+      expect(topic.quickReplies.every((reply) => reply.query.length >= 3)).toBe(
+        true,
+      );
+      expect(assistantTopicContext(topic.id)).toContain(topic.label);
+    }
+  });
+
+  it("defines a concise, deterministic post-resolution choice", () => {
+    expect(ASSISTANT_RESOLUTION.question).toBe(
+      "Can I help with anything else?",
+    );
+    expect(ASSISTANT_RESOLUTION.continueLabel).toMatch(/^Yes/);
+    expect(ASSISTANT_RESOLUTION.finishLabel).toMatch(/^No/);
+    expect(ASSISTANT_RESOLUTION.completedMessage.split(/\s+/)).toHaveLength(
+      11,
+    );
   });
 });
 
@@ -139,6 +174,38 @@ describe("assistant platform help", () => {
 });
 
 describe("assistant read-only tools", () => {
+  it("builds a structured listing preview for table-row rendering", () => {
+    expect(
+      assistantListingPreview({
+        material: { name: "HDPE regrind" },
+        seller: { name: "Circular Polymers" },
+        city: "Pune",
+        state: "Maharashtra",
+        quantityAvailable: 120,
+        unit: "ton",
+        priceMode: "FIXED",
+        pricePerUnit: 54,
+        currency: "INR",
+        minOrderQuantity: 5,
+        imageUrl: "https://example.test/hdpe.jpg",
+        sourceType: "seller_submitted",
+        verified: true,
+      }),
+    ).toEqual({
+      materialName: "HDPE regrind",
+      sellerName: "Circular Polymers",
+      location: "Pune, Maharashtra",
+      quantityAvailable: 120,
+      unit: "ton",
+      priceMode: "FIXED",
+      pricePerUnit: 54,
+      currency: "INR",
+      minOrderQuantity: 5,
+      imageUrl: "https://example.test/hdpe.jpg",
+      verified: true,
+    });
+  });
+
   it.each([
     ["Show my latest orders", "get_my_orders"],
     ["How many bids do I have?", "get_my_bids"],
@@ -284,6 +351,43 @@ describe.skipIf(!databaseReachable)(
         listAssistantConversations(userId, prisma),
       ).resolves.toMatchObject([
         { id: opened.conversation.id, lastMessage: { role: "ASSISTANT" } },
+      ]);
+    });
+
+    it("uses the selected help topic as retrieval context without saving it as a fake user message", async () => {
+      const answerer = vi.fn(
+        async (
+          _query: string,
+          _topK: number,
+          _options: RagAnswerOptions,
+        ) => ({
+          answer: "Grounded PET result [S1]",
+          citations: [],
+          retrieval: { mode: "hybrid" as const, resultCount: 0 },
+        }),
+      );
+
+      const result = await askMarketplaceAssistant(
+        {
+          userId,
+          topic: "catalogue",
+          query: "PET flakes near Pune",
+        },
+        { db: prisma, answerer },
+      );
+
+      const options = answerer.mock.calls[0]?.[2];
+      expect(options?.retrievalQuery).toContain("Selected help area");
+      expect(options?.retrievalQuery).toContain("Find materials");
+
+      const saved = await getAssistantConversation(
+        userId,
+        result.conversation.id,
+        prisma,
+      );
+      expect(saved.messages.map((message) => message.content)).toEqual([
+        "PET flakes near Pune",
+        "Grounded PET result [S1]",
       ]);
     });
 
