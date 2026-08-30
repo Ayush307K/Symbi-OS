@@ -7,6 +7,7 @@ import type {
 import { SAFE_CATEGORIES } from "@/lib/listing-constants";
 import { publicListingWhere } from "@/server/listings/policy";
 import type { PlatformHelpAnswer } from "@/server/assistant/platform-help";
+import { assistantListingPreview } from "@/server/assistant/listing-preview";
 import type { RagConversationTurn } from "@/server/rag/query";
 import { lexicalScore, retrieveKnowledge } from "@/server/rag/query";
 import {
@@ -314,16 +315,10 @@ const searchListings: ToolRegistration<typeof searchSchema> = {
       sourceId: listing.id,
       isEvalOnly: listing.isEvalOnly,
       excerpt: `${listing.seller.name} · ${listing.city}, ${listing.state} · ${listing.quantityAvailable} ${listing.unit} available`,
+      listing: assistantListingPreview(listing),
     }));
-    const bullets = ranked.map((listing, index) => {
-      const price =
-        listing.priceMode === "ON_REQUEST"
-          ? "quote required"
-          : `${formatMoney(listing.pricePerUnit, listing.currency)}/${listing.unit}`;
-      return `- ${listing.title} — ${price}, MOQ ${listing.minOrderQuantity} ${listing.unit}, ${listing.city} [S${index + 1}]`;
-    });
     return {
-      answer: `Found ${ranked.length} relevant option${ranked.length === 1 ? "" : "s"}:\n${bullets.join("\n")}`,
+      answer: `I found ${ranked.length} relevant listing${ranked.length === 1 ? "" : "s"}. Compare price, stock and location below.`,
       citations,
       retrieval: toolRetrieval("search_listings", ranked.length),
     };
@@ -385,6 +380,7 @@ const getListingDetails: ToolRegistration<typeof listingDetailsSchema> = {
           sourceId: listing.id,
           isEvalOnly: listing.isEvalOnly,
           excerpt: listing.description.slice(0, 240),
+          listing: assistantListingPreview(listing),
         },
       ],
       retrieval: toolRetrieval("get_listing_details", 1),

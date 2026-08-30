@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ASSISTANT_TOPIC_IDS } from "@/lib/assistant-guidance";
 import prisma from "@/lib/prisma";
 import { askMarketplaceAssistant } from "@/server/assistant";
 import { isAccountHelpQuestion } from "@/server/assistant/account-help";
@@ -19,6 +20,7 @@ const schema = z
   .object({
     conversationId: z.string().uuid().optional(),
     query: z.string().trim().min(3).max(1000),
+    topic: z.enum(ASSISTANT_TOPIC_IDS).optional(),
   })
   .strict();
 
@@ -57,6 +59,7 @@ export async function POST(request: NextRequest) {
       userId: auth.userId,
       conversationId: body.conversationId,
       query: body.query,
+      topic: body.topic,
     });
     const elapsedMs = Math.round((performance.now() - started) * 10) / 10;
     return NextResponse.json(result, {

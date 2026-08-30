@@ -1,4 +1,8 @@
 import { Prisma } from "@prisma/client";
+import {
+  assistantTopicContext,
+  type AssistantTopicId,
+} from "@/lib/assistant-guidance";
 import prisma, { type ExtendedPrismaClient } from "@/lib/prisma";
 import type {
   AssistantCitation,
@@ -9,9 +13,11 @@ import type {
 import { ApiError } from "@/server/http";
 import { answerAccountHelp } from "@/server/assistant/account-help";
 import { contextualizeHelpAnswer } from "@/server/assistant/help-generation";
+import { assistantListingPreview } from "@/server/assistant/listing-preview";
 import { answerPlatformHelp } from "@/server/assistant/platform-help";
 import { prepareSupportEscalation } from "@/server/assistant/support";
 import { answerWithAssistantTool } from "@/server/assistant/tools";
+import { publicListingWhere } from "@/server/listings/policy";
 import {
   answerWithRag,
   contextualRetrievalQuery,
@@ -101,6 +107,42 @@ export function assistantMessageDto(message: {
   };
 }
 
+async function hydrateListingCitations(
+  messages: AssistantMessageDto[],
+  db: ExtendedPrismaClient,
+) {
+  const listingIds = [
+    ...new Set(
+      messages.flatMap((message) =>
+        message.citations
+          .filter(
+            (citation) =>
+              citation.sourceType === "LISTING" && Boolean(citation.sourceId),
+          )
+          .map((citation) => citation.sourceId!),
+      ),
+    ),
+  ];
+  if (!listingIds.length) return messages;
+
+  const listings = await db.marketplaceListing.findMany({
+    where: { id: { in: listingIds }, ...publicListingWhere },
+    include: { material: true, seller: true },
+  });
+  const listingById = new Map(
+    listings.map((listing) => [listing.id, assistantListingPreview(listing)]),
+  );
+  return messages.map((message) => ({
+    ...message,
+    citations: message.citations.map((citation) => {
+      const listing = citation.sourceId
+        ? listingById.get(citation.sourceId)
+        : null;
+      return listing ? { ...citation, listing } : citation;
+    }),
+  }));
+}
+
 export async function listAssistantConversations(
   userId: string,
   db: ExtendedPrismaClient = prisma,
@@ -156,6 +198,10 @@ export async function getAssistantConversation(
       "ASSISTANT_CONVERSATION_NOT_FOUND",
     );
   }
+  const messages = await hydrateListingCitations(
+    conversation.messages.slice().reverse().map(assistantMessageDto),
+    db,
+  );
   return {
     conversation: {
       id: conversation.id,
@@ -163,7 +209,7 @@ export async function getAssistantConversation(
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
     },
-    messages: conversation.messages.slice().reverse().map(assistantMessageDto),
+    messages,
   };
 }
 
@@ -175,7 +221,12 @@ type AssistantAnswerer = (
 ) => Promise<Pick<RagAnswer, "answer" | "citations" | "retrieval">>;
 
 export async function askMarketplaceAssistant(
-  input: { userId: string; conversationId?: string; query: string },
+  input: {
+    userId: string;
+    conversationId?: string;
+    query: string;
+    topic?: AssistantTopicId;
+  },
   dependencies: {
     db?: ExtendedPrismaClient;
     answerer?: AssistantAnswerer;
@@ -215,9 +266,15 @@ export async function askMarketplaceAssistant(
       role: message.role === "USER" ? "USER" : "ASSISTANT",
       content: message.content,
     }));
+  const topicContext = input.topic
+    ? assistantTopicContext(input.topic)
+    : null;
+  const guidedHistory: RagConversationTurn[] = topicContext
+    ? [{ role: "USER", content: topicContext }, ...history]
+    : history;
 
   const toolAnswer = await answerWithAssistantTool(
-    { userId: input.userId, query, history },
+    { userId: input.userId, query, history: guidedHistory },
     db,
   );
   const accountAnswer = toolAnswer
@@ -225,9 +282,9 @@ export async function askMarketplaceAssistant(
     : await answerAccountHelp(input.userId, query, db);
   const rawPlatformAnswer = toolAnswer
     ? null
-    : answerPlatformHelp(query, history);
+    : answerPlatformHelp(query, guidedHistory);
   const platformAnswer = rawPlatformAnswer
-    ? await contextualizeHelpAnswer(query, rawPlatformAnswer, history)
+    ? await contextualizeHelpAnswer(query, rawPlatformAnswer, guidedHistory)
     : null;
   const trustedAnswer = toolAnswer ?? accountAnswer ?? platformAnswer;
   const supportAnswer = await prepareSupportEscalation(
@@ -244,8 +301,8 @@ export async function askMarketplaceAssistant(
     trustedAnswer ??
     (await answerer(query, 6, {
       corpus: "real",
-      conversation: history,
-      retrievalQuery: contextualRetrievalQuery(query, history),
+      conversation: guidedHistory,
+      retrievalQuery: contextualRetrievalQuery(query, guidedHistory),
     }));
 
   const result = await db.$transaction(async (tx) => {

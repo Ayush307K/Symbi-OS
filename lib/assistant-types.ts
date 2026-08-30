@@ -1,3 +1,17 @@
+export interface AssistantListingPreview {
+  materialName: string;
+  sellerName: string;
+  location: string;
+  quantityAvailable: number;
+  unit: string;
+  priceMode: string;
+  pricePerUnit: number;
+  currency: string;
+  minOrderQuantity: number;
+  imageUrl: string | null;
+  verified: boolean;
+}
+
 export interface AssistantCitation {
   id: string;
   title: string;
@@ -6,6 +20,7 @@ export interface AssistantCitation {
   sourceId: string | null;
   isEvalOnly: boolean;
   excerpt: string;
+  listing?: AssistantListingPreview;
 }
 
 export interface AssistantRetrieval {
